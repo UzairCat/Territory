@@ -1,3 +1,4 @@
+import { buildHouse, buildRoad, upgradeMansion } from '../rules/build-rules';
 import { placeSetupHouse, placeSetupRoad } from '../rules/setup-rules';
 import { endTurn, rollDice } from '../rules/turn-rules';
 import type { GameAction } from './actions';
@@ -25,6 +26,9 @@ export function dispatch(state: GameState, action: GameAction): DispatchResult {
   if (action.type === 'PLACE_SETUP_HOUSE') return placeSetupHouse(state, action);
   if (action.type === 'PLACE_SETUP_ROAD') return placeSetupRoad(state, action);
   if (action.type === 'ROLL_DICE') return rollDice(state, action);
+  if (action.type === 'BUILD_ROAD') return buildRoad(state, action);
+  if (action.type === 'BUILD_HOUSE') return buildHouse(state, action);
+  if (action.type === 'UPGRADE_MANSION') return upgradeMansion(state, action);
   if (action.type === 'END_TURN') return endTurn(state, action);
 
   return rejectAction(

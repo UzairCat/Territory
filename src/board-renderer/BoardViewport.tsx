@@ -11,6 +11,7 @@ export interface BoardViewportProps {
   readonly showDebugIds: boolean;
   readonly selectableTargets: readonly BoardTarget[];
   readonly highlightedHexIds: readonly HexId[];
+  readonly animatedTarget: BoardTarget | null;
   readonly playerColors: Readonly<Record<string, string>>;
   readonly onInspect: (target: BoardTarget | null) => void;
   readonly onSelect: (target: BoardTarget) => void;
@@ -21,6 +22,7 @@ export function BoardViewport({
   showDebugIds,
   selectableTargets,
   highlightedHexIds,
+  animatedTarget,
   playerColors,
   onInspect,
   onSelect,
@@ -52,6 +54,7 @@ export function BoardViewport({
           onSelect: (target) => selectRef.current(target),
           selectableTargets,
           highlightedHexIds,
+          animatedTarget,
           playerColors,
         });
         rendererRef.current = renderer;
@@ -70,7 +73,7 @@ export function BoardViewport({
       rendererRef.current?.destroy();
       rendererRef.current = null;
     };
-  }, [board, highlightedHexIds, playerColors, selectableTargets]);
+  }, [animatedTarget, board, highlightedHexIds, playerColors, selectableTargets]);
 
   useEffect(() => {
     debugRef.current = showDebugIds;

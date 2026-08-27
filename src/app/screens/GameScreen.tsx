@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
 import { useAppStore } from '../stores/app-store';
@@ -11,13 +11,21 @@ import type { ResourceBundle } from '../../engine/content/types';
 import type { GameEvent } from '../../engine/core/events';
 import type { GameState, PlayerState } from '../../engine/core/game-state';
 import { actionId } from '../../engine/core/ids';
-import type { PlayerId } from '../../engine/core/ids';
+import {
+  getConstructionAvailability,
+  getValidHouseVertexIds,
+  getValidMansionVertexIds,
+  getValidRoadEdgeIds,
+} from '../../engine/rules/build-rules';
+import type { ConstructionType } from '../../engine/rules/build-rules';
+import { calculatePublicScore } from '../../engine/rules/scoring-rules';
 import {
   getLegalSetupHouseVertexIds,
   getLegalSetupRoadEdgeIds,
   getSetupProgress,
 } from '../../engine/rules/setup-rules';
 import { Button } from '../../ui/components/Button';
+import { ConstructionPanel } from '../../ui/game/ConstructionPanel';
 import { DicePanel } from '../../ui/game/DicePanel';
 import { PlayerPanel } from '../../ui/game/PlayerPanel';
 
@@ -36,21 +44,6 @@ function phaseLabel(phase: GameState['turn']['phase']): string {
     GAME_OVER: 'Game over',
   };
   return labels[phase];
-}
-
-function publicScore(state: GameState, playerId: PlayerId): number {
-  const buildingScore = Object.values(state.board.vertices).reduce((total, vertex) => {
-    if (vertex.building?.ownerId !== playerId) return total;
-    return total + (vertex.building.type === 'MANSION' ? 2 : 1);
-  }, 0);
-  const bonusScore =
-    (state.bonuses.longestRoadHolderId === playerId
-      ? state.config.rules.longestRoad.victoryPoints
-      : 0) +
-    (state.bonuses.largestForceHolderId === playerId
-      ? state.config.rules.largestForce.victoryPoints
-      : 0);
-  return buildingScore + bonusScore;
 }
 
 function describeTarget(state: GameState, target: BoardTarget | null): string {
@@ -113,6 +106,30 @@ function recentEventMessage(events: readonly GameEvent[], state: GameState): str
   const robberStarted = events.some((event) => event.type === 'ROBBER_SEQUENCE_STARTED');
   if (robberStarted) return 'A 7 was rolled. The robber sequence must be resolved.';
 
+  const upgraded = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'BUILDING_UPGRADED' }> =>
+      event.type === 'BUILDING_UPGRADED',
+  );
+  if (upgraded !== undefined) {
+    return `${state.players[upgraded.playerId]?.name ?? 'A player'} upgraded a house to a mansion.`;
+  }
+
+  const building = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'BUILDING_PLACED' }> =>
+      event.type === 'BUILDING_PLACED',
+  );
+  if (building !== undefined) {
+    return `${state.players[building.playerId]?.name ?? 'A player'} built a ${building.buildingType.toLowerCase()}.`;
+  }
+
+  const road = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'ROAD_BUILT' }> =>
+      event.type === 'ROAD_BUILT',
+  );
+  if (road !== undefined) {
+    return `${state.players[road.playerId]?.name ?? 'A player'} built a road.`;
+  }
+
   const turnStarted = events.find(
     (event): event is Extract<GameEvent, { readonly type: 'TURN_STARTED' }> =>
       event.type === 'TURN_STARTED',
@@ -132,6 +149,19 @@ export function GameScreen() {
   const [showDebug, setShowDebug] = useState(false);
   const [inspectedTarget, setInspectedTarget] = useState<BoardTarget | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [constructionType, setConstructionType] = useState<ConstructionType | null>(null);
+
+  useEffect(() => {
+    if (constructionType === null) return undefined;
+    const cancelWithEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setConstructionType(null);
+        setActionError(null);
+      }
+    };
+    globalThis.addEventListener('keydown', cancelWithEscape);
+    return () => globalThis.removeEventListener('keydown', cancelWithEscape);
+  }, [constructionType]);
 
   const orderedPlayerConfigs = useMemo(
     () =>
@@ -148,7 +178,31 @@ export function GameScreen() {
     if (gameState.turn.phase === 'SETUP_PLACE_ROAD') {
       return getLegalSetupRoadEdgeIds(gameState).map((id) => ({ kind: 'EDGE', id }));
     }
+    const actorId = gameState.turn.activePlayerId;
+    if (gameState.turn.phase !== 'ACTION_PHASE' || actorId === null) return [];
+    if (constructionType === 'ROAD') {
+      return getValidRoadEdgeIds(gameState, actorId).map((id) => ({ kind: 'EDGE', id }));
+    }
+    if (constructionType === 'HOUSE') {
+      return getValidHouseVertexIds(gameState, actorId).map((id) => ({ kind: 'VERTEX', id }));
+    }
+    if (constructionType === 'MANSION') {
+      return getValidMansionVertexIds(gameState, actorId).map((id) => ({ kind: 'VERTEX', id }));
+    }
     return [];
+  }, [constructionType, gameState]);
+  const constructionAvailability = useMemo(() => {
+    const actorId = gameState?.turn.activePlayerId;
+    if (
+      gameState === null ||
+      actorId === null ||
+      actorId === undefined ||
+      gameState.turn.phase !== 'ACTION_PHASE'
+    )
+      return [];
+    return (['ROAD', 'HOUSE', 'MANSION'] as const).map((type) =>
+      getConstructionAvailability(gameState, actorId, type),
+    );
   }, [gameState]);
   const playerColors = useMemo<Readonly<Record<string, string>>>(() => {
     if (gameState === null) return {};
@@ -166,6 +220,20 @@ export function GameScreen() {
       .filter((hex) => hex.numberToken === total)
       .map((hex) => hex.id);
   }, [gameState]);
+  const animatedTarget = useMemo<BoardTarget | null>(() => {
+    const road = recentGameEvents.find(
+      (event): event is Extract<GameEvent, { readonly type: 'ROAD_BUILT' }> =>
+        event.type === 'ROAD_BUILT',
+    );
+    if (road !== undefined) return { kind: 'EDGE', id: road.edgeId };
+    const building = recentGameEvents.find(
+      (
+        event,
+      ): event is Extract<GameEvent, { readonly type: 'BUILDING_PLACED' | 'BUILDING_UPGRADED' }> =>
+        event.type === 'BUILDING_PLACED' || event.type === 'BUILDING_UPGRADED',
+    );
+    return building === undefined ? null : { kind: 'VERTEX', id: building.vertexId };
+  }, [recentGameEvents]);
 
   if (gameState === null) {
     return <Navigate to="/lobby" replace />;
@@ -184,13 +252,24 @@ export function GameScreen() {
       : gameState.turn.phase === 'SETUP_PLACE_ROAD'
         ? 'Choose a glowing edge attached to that house.'
         : null;
+  const constructionInstruction =
+    constructionType === 'ROAD'
+      ? 'Choose a glowing edge for the new road. Press Escape or Cancel to stop.'
+      : constructionType === 'HOUSE'
+        ? 'Choose a glowing corner for the new house. Press Escape or Cancel to stop.'
+        : constructionType === 'MANSION'
+          ? 'Choose one of your glowing houses to upgrade. Press Escape or Cancel to stop.'
+          : null;
 
   const leaveGame = (destination: '/' | '/lobby') => {
     void navigate(destination, { flushSync: true });
     clearGame();
   };
 
-  const handleActionResult = (result: ReturnType<typeof dispatchGameAction>) => {
+  const handleActionResult = (
+    result: ReturnType<typeof dispatchGameAction>,
+    keepConstructionMode = false,
+  ) => {
     if (result === null) {
       setActionError('No active match is available for this action.');
     } else if (!result.ok) {
@@ -198,6 +277,7 @@ export function GameScreen() {
     } else {
       setActionError(null);
       setInspectedTarget(null);
+      if (!keepConstructionMode) setConstructionType(null);
     }
   };
 
@@ -209,16 +289,28 @@ export function GameScreen() {
     }
 
     const id = actionId(`local-${globalThis.crypto.randomUUID()}`);
-    const result =
-      gameState.turn.phase === 'SETUP_PLACE_HOUSE' && target.kind === 'VERTEX'
-        ? dispatchGameAction({ id, type: 'PLACE_SETUP_HOUSE', actorId, vertexId: target.id })
-        : gameState.turn.phase === 'SETUP_PLACE_ROAD' && target.kind === 'EDGE'
-          ? dispatchGameAction({ id, type: 'PLACE_SETUP_ROAD', actorId, edgeId: target.id })
-          : null;
+    let result: ReturnType<typeof dispatchGameAction> = null;
+    if (gameState.turn.phase === 'SETUP_PLACE_HOUSE' && target.kind === 'VERTEX') {
+      result = dispatchGameAction({ id, type: 'PLACE_SETUP_HOUSE', actorId, vertexId: target.id });
+    } else if (gameState.turn.phase === 'SETUP_PLACE_ROAD' && target.kind === 'EDGE') {
+      result = dispatchGameAction({ id, type: 'PLACE_SETUP_ROAD', actorId, edgeId: target.id });
+    } else if (gameState.turn.phase === 'ACTION_PHASE') {
+      if (constructionType === 'ROAD' && target.kind === 'EDGE') {
+        result = dispatchGameAction({ id, type: 'BUILD_ROAD', actorId, edgeId: target.id });
+      } else if (constructionType === 'HOUSE' && target.kind === 'VERTEX') {
+        result = dispatchGameAction({ id, type: 'BUILD_HOUSE', actorId, vertexId: target.id });
+      } else if (constructionType === 'MANSION' && target.kind === 'VERTEX') {
+        result = dispatchGameAction({ id, type: 'UPGRADE_MANSION', actorId, vertexId: target.id });
+      }
+    }
 
     if (result === null)
       setActionError('That board target is not available during the current phase.');
-    else handleActionResult(result);
+    else
+      handleActionResult(
+        result,
+        gameState.turn.phase === 'ACTION_PHASE' && constructionType !== null,
+      );
   };
 
   const rollDice = () => {
@@ -241,6 +333,17 @@ export function GameScreen() {
         actorId: gameState.turn.activePlayerId,
       }),
     );
+  };
+
+  const chooseConstruction = (type: ConstructionType) => {
+    setConstructionType(type);
+    setInspectedTarget(null);
+    setActionError(null);
+  };
+
+  const cancelConstruction = () => {
+    setConstructionType(null);
+    setActionError(null);
   };
 
   return (
@@ -291,6 +394,7 @@ export function GameScreen() {
             showDebugIds={showDebug}
             selectableTargets={selectableTargets}
             highlightedHexIds={highlightedHexIds}
+            animatedTarget={animatedTarget}
             playerColors={playerColors}
             onInspect={setInspectedTarget}
             onSelect={selectBoardTarget}
@@ -299,7 +403,12 @@ export function GameScreen() {
             className={`board-inspector ${actionError === null ? '' : 'board-inspector--error'}`}
             aria-live="polite"
           >
-            {actionError ?? (inspectedTarget === null ? (turnFeedback ?? inspection) : inspection)}
+            {actionError ??
+              (constructionInstruction === null
+                ? inspectedTarget === null
+                  ? (turnFeedback ?? inspection)
+                  : inspection
+                : `${turnFeedback === null ? '' : `${turnFeedback} `}${constructionInstruction}`)}
           </p>
         </div>
 
@@ -321,7 +430,7 @@ export function GameScreen() {
                   player={player}
                   position={index + 1}
                   active={gameState.turn.activePlayerId === player.id}
-                  publicScore={publicScore(gameState, player.id)}
+                  publicScore={calculatePublicScore(gameState, player.id)}
                 />
               );
             })}
@@ -388,12 +497,22 @@ export function GameScreen() {
           ))}
         </div>
         {setupProgress === null ? (
-          <DicePanel
-            phase={gameState.turn.phase}
-            dice={gameState.turn.dice}
-            onRoll={rollDice}
-            onEndTurn={endTurn}
-          />
+          <div className="turn-controls">
+            {gameState.turn.phase === 'ACTION_PHASE' ? (
+              <ConstructionPanel
+                availability={constructionAvailability}
+                activeType={constructionType}
+                onChoose={chooseConstruction}
+                onCancel={cancelConstruction}
+              />
+            ) : null}
+            <DicePanel
+              phase={gameState.turn.phase}
+              dice={gameState.turn.dice}
+              onRoll={rollDice}
+              onEndTurn={endTurn}
+            />
+          </div>
         ) : (
           <div className="setup-progress" aria-live="polite">
             <strong>

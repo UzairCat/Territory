@@ -23,3 +23,6 @@ export * from './modes/classic';
 export * from './rules/setup-rules';
 export * from './rules/production-rules';
 export * from './rules/turn-rules';
+export * from './rules/resource-rules';
+export * from './rules/scoring-rules';
+export * from './rules/build-rules';

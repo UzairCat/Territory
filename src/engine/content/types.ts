@@ -87,6 +87,7 @@ export interface ClassicRules {
     readonly sides: 6;
     readonly robberTotal: 7;
   };
+  readonly robberFlowEnabled: boolean;
   readonly discardThreshold: number;
   readonly bankCardsPerResource: number;
   readonly bankTradeRatio: 4;

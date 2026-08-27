@@ -21,6 +21,17 @@ data from `ClassicModeConfig` and `BaseMapDefinition`; UI components must not du
 | Mansion       | 2 Grain, 3 Ore                        |      4 | 2 VP total, 2 resources |
 | Progress card | 1 Grain, 1 Livestock, 1 Ore           |      — | Card-defined            |
 
+During action phase, construction costs are paid to the bank atomically with placement:
+
+- A Road uses an empty edge connected to the player's network. An opponent building blocks extending
+  through that corner.
+- A House uses an empty corner at least two edges from every other building and must touch one of the
+  player's Roads.
+- A Mansion replaces one of the player's Houses. The Mansion supply decreases by one, the replaced
+  House returns to supply, and the building is worth 2 VP total.
+- Construction is rejected before any state changes if the player is inactive, outside action phase,
+  cannot pay, has no matching piece, or selects an illegal target.
+
 The bank begins with 19 cards each of Wood, Brick, Grain, Livestock, and Ore. If it cannot satisfy
 the complete demand for one resource type during production, nobody receives that resource type for
 that event; other resource types resolve normally.

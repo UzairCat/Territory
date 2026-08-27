@@ -75,6 +75,27 @@ A seven performs no production. It deterministically identifies players above th
 and enters either `DISCARD_RESOURCES` or `MOVE_ROBBER`. Those pending-interaction states are already
 authoritative; their completion UI and actions belong to the dedicated robber phase.
 
+## Normal construction
+
+Normal construction is split between pure legality queries and authoritative actions. The shared
+resource helpers compare arbitrary bundles and apply payments without mutating their inputs. Road,
+House, and Mansion costs always come from the match's mode configuration; accepted payments return
+those cards to the finite bank in the same transition that changes the board and piece inventories.
+
+Road targets must be empty and connect to the player's road/building network. An opponent building
+blocks continuation through its vertex. House targets must be empty, obey the distance rule, and touch
+an owned road. Mansion targets must contain an owned House; upgrading consumes one Mansion and returns
+the replaced House to its player's supply. Building VP is derived from board state, so the public score
+changes immediately without maintaining a second mutable score counter.
+
+The action-phase UI keeps only the temporary selected construction type as interface state. It asks
+the engine for legal targets, highlights those targets, and still dispatches the final target through
+the same validating action boundary. A successful placement keeps that construction type selected and
+refreshes its targets so multiple matching pieces can be built; Cancel, Escape, switching type, or
+ending the turn exits the mode. Accepted `RESOURCES_SPENT`, `ROAD_BUILT`, `BUILDING_PLACED`,
+`BUILDING_UPGRADED`, and `SCORE_CHANGED` events provide public feedback plus animation/audio hooks;
+the current renderer uses the placement event to fade the new piece into view.
+
 ## Intended online shape
 
 Local v0.1 calls `dispatch` in the browser. A future online client sends the same serializable action

@@ -16,6 +16,7 @@ interface TerritoryBoardOptions {
   readonly onSelect: (target: BoardTarget) => void;
   readonly selectableTargets: readonly BoardTarget[];
   readonly highlightedHexIds: readonly HexId[];
+  readonly animatedTarget: BoardTarget | null;
   readonly playerColors: Readonly<Record<string, string>>;
   readonly showDebugIds?: boolean;
 }
@@ -37,6 +38,7 @@ export class TerritoryBoard {
   private readonly onSelect: TerritoryBoardOptions['onSelect'];
   private readonly selectableTargetKeys: ReadonlySet<string>;
   private readonly highlightedHexIds: ReadonlySet<HexId>;
+  private readonly animatedTargetKey: string | null;
   private readonly playerColors: TerritoryBoardOptions['playerColors'];
   private readonly world = new Container();
   private readonly debugLayer = new Container();
@@ -55,6 +57,8 @@ export class TerritoryBoard {
     this.onSelect = options.onSelect;
     this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
     this.highlightedHexIds = new Set(options.highlightedHexIds);
+    this.animatedTargetKey =
+      options.animatedTarget === null ? null : targetKey(options.animatedTarget);
     this.playerColors = options.playerColors;
     this.debugLayer.visible = options.showDebugIds ?? false;
   }
@@ -277,6 +281,7 @@ export class TerritoryBoard {
         roadOutline.eventMode = 'none';
         road.eventMode = 'none';
         pieceLayer.addChild(roadOutline, road);
+        this.animatePlacement(edge.target, [roadOutline, road]);
       }
     }
 
@@ -338,6 +343,7 @@ export class TerritoryBoard {
         }
         piece.eventMode = 'none';
         pieceLayer.addChild(piece);
+        this.animatePlacement(vertex.target, [piece]);
       }
     }
 
@@ -371,6 +377,25 @@ export class TerritoryBoard {
       this.targets.set(targetKey(port.target), background);
       portLayer.addChild(background, label);
     }
+  }
+
+  private animatePlacement(target: BoardTarget, pieces: readonly Container[]): void {
+    if (
+      this.animatedTargetKey !== targetKey(target) ||
+      globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ) {
+      return;
+    }
+
+    const startedAt = globalThis.performance.now();
+    for (const piece of pieces) piece.alpha = 0;
+    const tick = () => {
+      const progress = Math.min((globalThis.performance.now() - startedAt) / 260, 1);
+      const eased = 1 - (1 - progress) ** 3;
+      for (const piece of pieces) piece.alpha = eased;
+      if (progress >= 1) this.application.ticker.remove(tick);
+    };
+    this.application.ticker.add(tick);
   }
 
   private attachViewportInteraction(): void {

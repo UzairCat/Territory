@@ -31,11 +31,18 @@ The implementation roadmap is split into independently verified phases.
   piece rendering, forward/reverse snake order, starting resources, and normal-turn handoff.
 - Phase 5 adds deterministic 2d6 rolls, finite-bank production, robber blocking, resource-shortage
   handling, public gain feedback, rolled-tile highlights, and repeatable end-turn advancement.
+- Phase 6 adds engine-authoritative normal construction for Roads, Houses, and Mansions, including
+  costs, bank returns, piece limits, network/distance validation, legal-target queries, and build mode.
 
 The initialized game route now renders the generated board, ports, tokens, robber, player order,
 public piece counts, resource hand, optional developer IDs, and engine-authoritative setup controls.
-After setup, players can now roll, resolve non-seven production, and pass play to the next player.
-Normal construction begins in Phase 6; a roll of seven enters the reserved robber flow.
+After setup, players can now roll, resolve non-seven production, construct during action phase, and
+pass play to the next player. A roll of seven enters the reserved robber flow, which is the next
+gameplay phase.
+
+Temporary testing note: Classic mode rerolls sevens deterministically until the complete robber flow
+lands, preventing construction test matches from becoming stuck. The robber branch remains covered
+behind its mode flag and will be re-enabled in that phase.
 
 See [Architecture](docs/ARCHITECTURE.md) and [Classic Rules](docs/CLASSIC_RULES.md) for the decisions
 that later phases build upon.

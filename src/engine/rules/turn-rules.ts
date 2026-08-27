@@ -27,9 +27,17 @@ export function rollDice(
       : rejectAction(state, 'DICE_ALREADY_ROLLED', 'The dice have already been rolled this turn.');
   }
 
-  const first = randomInteger(state.random, 1, state.config.rules.dice.sides + 1);
-  const second = randomInteger(first.state, 1, state.config.rules.dice.sides + 1);
-  const dice = [first.value, second.value] as const;
+  let nextRandom = state.random;
+  let dice: readonly [number, number];
+  do {
+    const first = randomInteger(nextRandom, 1, state.config.rules.dice.sides + 1);
+    const second = randomInteger(first.state, 1, state.config.rules.dice.sides + 1);
+    dice = [first.value, second.value];
+    nextRandom = second.state;
+  } while (
+    !state.config.rules.robberFlowEnabled &&
+    dice[0] + dice[1] === state.config.rules.dice.robberTotal
+  );
   const total = dice[0] + dice[1];
   const events: GameEvent[] = [{ type: 'DICE_ROLLED', playerId: action.actorId, dice }];
 
@@ -49,7 +57,7 @@ export function rollDice(
 
     const nextState: GameState = {
       ...state,
-      random: second.state,
+      random: nextRandom,
       turn: { ...state.turn, dice, phase: queue.length > 0 ? 'DISCARD_RESOURCES' : 'MOVE_ROBBER' },
       pendingInteraction:
         queue.length > 0
@@ -71,7 +79,7 @@ export function rollDice(
     ...state,
     players: production.players,
     bank: production.bank,
-    random: second.state,
+    random: nextRandom,
     turn: { ...state.turn, dice, phase: 'ACTION_PHASE' },
   };
   return acceptAction(state, action, nextState, events);

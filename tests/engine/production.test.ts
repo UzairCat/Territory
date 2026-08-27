@@ -2,13 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import { RESOURCE_IDS, TERRAIN_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
+import type { GameAction } from '../../src/engine/core/actions';
+import { createGame } from '../../src/engine/core/create-game';
+import { dispatch } from '../../src/engine/core/game-engine';
 import type { GameState } from '../../src/engine/core/game-state';
-import { hexId, vertexId } from '../../src/engine/core/ids';
+import { actionId, hexId, vertexId } from '../../src/engine/core/ids';
+import { createRandomState, randomInteger } from '../../src/engine/core/random';
 import {
   calculateProductionDemand,
   resolveProduction,
 } from '../../src/engine/rules/production-rules';
-import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
+import {
+  getLegalSetupHouseVertexIds,
+  getLegalSetupRoadEdgeIds,
+} from '../../src/engine/rules/setup-rules';
+import { createTestConfig, createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 const VERTEX_A = vertexId('production-a');
 const VERTEX_B = vertexId('production-b');
@@ -99,6 +107,54 @@ function productionState(): GameState {
   };
 }
 
+function randomForTotal(total: number) {
+  for (let candidate = 0; candidate < 10_000; candidate += 1) {
+    const state = createRandomState(`production-roll-${total}-${candidate}`);
+    const first = randomInteger(state, 1, 7);
+    const second = randomInteger(first.state, 1, 7);
+    if (first.value + second.value === total) return state;
+  }
+  throw new Error(`Could not find deterministic dice total ${total}.`);
+}
+
+function completeGeneratedSetup(): GameState {
+  const created = createGame({ ...createTestConfig(), seed: 'production-integration-seed' });
+  if (!created.ok) throw new Error(created.issues.map((issue) => issue.message).join(', '));
+  let state = created.state;
+  let serial = 0;
+
+  while (state.turn.phase === 'SETUP_PLACE_HOUSE' || state.turn.phase === 'SETUP_PLACE_ROAD') {
+    const actorId = state.turn.activePlayerId;
+    if (actorId === null) throw new Error('Generated setup has no active player.');
+    let action: GameAction;
+    if (state.turn.phase === 'SETUP_PLACE_HOUSE') {
+      const vertexId = getLegalSetupHouseVertexIds(state)[0];
+      if (vertexId === undefined) throw new Error('Generated setup has no legal house.');
+      action = {
+        id: actionId(`production-setup-house-${serial}`),
+        type: 'PLACE_SETUP_HOUSE',
+        actorId,
+        vertexId,
+      };
+    } else {
+      const edgeId = getLegalSetupRoadEdgeIds(state)[0];
+      if (edgeId === undefined) throw new Error('Generated setup has no legal road.');
+      action = {
+        id: actionId(`production-setup-road-${serial}`),
+        type: 'PLACE_SETUP_ROAD',
+        actorId,
+        edgeId,
+      };
+    }
+    const result = dispatch(state, action);
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+    state = result.state;
+    serial += 1;
+  }
+
+  return state;
+}
+
 describe('resource production', () => {
   it('aggregates houses, mansions, and multiple matching tiles by player and resource', () => {
     const state = productionState();
@@ -161,5 +217,41 @@ describe('resource production', () => {
     expect(resolution.grants[TEST_PLAYER_IDS[1]]).toBeUndefined();
     expect(resolution.bank[RESOURCE_IDS.wood]).toBe(3);
     expect(resolution.bank[RESOURCE_IDS.brick]).toBe(18);
+  });
+
+  it('pays every numbered building connection on a generated board through the dice action', () => {
+    const setupState = completeGeneratedSetup();
+    const numberedConnections = Object.values(setupState.board.vertices).flatMap((vertex) =>
+      vertex.building === null
+        ? []
+        : vertex.adjacentHexIds.flatMap((adjacentHexId) => {
+            const hex = setupState.board.hexes[adjacentHexId];
+            return hex?.numberToken === null ||
+              hex?.numberToken === undefined ||
+              hex.resourceId === null
+              ? []
+              : [{ playerId: vertex.building!.ownerId, hex }];
+          }),
+    );
+    expect(numberedConnections.length).toBeGreaterThan(0);
+
+    for (const connection of numberedConnections) {
+      const state: GameState = {
+        ...setupState,
+        random: randomForTotal(connection.hex.numberToken!),
+      };
+      const playerBefore = state.players[connection.playerId];
+      const result = dispatch(state, {
+        id: actionId(`roll-${connection.hex.id}-${connection.playerId}`),
+        type: 'ROLL_DICE',
+        actorId: state.turn.activePlayerId!,
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok || playerBefore === undefined) continue;
+      expect(
+        (result.state.players[connection.playerId]?.resources[connection.hex.resourceId!] ?? 0) -
+          (playerBefore.resources[connection.hex.resourceId!] ?? 0),
+      ).toBeGreaterThanOrEqual(1);
+    }
   });
 });

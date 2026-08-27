@@ -8,6 +8,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '../../src/app/App';
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
+import { RESOURCE_IDS } from '../../src/engine/content/resources';
+import { resourceBundle } from '../../src/engine/content/types';
 import { createRandomState, randomInteger } from '../../src/engine/core/random';
 
 vi.mock('../../src/board-renderer/BoardViewport', () => ({
@@ -122,6 +124,60 @@ describe('application flow', () => {
     expect(screen.getByText('Action phase')).toBeInTheDocument();
     expect(screen.getByLabelText('Dice total')).toHaveTextContent('Total 8');
     expect(screen.getByText(/^Roll 8:/)).toBeInTheDocument();
+
+    const actionState = useAppStore.getState().gameState;
+    const actorId = actionState?.turn.activePlayerId;
+    if (
+      actionState === null ||
+      actionState === undefined ||
+      actorId === null ||
+      actorId === undefined
+    ) {
+      throw new Error('Roll did not retain an active action-phase player.');
+    }
+    act(() =>
+      useAppStore.setState({
+        gameState: {
+          ...actionState,
+          players: {
+            ...actionState.players,
+            [actorId]: {
+              ...actionState.players[actorId]!,
+              resources: resourceBundle([
+                [RESOURCE_IDS.wood, 2],
+                [RESOURCE_IDS.brick, 2],
+              ]),
+            },
+          },
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Build road/ }));
+    expect(screen.getByText(/Choose a glowing edge for the new road/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Build road/ }));
+    await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
+    expect(screen.getByText(/built a road/)).toBeInTheDocument();
+    expect(useAppStore.getState().recentGameEvents.map((event) => event.type)).toEqual([
+      'RESOURCES_SPENT',
+      'ROAD_BUILT',
+    ]);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Place first legal target' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Build road/ })).toBeDisabled();
+    expect(useAppStore.getState().gameState?.players[actorId]?.resources).toMatchObject({
+      wood: 0,
+      brick: 0,
+    });
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
     await user.click(screen.getByRole('button', { name: 'End turn' }));
     expect(screen.getByText('Waiting for roll')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Roll dice' })).toBeInTheDocument();

@@ -13,6 +13,7 @@ export const CLASSIC_MODE = {
     playerCount: { minimum: 2, maximum: 4 },
     victoryTarget: 10,
     dice: { count: 2, sides: 6, robberTotal: 7 },
+    robberFlowEnabled: false,
     discardThreshold: 7,
     bankCardsPerResource: 19,
     bankTradeRatio: 4,

@@ -21,6 +21,16 @@ function randomForTotal(total: number) {
   throw new Error(`Could not find deterministic dice total ${total}.`);
 }
 
+function withRobberFlowEnabled(state: GameState): GameState {
+  return {
+    ...state,
+    config: {
+      ...state.config,
+      rules: { ...state.config.rules, robberFlowEnabled: true },
+    },
+  };
+}
+
 describe('normal turn rules', () => {
   it('rolls deterministic 2d6, resolves production, and enters action phase', () => {
     const random = randomForTotal(8);
@@ -73,7 +83,10 @@ describe('normal turn rules', () => {
 
   it('branches a seven into robber movement when nobody must discard', () => {
     const random = randomForTotal(7);
-    const state: GameState = { ...createTestGameState('WAITING_FOR_ROLL'), random: random.state };
+    const state = withRobberFlowEnabled({
+      ...createTestGameState('WAITING_FOR_ROLL'),
+      random: random.state,
+    });
     const result = dispatch(state, {
       id: actionId('roll-seven'),
       type: 'ROLL_DICE',
@@ -96,7 +109,7 @@ describe('normal turn rules', () => {
   it('creates a deterministic discard queue when a seven finds large hands', () => {
     const random = randomForTotal(7);
     const original = createTestGameState('WAITING_FOR_ROLL');
-    const state: GameState = {
+    const state = withRobberFlowEnabled({
       ...original,
       random: random.state,
       players: {
@@ -110,7 +123,7 @@ describe('normal turn rules', () => {
           resources: resourceBundle([[RESOURCE_IDS.brick, 9]]),
         },
       },
-    };
+    });
     const result = dispatch(state, {
       id: actionId('roll-seven-discards'),
       type: 'ROLL_DICE',
@@ -125,6 +138,29 @@ describe('normal turn rules', () => {
       queue: [TEST_PLAYER_IDS[0], TEST_PLAYER_IDS[1]],
       requiredCounts: { [TEST_PLAYER_IDS[0]]: 4, [TEST_PLAYER_IDS[1]]: 4 },
     });
+  });
+
+  it('deterministically rerolls sevens while the robber flow is disabled', () => {
+    const random = randomForTotal(7);
+    const state: GameState = { ...createTestGameState('WAITING_FOR_ROLL'), random: random.state };
+    const action = {
+      id: actionId('reroll-seven'),
+      type: 'ROLL_DICE' as const,
+      actorId: TEST_PLAYER_IDS[0],
+    };
+    const result = dispatch(state, action);
+    const replay = dispatch(structuredClone(state), action);
+
+    expect(result.ok).toBe(true);
+    expect(replay).toEqual(result);
+    if (!result.ok) return;
+    const dice = result.state.turn.dice;
+    expect(dice).not.toBeNull();
+    if (dice === null) return;
+    expect(dice[0] + dice[1]).not.toBe(7);
+    expect(result.state.turn.phase).toBe('ACTION_PHASE');
+    expect(result.state.random.draws).toBeGreaterThanOrEqual(state.random.draws + 4);
+    expect(result.events.map((event) => event.type)).toEqual(['DICE_ROLLED', 'RESOURCES_PRODUCED']);
   });
 
   it('requires a completed roll before ending and then advances a clean turn', () => {

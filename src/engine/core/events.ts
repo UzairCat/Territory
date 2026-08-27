@@ -25,7 +25,18 @@ export type GameEvent =
       readonly vertexId: VertexId;
       readonly buildingType: Extract<BuildingType, 'HOUSE' | 'MANSION'>;
     }
+  | {
+      readonly type: 'BUILDING_UPGRADED';
+      readonly playerId: PlayerId;
+      readonly vertexId: VertexId;
+    }
   | { readonly type: 'ROAD_BUILT'; readonly playerId: PlayerId; readonly edgeId: EdgeId }
+  | {
+      readonly type: 'RESOURCES_SPENT';
+      readonly playerId: PlayerId;
+      readonly resources: ResourceBundle;
+      readonly reason: Extract<BuildingType, 'ROAD' | 'HOUSE' | 'MANSION'>;
+    }
   | {
       readonly type: 'DICE_ROLLED';
       readonly playerId: PlayerId;
