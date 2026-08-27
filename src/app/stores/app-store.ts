@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 
 import { createGame } from '../../engine/core/create-game';
+import type { GameAction } from '../../engine/core/actions';
+import { dispatch as dispatchEngineAction } from '../../engine/core/game-engine';
+import type { DispatchResult } from '../../engine/core/game-engine';
 import type { GameState } from '../../engine/core/game-state';
 import { gameId, playerId } from '../../engine/core/ids';
 import type { ColorId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
@@ -44,6 +47,7 @@ interface AppStoreState {
   readonly editLobbyPlayer: (id: PlayerId, name: string, colorId: ColorId) => void;
   readonly removeLobbyPlayer: (id: PlayerId) => void;
   readonly beginGame: () => BeginGameResult;
+  readonly dispatchGameAction: (action: GameAction) => DispatchResult | null;
   readonly clearGame: () => void;
   readonly openSettings: () => void;
   readonly closeSettings: () => void;
@@ -126,6 +130,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
     set({ gameState: gameResult.state });
     return { ok: true };
+  },
+  dispatchGameAction: (action) => {
+    const gameState = get().gameState;
+    if (gameState === null) return null;
+
+    const result = dispatchEngineAction(gameState, action);
+    if (result.ok) set({ gameState: result.state });
+    return result;
   },
   clearGame: () => set({ gameState: null }),
   openSettings: () => set({ settingsOpen: true }),

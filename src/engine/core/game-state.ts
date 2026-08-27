@@ -107,6 +107,7 @@ export interface TurnState {
   readonly dice: readonly [number, number] | null;
   readonly cardsPlayedThisTurn: number;
   readonly cardIdsBoughtThisTurn: readonly CardInstanceId[];
+  readonly setupPlacementIndex: number | null;
   readonly setupPlacementVertexId: VertexId | null;
 }
 

@@ -5,21 +5,36 @@ import type { BoardTarget } from './render-model';
 import type { TerritoryBoard } from './TerritoryBoard';
 import { Button } from '../ui/components/Button';
 
-interface BoardViewportProps {
+export interface BoardViewportProps {
   readonly board: BoardState;
   readonly showDebugIds: boolean;
+  readonly selectableTargets: readonly BoardTarget[];
+  readonly playerColors: Readonly<Record<string, string>>;
   readonly onInspect: (target: BoardTarget | null) => void;
+  readonly onSelect: (target: BoardTarget) => void;
 }
 
-export function BoardViewport({ board, showDebugIds, onInspect }: BoardViewportProps) {
+export function BoardViewport({
+  board,
+  showDebugIds,
+  selectableTargets,
+  playerColors,
+  onInspect,
+  onSelect,
+}: BoardViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<TerritoryBoard | null>(null);
   const inspectRef = useRef(onInspect);
+  const selectRef = useRef(onSelect);
   const debugRef = useRef(showDebugIds);
 
   useEffect(() => {
     inspectRef.current = onInspect;
   }, [onInspect]);
+
+  useEffect(() => {
+    selectRef.current = onSelect;
+  }, [onSelect]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -31,6 +46,9 @@ export function BoardViewport({ board, showDebugIds, onInspect }: BoardViewportP
         if (cancelled) return;
         const renderer = new Renderer(host, board, {
           onInspect: (target) => inspectRef.current(target),
+          onSelect: (target) => selectRef.current(target),
+          selectableTargets,
+          playerColors,
         });
         rendererRef.current = renderer;
         renderer.setDebugIdsVisible(debugRef.current);
@@ -48,7 +66,7 @@ export function BoardViewport({ board, showDebugIds, onInspect }: BoardViewportP
       rendererRef.current?.destroy();
       rendererRef.current = null;
     };
-  }, [board]);
+  }, [board, playerColors, selectableTargets]);
 
   useEffect(() => {
     debugRef.current = showDebugIds;
@@ -59,7 +77,15 @@ export function BoardViewport({ board, showDebugIds, onInspect }: BoardViewportP
     <section className="board-shell" aria-label="Territory board">
       <div ref={hostRef} className="board-viewport" />
       <div className="board-controls">
-        <span>Drag to pan · Scroll to zoom</span>
+        <span>
+          {selectableTargets.length > 0 ? (
+            <>
+              <i className="legal-target-swatch" aria-hidden="true" /> {selectableTargets.length}{' '}
+              legal targets ·{' '}
+            </>
+          ) : null}
+          Drag to pan · Scroll to zoom
+        </span>
         <Button variant="ghost" onClick={() => rendererRef.current?.fitBoard()}>
           Fit board
         </Button>

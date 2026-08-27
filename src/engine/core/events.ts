@@ -13,6 +13,13 @@ import type {
 export type GameEvent =
   | { readonly type: 'SETUP_STARTED'; readonly playerId: PlayerId }
   | {
+      readonly type: 'SETUP_PLAYER_ADVANCED';
+      readonly playerId: PlayerId;
+      readonly placementNumber: number;
+      readonly totalPlacements: number;
+    }
+  | { readonly type: 'SETUP_COMPLETED'; readonly firstPlayerId: PlayerId }
+  | {
       readonly type: 'BUILDING_PLACED';
       readonly playerId: PlayerId;
       readonly vertexId: VertexId;

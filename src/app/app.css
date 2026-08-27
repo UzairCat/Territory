@@ -852,6 +852,18 @@ input[type='checkbox'] {
   font-size: 0.75rem;
 }
 
+.legal-target-swatch {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.15rem;
+  border: 2px solid #111910;
+  border-radius: 50%;
+  vertical-align: -0.08rem;
+  background: #e2c26d;
+  box-shadow: 0 0 0.5rem rgb(226 194 109 / 55%);
+}
+
 .board-inspector {
   min-height: 1.25rem;
   margin: 0;
@@ -861,6 +873,11 @@ input[type='checkbox'] {
   font-size: 0.8rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.board-inspector--error {
+  color: #f1a0a6;
+  font-weight: 680;
 }
 
 .player-sidebar {
@@ -1096,6 +1113,24 @@ input[type='checkbox'] {
   text-align: right;
 }
 
+.setup-progress {
+  display: grid;
+  justify-items: end;
+  gap: 0.18rem;
+  text-align: right;
+}
+
+.setup-progress strong {
+  color: var(--gold);
+  font-size: 0.78rem;
+}
+
+.setup-progress span {
+  max-width: 19rem;
+  color: var(--muted-bright);
+  font-size: 0.7rem;
+}
+
 @media (max-width: 840px) {
   .lobby-layout {
     grid-template-columns: 1fr;
@@ -1137,6 +1172,12 @@ input[type='checkbox'] {
 
   .phase-placeholder {
     display: none;
+  }
+
+  .setup-progress {
+    justify-items: start;
+    grid-column: 1 / -1;
+    text-align: left;
   }
 }
 

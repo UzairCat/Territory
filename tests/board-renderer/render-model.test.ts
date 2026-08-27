@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { createBoardRenderModel } from '../../src/board-renderer/render-model';
 import { generateBaseBoard } from '../../src/engine/board/generate-board';
+import type { BoardState } from '../../src/engine/core/game-state';
+import { playerId } from '../../src/engine/core/ids';
 import { createRandomState } from '../../src/engine/core/random';
 
 function modelFor(seed: string) {
@@ -61,5 +63,32 @@ describe('board render model', () => {
     expect(second.hexes.map((hex) => hex.terrainName)).not.toEqual(
       first.hexes.map((hex) => hex.terrainName),
     );
+  });
+
+  it('carries authoritative building and road ownership into the presentation model', () => {
+    const { board } = modelFor('render-pieces');
+    const vertex = Object.values(board.vertices)[0];
+    const edge = Object.values(board.edges)[0];
+    if (vertex === undefined || edge === undefined)
+      throw new Error('Generated board has no target.');
+    const ownerId = playerId('piece-owner');
+    const boardWithPieces: BoardState = {
+      ...board,
+      vertices: {
+        ...board.vertices,
+        [vertex.id]: { ...vertex, building: { ownerId, type: 'HOUSE' } },
+      },
+      edges: {
+        ...board.edges,
+        [edge.id]: { ...edge, roadOwnerId: ownerId },
+      },
+    };
+
+    const model = createBoardRenderModel(boardWithPieces);
+    expect(model.vertices.find((target) => target.target.id === vertex.id)?.building).toEqual({
+      ownerId,
+      type: 'HOUSE',
+    });
+    expect(model.edges.find((target) => target.target.id === edge.id)?.roadOwnerId).toBe(ownerId);
   });
 });

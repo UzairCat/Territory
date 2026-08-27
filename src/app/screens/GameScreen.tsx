@@ -4,10 +4,17 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/app-store';
 import { BoardViewport } from '../../board-renderer/BoardViewport';
 import type { BoardTarget } from '../../board-renderer/render-model';
+import { PLAYER_COLORS } from '../../engine/content/colors';
 import { PROGRESS_CARDS } from '../../engine/content/progress-cards';
 import { RESOURCES, TERRAINS } from '../../engine/content/resources';
 import type { GameState, PlayerState } from '../../engine/core/game-state';
+import { actionId } from '../../engine/core/ids';
 import type { PlayerId } from '../../engine/core/ids';
+import {
+  getLegalSetupHouseVertexIds,
+  getLegalSetupRoadEdgeIds,
+  getSetupProgress,
+} from '../../engine/rules/setup-rules';
 import { Button } from '../../ui/components/Button';
 import { PlayerPanel } from '../../ui/game/PlayerPanel';
 
@@ -73,9 +80,11 @@ export function GameScreen() {
   const navigate = useNavigate();
   const gameState = useAppStore((state) => state.gameState);
   const clearGame = useAppStore((state) => state.clearGame);
+  const dispatchGameAction = useAppStore((state) => state.dispatchGameAction);
   const openSettings = useAppStore((state) => state.openSettings);
   const [showDebug, setShowDebug] = useState(false);
   const [inspectedTarget, setInspectedTarget] = useState<BoardTarget | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const orderedPlayerConfigs = useMemo(
     () =>
@@ -84,6 +93,25 @@ export function GameScreen() {
         : [...gameState.config.players].sort((first, second) => first.order - second.order),
     [gameState],
   );
+  const selectableTargets = useMemo<readonly BoardTarget[]>(() => {
+    if (gameState === null) return [];
+    if (gameState.turn.phase === 'SETUP_PLACE_HOUSE') {
+      return getLegalSetupHouseVertexIds(gameState).map((id) => ({ kind: 'VERTEX', id }));
+    }
+    if (gameState.turn.phase === 'SETUP_PLACE_ROAD') {
+      return getLegalSetupRoadEdgeIds(gameState).map((id) => ({ kind: 'EDGE', id }));
+    }
+    return [];
+  }, [gameState]);
+  const playerColors = useMemo<Readonly<Record<string, string>>>(() => {
+    if (gameState === null) return {};
+    return Object.fromEntries(
+      gameState.config.players.map((player) => [
+        player.id,
+        PLAYER_COLORS.find((color) => color.id === player.colorId)?.hex ?? '#f6f0dc',
+      ]),
+    );
+  }, [gameState]);
 
   if (gameState === null) {
     return <Navigate to="/lobby" replace />;
@@ -94,10 +122,42 @@ export function GameScreen() {
       ? undefined
       : gameState.players[gameState.turn.activePlayerId];
   const inspection = describeTarget(gameState, inspectedTarget);
+  const setupProgress = getSetupProgress(gameState);
+  const setupInstruction =
+    gameState.turn.phase === 'SETUP_PLACE_HOUSE'
+      ? 'Choose a glowing corner for your house.'
+      : gameState.turn.phase === 'SETUP_PLACE_ROAD'
+        ? 'Choose a glowing edge attached to that house.'
+        : null;
 
   const leaveGame = (destination: '/' | '/lobby') => {
     void navigate(destination, { flushSync: true });
     clearGame();
+  };
+
+  const selectBoardTarget = (target: BoardTarget) => {
+    const actorId = gameState.turn.activePlayerId;
+    if (actorId === null) {
+      setActionError('No active player is available for this action.');
+      return;
+    }
+
+    const id = actionId(`local-${globalThis.crypto.randomUUID()}`);
+    const result =
+      gameState.turn.phase === 'SETUP_PLACE_HOUSE' && target.kind === 'VERTEX'
+        ? dispatchGameAction({ id, type: 'PLACE_SETUP_HOUSE', actorId, vertexId: target.id })
+        : gameState.turn.phase === 'SETUP_PLACE_ROAD' && target.kind === 'EDGE'
+          ? dispatchGameAction({ id, type: 'PLACE_SETUP_ROAD', actorId, edgeId: target.id })
+          : null;
+
+    if (result === null) {
+      setActionError('That board target is not available during the current phase.');
+    } else if (!result.ok) {
+      setActionError(result.error.message);
+    } else {
+      setActionError(null);
+      setInspectedTarget(null);
+    }
   };
 
   return (
@@ -146,10 +206,16 @@ export function GameScreen() {
           <BoardViewport
             board={gameState.board}
             showDebugIds={showDebug}
+            selectableTargets={selectableTargets}
+            playerColors={playerColors}
             onInspect={setInspectedTarget}
+            onSelect={selectBoardTarget}
           />
-          <p className="board-inspector" aria-live="polite">
-            {inspection}
+          <p
+            className={`board-inspector ${actionError === null ? '' : 'board-inspector--error'}`}
+            aria-live="polite"
+          >
+            {actionError ?? inspection}
           </p>
         </div>
 
@@ -204,6 +270,13 @@ export function GameScreen() {
                 </dd>
               </div>
               <div>
+                <dt>Actions</dt>
+                <dd>
+                  {gameState.actionHistory.length} ·{' '}
+                  {gameState.actionHistory.at(-1)?.actionType ?? 'none'}
+                </dd>
+              </div>
+              <div>
                 <dt>Target</dt>
                 <dd>{inspectedTarget?.id ?? 'none'}</dd>
               </div>
@@ -230,7 +303,17 @@ export function GameScreen() {
             </div>
           ))}
         </div>
-        <span className="phase-placeholder">Setup controls arrive in Phase 4</span>
+        {setupProgress === null ? (
+          <span className="phase-placeholder">Dice and production arrive in Phase 5</span>
+        ) : (
+          <div className="setup-progress" aria-live="polite">
+            <strong>
+              Placement {setupProgress.placementNumber}/{setupProgress.totalPlacements} ·{' '}
+              {setupProgress.round === 'FORWARD' ? 'Forward' : 'Reverse'} round
+            </strong>
+            <span>{setupInstruction}</span>
+          </div>
+        )}
       </footer>
     </main>
   );

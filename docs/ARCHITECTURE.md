@@ -44,6 +44,20 @@ without relying on floating-point equality. The renderer converts that lattice i
 render-model adapter. PixiJS owns canvas presentation, hit targets, pan, zoom, and hover state; React
 owns the surrounding HUD. Neither layer is allowed to mutate authoritative game state directly.
 
+## Initial placement protocol
+
+New matches enter `SETUP_PLACE_HOUSE` immediately. The engine derives a deterministic snake from the
+already-randomized player order, records the current placement-pair index in `TurnState`, and permits
+only the active player to submit the expected action. A setup house must satisfy occupancy, distance,
+and piece-supply rules. The following road must occupy an empty edge attached to that exact house.
+
+Legal-target selectors share the same rule predicates as the dispatcher, so Pixi highlights are an
+affordance rather than authority. Every click still becomes a serializable `GameAction` submitted
+through `dispatch`. Rejections preserve the identical state object; accepted actions append history
+and emit ordered domain events. Second-round houses receive resources from adjacent producing hexes,
+with matching cards removed from the bank. The final road atomically clears setup state and enters
+`WAITING_FOR_ROLL` with the first player active.
+
 ## Intended online shape
 
 Local v0.1 calls `dispatch` in the browser. A future online client sends the same serializable action

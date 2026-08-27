@@ -1,6 +1,12 @@
 import { TERRAINS } from '../engine/content/resources';
-import type { BoardState, EdgeState, HexState, PortState } from '../engine/core/game-state';
-import type { EdgeId, HexId, PortId, VertexId } from '../engine/core/ids';
+import type {
+  BoardState,
+  BuildingState,
+  EdgeState,
+  HexState,
+  PortState,
+} from '../engine/core/game-state';
+import type { EdgeId, HexId, PlayerId, PortId, VertexId } from '../engine/core/ids';
 import {
   axialToWorld,
   hexCornerToTopology,
@@ -28,11 +34,13 @@ export interface RenderEdge {
   readonly target: Extract<BoardTarget, { readonly kind: 'EDGE' }>;
   readonly first: WorldPoint;
   readonly second: WorldPoint;
+  readonly roadOwnerId: PlayerId | null;
 }
 
 export interface RenderVertex {
   readonly target: Extract<BoardTarget, { readonly kind: 'VERTEX' }>;
   readonly position: WorldPoint;
+  readonly building: BuildingState | null;
 }
 
 export interface RenderPort {
@@ -107,7 +115,12 @@ function renderEdge(edge: EdgeState, positions: ReadonlyMap<VertexId, WorldPoint
   if (first === undefined || second === undefined) {
     throw new Error(`Cannot render ${edge.id} without both vertices.`);
   }
-  return { target: { kind: 'EDGE', id: edge.id }, first, second };
+  return {
+    target: { kind: 'EDGE', id: edge.id },
+    first,
+    second,
+    roadOwnerId: edge.roadOwnerId,
+  };
 }
 
 function portLabel(port: PortState): string {
@@ -151,7 +164,7 @@ export function createBoardRenderModel(board: BoardState, hexSize = 70): BoardRe
   const vertices = Object.values(board.vertices).map((vertex): RenderVertex => {
     const position = positions.get(vertex.id);
     if (position === undefined) throw new Error(`Cannot render unknown vertex ${vertex.id}.`);
-    return { target: { kind: 'VERTEX', id: vertex.id }, position };
+    return { target: { kind: 'VERTEX', id: vertex.id }, position, building: vertex.building };
   });
   const ports = Object.values(board.ports).map((port) => renderPort(port, edgeById, hexSize));
   const extentPoints = [

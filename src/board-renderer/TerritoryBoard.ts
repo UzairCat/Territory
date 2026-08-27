@@ -12,6 +12,9 @@ import { createBoardRenderModel, type BoardRenderModel, type BoardTarget } from 
 
 interface TerritoryBoardOptions {
   readonly onInspect: (target: BoardTarget | null) => void;
+  readonly onSelect: (target: BoardTarget) => void;
+  readonly selectableTargets: readonly BoardTarget[];
+  readonly playerColors: Readonly<Record<string, string>>;
   readonly showDebugIds?: boolean;
 }
 
@@ -29,6 +32,9 @@ export class TerritoryBoard {
   private readonly host: HTMLElement;
   private readonly model: BoardRenderModel;
   private readonly onInspect: TerritoryBoardOptions['onInspect'];
+  private readonly onSelect: TerritoryBoardOptions['onSelect'];
+  private readonly selectableTargetKeys: ReadonlySet<string>;
+  private readonly playerColors: TerritoryBoardOptions['playerColors'];
   private readonly world = new Container();
   private readonly debugLayer = new Container();
   private readonly application = new Application();
@@ -43,6 +49,9 @@ export class TerritoryBoard {
     this.host = host;
     this.model = createBoardRenderModel(board);
     this.onInspect = options.onInspect;
+    this.onSelect = options.onSelect;
+    this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
+    this.playerColors = options.playerColors;
     this.debugLayer.visible = options.showDebugIds ?? false;
   }
 
@@ -65,7 +74,7 @@ export class TerritoryBoard {
     this.application.canvas.setAttribute('role', 'img');
     this.application.canvas.setAttribute(
       'aria-label',
-      'Interactive Territory board. Drag to pan and use the mouse wheel to zoom.',
+      'Interactive Territory board. Gold markers are legal placements. Drag to pan and use the mouse wheel to zoom.',
     );
     this.application.canvas.tabIndex = 0;
     this.host.replaceChildren(this.application.canvas);
@@ -202,6 +211,7 @@ export class TerritoryBoard {
     }
 
     for (const edge of this.model.edges) {
+      const selectable = this.selectableTargetKeys.has(targetKey(edge.target));
       const graphic = new Graphics();
       const drawEdge = (hovered: boolean) => {
         graphic
@@ -209,14 +219,24 @@ export class TerritoryBoard {
           .moveTo(edge.first.x, edge.first.y)
           .lineTo(edge.second.x, edge.second.y)
           .stroke({
-            color: hovered ? '#f0d58d' : '#dce7d8',
-            width: hovered ? 9 : 13,
-            alpha: hovered ? 0.75 : 0.001,
+            color: '#ffffff',
+            width: 15,
+            alpha: 0.001,
           });
+        if (selectable || hovered) {
+          graphic
+            .moveTo(edge.first.x, edge.first.y)
+            .lineTo(edge.second.x, edge.second.y)
+            .stroke({
+              color: selectable ? (hovered ? '#fff0b8' : '#e2c26d') : '#dce7d8',
+              width: hovered ? 9 : 7,
+              alpha: selectable ? 0.9 : 0.5,
+            });
+        }
       };
       drawEdge(false);
       graphic.eventMode = 'static';
-      graphic.cursor = 'pointer';
+      graphic.cursor = selectable ? 'pointer' : 'help';
       graphic.on('pointerover', () => {
         drawEdge(true);
         this.onInspect(edge.target);
@@ -225,22 +245,45 @@ export class TerritoryBoard {
         drawEdge(false);
         this.onInspect(null);
       });
-      graphic.on('pointertap', () => this.onInspect(edge.target));
+      graphic.on('pointertap', () => {
+        if (selectable) this.onSelect(edge.target);
+        else this.onInspect(edge.target);
+      });
       this.targets.set(targetKey(edge.target), graphic);
       edgeLayer.addChild(graphic);
+
+      const ownerId = edge.roadOwnerId;
+      if (ownerId !== null) {
+        const roadOutline = new Graphics()
+          .moveTo(edge.first.x, edge.first.y)
+          .lineTo(edge.second.x, edge.second.y)
+          .stroke({ color: '#10140f', width: 13, alpha: 0.95 });
+        const road = new Graphics()
+          .moveTo(edge.first.x, edge.first.y)
+          .lineTo(edge.second.x, edge.second.y)
+          .stroke({ color: this.playerColors[ownerId] ?? '#f6f0dc', width: 8 });
+        roadOutline.eventMode = 'none';
+        road.eventMode = 'none';
+        pieceLayer.addChild(roadOutline, road);
+      }
     }
 
     for (const vertex of this.model.vertices) {
+      const selectable = this.selectableTargetKeys.has(targetKey(vertex.target));
       const graphic = new Graphics();
       const drawVertex = (hovered: boolean) => {
-        graphic
-          .clear()
-          .circle(vertex.position.x, vertex.position.y, hovered ? 10 : 8)
-          .fill({ color: hovered ? '#f0d58d' : '#ffffff', alpha: hovered ? 0.9 : 0.001 });
+        graphic.clear().circle(vertex.position.x, vertex.position.y, hovered ? 12 : 10);
+        if (selectable) {
+          graphic
+            .fill({ color: hovered ? '#fff0b8' : '#e2c26d', alpha: 0.95 })
+            .stroke({ color: '#111910', width: 3, alpha: 0.9 });
+        } else {
+          graphic.fill({ color: hovered ? '#dce7d8' : '#ffffff', alpha: hovered ? 0.75 : 0.001 });
+        }
       };
       drawVertex(false);
       graphic.eventMode = 'static';
-      graphic.cursor = 'pointer';
+      graphic.cursor = selectable ? 'pointer' : 'help';
       graphic.on('pointerover', () => {
         drawVertex(true);
         this.onInspect(vertex.target);
@@ -249,9 +292,41 @@ export class TerritoryBoard {
         drawVertex(false);
         this.onInspect(null);
       });
-      graphic.on('pointertap', () => this.onInspect(vertex.target));
+      graphic.on('pointertap', () => {
+        if (selectable) this.onSelect(vertex.target);
+        else this.onInspect(vertex.target);
+      });
       this.targets.set(targetKey(vertex.target), graphic);
       vertexLayer.addChild(graphic);
+
+      const building = vertex.building;
+      if (building !== null) {
+        const { x, y } = vertex.position;
+        const color = this.playerColors[building.ownerId] ?? '#f6f0dc';
+        const piece = new Graphics();
+        if (building.type === 'MANSION') {
+          piece
+            .roundRect(x - 13, y - 8, 26, 22, 3)
+            .fill({ color })
+            .stroke({ color: '#11140f', width: 3 })
+            .rect(x - 9, y - 15, 7, 9)
+            .fill({ color })
+            .stroke({ color: '#11140f', width: 2 })
+            .rect(x + 2, y - 15, 7, 9)
+            .fill({ color })
+            .stroke({ color: '#11140f', width: 2 });
+        } else {
+          piece
+            .rect(x - 10, y - 2, 20, 16)
+            .fill({ color })
+            .stroke({ color: '#11140f', width: 3 })
+            .poly([x - 13, y - 2, x, y - 15, x + 13, y - 2])
+            .fill({ color })
+            .stroke({ color: '#11140f', width: 3 });
+        }
+        piece.eventMode = 'none';
+        pieceLayer.addChild(piece);
+      }
     }
 
     for (const port of this.model.ports) {

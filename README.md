@@ -25,11 +25,14 @@ The implementation roadmap is split into independently verified phases.
   deterministic random provider, and authoritative dispatch boundary.
 - Phase 2 added application routing, the main menu, settings, the complete local lobby, player
   editing, lobby validation, randomized turn order, and deterministic match initialization.
-- Phase 3 adds deterministic classic board and progress-deck generation, validated shared topology,
+- Phase 3 added deterministic classic board and progress-deck generation, validated shared topology,
   a responsive PixiJS board with stable interaction targets, and the first complete match-table HUD.
+- Phase 4 adds the complete initial-placement sequence: legal house and attached-road targets, placed
+  piece rendering, forward/reverse snake order, starting resources, and normal-turn handoff.
 
 The initialized game route now renders the generated board, ports, tokens, robber, player order,
-public piece counts, resource hand, and optional developer IDs. Setup placement begins in Phase 4.
+public piece counts, resource hand, optional developer IDs, and engine-authoritative setup controls.
+Dice rolling and production begin in Phase 5.
 
 See [Architecture](docs/ARCHITECTURE.md) and [Classic Rules](docs/CLASSIC_RULES.md) for the decisions
 that later phases build upon.

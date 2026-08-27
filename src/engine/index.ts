@@ -20,3 +20,4 @@ export * from './core/json';
 export * from './core/random';
 export * from './maps/base-map';
 export * from './modes/classic';
+export * from './rules/setup-rules';

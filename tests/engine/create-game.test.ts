@@ -15,7 +15,8 @@ describe('match creation', () => {
     expect(second).toEqual(first);
     if (!first.ok) return;
 
-    expect(first.state.turn.phase).toBe('INITIALIZING');
+    expect(first.state.turn.phase).toBe('SETUP_PLACE_HOUSE');
+    expect(first.state.turn.setupPlacementIndex).toBe(0);
     const turnOrder = [...first.state.config.players].sort(
       (firstPlayer, secondPlayer) => firstPlayer.order - secondPlayer.order,
     );

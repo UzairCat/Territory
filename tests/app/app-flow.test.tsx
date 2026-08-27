@@ -7,9 +7,18 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
 import { resetAppStoreForTests } from '../../src/app/stores/app-store';
+import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 
 vi.mock('../../src/board-renderer/BoardViewport', () => ({
-  BoardViewport: () => <section aria-label="Territory board" />,
+  BoardViewport: ({ selectableTargets, onSelect }: BoardViewportProps) => (
+    <section aria-label="Territory board">
+      {selectableTargets[0] === undefined ? null : (
+        <button type="button" onClick={() => onSelect(selectableTargets[0]!)}>
+          Place first legal target
+        </button>
+      )}
+    </section>
+  ),
 }));
 
 function renderApp(initialPath = '/') {
@@ -61,7 +70,7 @@ describe('application flow', () => {
     expect(startButton).toBeEnabled();
     await user.click(startButton);
 
-    expect(screen.getByText('Board ready')).toBeInTheDocument();
+    expect(screen.getByText('Place a house')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Territory board' })).toBeInTheDocument();
     const matchSidebar = screen.getByRole('complementary', { name: 'Players and match state' });
     expect(matchSidebar).toHaveTextContent('Alex');
@@ -76,6 +85,23 @@ describe('application flow', () => {
     expect(
       screen.getByText('2 of 2 seats filled · Turn order randomizes at start'),
     ).toBeInTheDocument();
+  });
+
+  it('completes a two-player setup through board selections', async () => {
+    const user = userEvent.setup();
+    renderApp('/lobby');
+    await addPlayer('Alex');
+    await addPlayer('Sam');
+    await user.click(screen.getByRole('button', { name: 'Start game' }));
+
+    expect(screen.getByText(/Placement 1\/4/)).toBeInTheDocument();
+    for (let action = 0; action < 8; action += 1) {
+      await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
+    }
+
+    expect(screen.getByText('Waiting for roll')).toBeInTheDocument();
+    expect(screen.queryByText(/Placement \d\/4/)).not.toBeInTheDocument();
+    expect(screen.getByText('Dice and production arrive in Phase 5')).toBeInTheDocument();
   });
 
   it('prevents a duplicate player name in the editor', async () => {

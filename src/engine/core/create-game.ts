@@ -107,10 +107,11 @@ export function createGame(config: GameState['config']): CreateGameResult {
       turn: {
         activePlayerId: orderedPlayers[0]?.id ?? null,
         turnNumber: 0,
-        phase: 'INITIALIZING',
+        phase: 'SETUP_PLACE_HOUSE',
         dice: null,
         cardsPlayedThisTurn: 0,
         cardIdsBoughtThisTurn: [],
+        setupPlacementIndex: 0,
         setupPlacementVertexId: null,
       },
       progressDeck: generatedDeck.deck,

@@ -1,5 +1,6 @@
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
+import type { PlayerCount } from '../../src/engine/content/types';
 import { CLASSIC_MODE } from '../../src/engine/modes/classic';
 import { BASE_MAP_ID } from '../../src/engine/maps/base-map';
 import type { GameConfig } from '../../src/engine/core/game-config';
@@ -7,21 +8,30 @@ import type { GamePhase, GameState } from '../../src/engine/core/game-state';
 import { colorId, gameId, playerId } from '../../src/engine/core/ids';
 import { createRandomState } from '../../src/engine/core/random';
 
-export const TEST_PLAYER_IDS = [playerId('player-1'), playerId('player-2')] as const;
+export const TEST_PLAYER_IDS = [
+  playerId('player-1'),
+  playerId('player-2'),
+  playerId('player-3'),
+  playerId('player-4'),
+] as const;
 
-export function createTestConfig(): GameConfig {
+const TEST_PLAYERS = [
+  { id: TEST_PLAYER_IDS[0], name: 'Alex', colorId: colorId('cobalt') },
+  { id: TEST_PLAYER_IDS[1], name: 'Sam', colorId: colorId('crimson') },
+  { id: TEST_PLAYER_IDS[2], name: 'Jordan', colorId: colorId('gold') },
+  { id: TEST_PLAYER_IDS[3], name: 'Casey', colorId: colorId('violet') },
+] as const;
+
+export function createTestConfig(playerCount: PlayerCount = 2): GameConfig {
   return {
     schemaVersion: 1,
     gameId: gameId('test-game'),
     modeId: CLASSIC_MODE.id,
     mapId: BASE_MAP_ID,
-    playerCount: 2,
+    playerCount,
     seed: 'phase-one-test-seed',
     victoryTarget: CLASSIC_MODE.rules.victoryTarget,
-    players: [
-      { id: TEST_PLAYER_IDS[0], name: 'Alex', colorId: colorId('cobalt'), order: 0 },
-      { id: TEST_PLAYER_IDS[1], name: 'Sam', colorId: colorId('crimson'), order: 1 },
-    ],
+    players: TEST_PLAYERS.slice(0, playerCount).map((player, order) => ({ ...player, order })),
     rules: CLASSIC_MODE.rules,
   };
 }
@@ -71,6 +81,7 @@ export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameStat
       dice: null,
       cardsPlayedThisTurn: 0,
       cardIdsBoughtThisTurn: [],
+      setupPlacementIndex: phase.startsWith('SETUP_') ? 0 : null,
       setupPlacementVertexId: null,
     },
     progressDeck: [],

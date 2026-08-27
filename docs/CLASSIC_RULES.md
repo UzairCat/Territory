@@ -25,6 +25,18 @@ The bank begins with 19 cards each of Wood, Brick, Grain, Livestock, and Ore. If
 the complete demand for one resource type during production, nobody receives that resource type for
 that event; other resource types resolve normally.
 
+## Initial placement
+
+- Setup follows randomized turn order forward and then in reverse. Four players therefore place in
+  the order P1 → P2 → P3 → P4 → P4 → P3 → P2 → P1.
+- Each setup placement is one House followed immediately by one Road touching that House.
+- Houses must use empty vertices and obey the distance rule; setup Houses do not require an existing
+  road network.
+- Roads must use an empty edge attached to the House placed in the current setup pair.
+- A player's second House grants one resource from every adjacent producing hex, with those cards
+  removed from the bank.
+- After the last setup Road, P1 becomes active and normal play begins in `WAITING_FOR_ROLL`.
+
 ## Base map and trading
 
 - Nineteen terrain hexes: four Forest, three Hills, four Fields, four Pasture, three Mountains, and
