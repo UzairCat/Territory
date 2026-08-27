@@ -5,6 +5,7 @@ export * from './content/resources';
 export * from './content/types';
 export * from './content/validate-content';
 export * from './core/actions';
+export * from './core/create-game';
 export * from './core/errors';
 export * from './core/events';
 export * from './core/game-config';
