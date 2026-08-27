@@ -253,7 +253,8 @@ h2 {
 
 .menu-card {
   width: min(100%, 33rem);
-  padding: clamp(2.5rem, 7vw, 5rem);
+  overflow: hidden;
+  padding: clamp(2rem, 6vw, 4rem);
   border: 1px solid var(--line-strong);
   border-radius: 1.4rem;
   text-align: center;
@@ -264,9 +265,10 @@ h2 {
 
 .menu-card h1 {
   margin-bottom: 0.5rem;
-  font-size: clamp(3.8rem, 13vw, 6.6rem);
+  max-width: 100%;
+  font-size: clamp(2.45rem, 13vw, 5rem);
   font-weight: 600;
-  letter-spacing: 0.035em;
+  letter-spacing: 0.02em;
   line-height: 0.95;
 }
 
@@ -779,6 +781,14 @@ input[type='checkbox'] {
 }
 
 @media (max-width: 610px) {
+  .menu-screen {
+    padding: 1rem;
+  }
+
+  .menu-card {
+    padding-inline: 1.25rem;
+  }
+
   .lobby-screen,
   .handoff-screen {
     padding: 1rem;

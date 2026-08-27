@@ -9,22 +9,9 @@ interface PlayerSlotProps {
   readonly onAdd: () => void;
   readonly onEdit: (player: LocalLobbyPlayer) => void;
   readonly onRemove: (player: LocalLobbyPlayer) => void;
-  readonly onMove: (player: LocalLobbyPlayer, direction: -1 | 1) => void;
-  readonly canMoveUp: boolean;
-  readonly canMoveDown: boolean;
 }
 
-export function PlayerSlot({
-  index,
-  player,
-  canAdd,
-  onAdd,
-  onEdit,
-  onRemove,
-  onMove,
-  canMoveUp,
-  canMoveDown,
-}: PlayerSlotProps) {
+export function PlayerSlot({ index, player, canAdd, onAdd, onEdit, onRemove }: PlayerSlotProps) {
   if (player === null) {
     return (
       <li className="player-slot player-slot--empty">
@@ -55,24 +42,6 @@ export function PlayerSlot({
         <small>{color?.displayName ?? 'Unknown color'}</small>
       </span>
       <span className="player-slot__controls">
-        <Button
-          className="icon-button"
-          variant="ghost"
-          aria-label={`Move ${player.name} up`}
-          disabled={!canMoveUp}
-          onClick={() => onMove(player, -1)}
-        >
-          ↑
-        </Button>
-        <Button
-          className="icon-button"
-          variant="ghost"
-          aria-label={`Move ${player.name} down`}
-          disabled={!canMoveDown}
-          onClick={() => onMove(player, 1)}
-        >
-          ↓
-        </Button>
         <Button variant="ghost" onClick={() => onEdit(player)}>
           Edit
         </Button>

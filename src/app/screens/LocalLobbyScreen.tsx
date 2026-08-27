@@ -28,7 +28,6 @@ export function LocalLobbyScreen() {
   const addLobbyPlayer = useAppStore((state) => state.addLobbyPlayer);
   const editLobbyPlayer = useAppStore((state) => state.editLobbyPlayer);
   const removeLobbyPlayer = useAppStore((state) => state.removeLobbyPlayer);
-  const moveLobbyPlayer = useAppStore((state) => state.moveLobbyPlayer);
   const beginGame = useAppStore((state) => state.beginGame);
   const clearGame = useAppStore((state) => state.clearGame);
   const openSettings = useAppStore((state) => state.openSettings);
@@ -168,7 +167,7 @@ export function LocalLobbyScreen() {
             <div>
               <h2 id="players-title">Players</h2>
               <p>
-                {lobby.players.length} of {lobby.size} seats filled
+                {lobby.players.length} of {lobby.size} seats filled · Turn order randomizes at start
               </p>
             </div>
           </div>
@@ -185,9 +184,6 @@ export function LocalLobbyScreen() {
                   onAdd={openAddPlayer}
                   onEdit={openEditPlayer}
                   onRemove={(entry) => removeLobbyPlayer(entry.id)}
-                  onMove={(entry, direction) => moveLobbyPlayer(entry.id, direction)}
-                  canMoveUp={player !== null && index > 0}
-                  canMoveDown={player !== null && index < lobby.players.length - 1}
                 />
               );
             })}

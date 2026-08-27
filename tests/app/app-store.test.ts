@@ -8,7 +8,7 @@ import { PLAYER_COLORS } from '../../src/engine/content/colors';
 describe('application session store', () => {
   beforeEach(() => resetAppStoreForTests());
 
-  it('reorders players and only truncates them through confirmed resizing', () => {
+  it('only truncates players through confirmed resizing', () => {
     const actions = useAppStore.getState();
     actions.confirmLobbyResize(4);
     actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
@@ -16,19 +16,10 @@ describe('application session store', () => {
     actions.addLobbyPlayer('Jo', PLAYER_COLORS[2]!.id);
     actions.addLobbyPlayer('Rae', PLAYER_COLORS[3]!.id);
 
-    const joId = useAppStore.getState().lobby.players[2]!.id;
-    actions.moveLobbyPlayer(joId, -1);
-    expect(useAppStore.getState().lobby.players.map((player) => player.name)).toEqual([
-      'Alex',
-      'Jo',
-      'Sam',
-      'Rae',
-    ]);
-
     actions.confirmLobbyResize(2);
     expect(useAppStore.getState().lobby.players.map((player) => player.name)).toEqual([
       'Alex',
-      'Jo',
+      'Sam',
     ]);
   });
 
@@ -40,10 +31,9 @@ describe('application session store', () => {
     actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
     actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
     expect(actions.beginGame().ok).toBe(true);
-    expect(useAppStore.getState().gameState?.config.players.map((player) => player.name)).toEqual([
-      'Alex',
-      'Sam',
-    ]);
+    const initializedNames =
+      useAppStore.getState().gameState?.config.players.map((player) => player.name) ?? [];
+    expect([...initializedNames].sort()).toEqual(['Alex', 'Sam']);
   });
 
   it('opens a fresh lobby with a new seed and no retained match', () => {

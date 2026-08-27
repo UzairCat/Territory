@@ -8,7 +8,7 @@ import type { GameConfigIssue } from './game-config';
 import { validateGameConfig } from './game-config';
 import { GAME_STATE_VERSION } from './game-state';
 import type { GameState, PlayerState } from './game-state';
-import { createRandomState } from './random';
+import { createRandomState, shuffle } from './random';
 
 export interface CreateGameIssue {
   readonly code: string;
@@ -48,7 +48,10 @@ export function createGame(config: GameState['config']): CreateGameResult {
     return { ok: false, issues };
   }
 
-  const orderedPlayers = [...config.players].sort((first, second) => first.order - second.order);
+  const initialPlayers = [...config.players].sort((first, second) => first.order - second.order);
+  const shuffledPlayers = shuffle(createRandomState(config.seed), initialPlayers);
+  const orderedPlayers = shuffledPlayers.value.map((player, order) => ({ ...player, order }));
+  const resolvedConfig = { ...config, players: orderedPlayers };
   const players = Object.fromEntries(
     orderedPlayers.map((player): readonly [string, PlayerState] => [
       player.id,
@@ -73,7 +76,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
     ok: true,
     state: {
       schemaVersion: GAME_STATE_VERSION,
-      config,
+      config: resolvedConfig,
       players,
       board: { hexes: {}, vertices: {}, edges: {}, ports: {}, robberHexId: null },
       bank,
@@ -92,7 +95,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
       bonuses: { longestRoadHolderId: null, largestForceHolderId: null },
       winnerId: null,
       actionHistory: [],
-      random: createRandomState(config.seed),
+      random: shuffledPlayers.state,
     },
   };
 }

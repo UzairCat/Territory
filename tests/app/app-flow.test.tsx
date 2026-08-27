@@ -47,7 +47,7 @@ describe('Phase 2 application flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Local game' }));
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
-    expect(screen.getByText('0 of 2 seats filled')).toBeInTheDocument();
+    expect(screen.getByText(/0 of 2 seats filled/)).toBeInTheDocument();
 
     await addPlayer('Alex');
     await addPlayer('Sam');
@@ -60,6 +60,12 @@ describe('Phase 2 application flow', () => {
     expect(screen.getByRole('heading', { name: 'The table is ready.' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Turn order' })).toHaveTextContent('Alex');
     expect(screen.getByRole('list', { name: 'Turn order' })).toHaveTextContent('Sam');
+
+    await user.click(screen.getByRole('button', { name: 'Return to lobby' }));
+    expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
+    expect(
+      screen.getByText('2 of 2 seats filled · Turn order randomizes at start'),
+    ).toBeInTheDocument();
   });
 
   it('prevents a duplicate player name in the editor', async () => {
@@ -85,7 +91,7 @@ describe('Phase 2 application flow', () => {
     await user.click(screen.getByRole('button', { name: /main menu/i }));
     await user.click(screen.getByRole('button', { name: 'Local game' }));
 
-    expect(screen.getByText('0 of 2 seats filled')).toBeInTheDocument();
+    expect(screen.getByText(/0 of 2 seats filled/)).toBeInTheDocument();
     expect(screen.queryByText('Alex')).not.toBeInTheDocument();
   });
 });

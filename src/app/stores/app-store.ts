@@ -43,7 +43,6 @@ interface AppStoreState {
   readonly addLobbyPlayer: (name: string, colorId: ColorId) => void;
   readonly editLobbyPlayer: (id: PlayerId, name: string, colorId: ColorId) => void;
   readonly removeLobbyPlayer: (id: PlayerId) => void;
-  readonly moveLobbyPlayer: (id: PlayerId, direction: -1 | 1) => void;
   readonly beginGame: () => BeginGameResult;
   readonly clearGame: () => void;
   readonly openSettings: () => void;
@@ -114,26 +113,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set((state) => ({
       lobby: { ...state.lobby, players: state.lobby.players.filter((player) => player.id !== id) },
     })),
-  moveLobbyPlayer: (id, direction) =>
-    set((state) => {
-      const players = [...state.lobby.players];
-      const currentIndex = players.findIndex((player) => player.id === id);
-      const destinationIndex = currentIndex + direction;
-
-      if (currentIndex < 0 || destinationIndex < 0 || destinationIndex >= players.length) {
-        return state;
-      }
-
-      const currentPlayer = players[currentIndex];
-      const destinationPlayer = players[destinationIndex];
-      if (currentPlayer === undefined || destinationPlayer === undefined) {
-        return state;
-      }
-
-      players[currentIndex] = destinationPlayer;
-      players[destinationIndex] = currentPlayer;
-      return { lobby: { ...state.lobby, players } };
-    }),
   beginGame: () => {
     const configResult = buildGameConfig(get().lobby, gameId(createRandomToken('game')));
     if (!configResult.ok) {

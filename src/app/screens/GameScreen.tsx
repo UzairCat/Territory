@@ -11,7 +11,7 @@ export function GameScreen() {
   const clearGame = useAppStore((state) => state.clearGame);
 
   if (gameState === null) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/lobby" replace />;
   }
 
   const orderedPlayers = [...gameState.config.players].sort(

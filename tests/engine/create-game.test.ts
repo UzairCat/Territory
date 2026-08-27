@@ -16,7 +16,10 @@ describe('match creation', () => {
     if (!first.ok) return;
 
     expect(first.state.turn.phase).toBe('INITIALIZING');
-    expect(first.state.turn.activePlayerId).toBe(TEST_PLAYER_IDS[0]);
+    const turnOrder = [...first.state.config.players].sort(
+      (firstPlayer, secondPlayer) => firstPlayer.order - secondPlayer.order,
+    );
+    expect(first.state.turn.activePlayerId).toBe(turnOrder[0]?.id);
     expect(first.state.players[TEST_PLAYER_IDS[0]]).toMatchObject({
       roadsRemaining: 15,
       housesRemaining: 5,
@@ -24,7 +27,21 @@ describe('match creation', () => {
     });
     expect(first.state.bank[RESOURCE_IDS.wood]).toBe(19);
     expect(first.state.random.seed).toBe(config.seed);
+    expect(first.state.random.draws).toBe(config.players.length - 1);
     expect(isJsonSerializable(first.state)).toBe(true);
+  });
+
+  it('uses the match seed to randomize turn order instead of lobby creation order', () => {
+    const config = { ...createTestConfig(), seed: 'turn-order-seed' };
+    const result = createGame(config);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.config.players.map((player) => player.id)).toEqual([
+      TEST_PLAYER_IDS[1],
+      TEST_PLAYER_IDS[0],
+    ]);
+    expect(result.state.turn.activePlayerId).toBe(TEST_PLAYER_IDS[1]);
   });
 
   it('returns validation issues instead of creating an invalid match', () => {

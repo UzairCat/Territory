@@ -6,6 +6,7 @@ data from `ClassicModeConfig` and `BaseMapDefinition`; UI components must not du
 ## Match
 
 - Two to four human players on one device; no bots or neutral pieces.
+- Turn order is shuffled by the engine when the match starts and is reproducible from the match seed.
 - Ten victory points wins.
 - Two six-sided dice; a total of seven starts the robber flow.
 - Players holding more than seven resources discard half, rounded down, after a seven.
