@@ -5,6 +5,7 @@ import type { GameAction } from '../../engine/core/actions';
 import { dispatch as dispatchEngineAction } from '../../engine/core/game-engine';
 import type { DispatchResult } from '../../engine/core/game-engine';
 import type { GameState } from '../../engine/core/game-state';
+import type { GameEvent } from '../../engine/core/events';
 import { gameId, playerId } from '../../engine/core/ids';
 import type { ColorId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
 import type { PlayerCount } from '../../engine/content/types';
@@ -35,6 +36,7 @@ export type BeginGameResult =
 interface AppStoreState {
   readonly lobby: LobbyConfig;
   readonly gameState: GameState | null;
+  readonly recentGameEvents: readonly GameEvent[];
   readonly settings: AppSettings;
   readonly settingsOpen: boolean;
   readonly startFreshLobby: () => void;
@@ -74,6 +76,7 @@ function initialState() {
   return {
     lobby: createDefaultLobby(createLobbySeed()),
     gameState: null,
+    recentGameEvents: [],
     settings: DEFAULT_SETTINGS,
     settingsOpen: false,
   };
@@ -81,7 +84,8 @@ function initialState() {
 
 export const useAppStore = create<AppStoreState>((set, get) => ({
   ...initialState(),
-  startFreshLobby: () => set({ lobby: createDefaultLobby(createLobbySeed()), gameState: null }),
+  startFreshLobby: () =>
+    set({ lobby: createDefaultLobby(createLobbySeed()), gameState: null, recentGameEvents: [] }),
   setLobbyMap: (mapId) => set((state) => ({ lobby: { ...state.lobby, mapId } })),
   setLobbyMode: (modeId) => set((state) => ({ lobby: { ...state.lobby, modeId } })),
   setLobbySeed: (seed) => set((state) => ({ lobby: { ...state.lobby, seed } })),
@@ -128,7 +132,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return gameResult;
     }
 
-    set({ gameState: gameResult.state });
+    set({ gameState: gameResult.state, recentGameEvents: [] });
     return { ok: true };
   },
   dispatchGameAction: (action) => {
@@ -136,10 +140,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (gameState === null) return null;
 
     const result = dispatchEngineAction(gameState, action);
-    if (result.ok) set({ gameState: result.state });
+    if (result.ok) set({ gameState: result.state, recentGameEvents: result.events });
     return result;
   },
-  clearGame: () => set({ gameState: null }),
+  clearGame: () => set({ gameState: null, recentGameEvents: [] }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   updateSettings: (settings) => set((state) => ({ settings: { ...state.settings, ...settings } })),

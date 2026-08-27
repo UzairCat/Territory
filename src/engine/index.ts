@@ -21,3 +21,5 @@ export * from './core/random';
 export * from './maps/base-map';
 export * from './modes/classic';
 export * from './rules/setup-rules';
+export * from './rules/production-rules';
+export * from './rules/turn-rules';

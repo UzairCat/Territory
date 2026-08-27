@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
-import { resetAppStoreForTests } from '../../src/app/stores/app-store';
+import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
+import { createRandomState, randomInteger } from '../../src/engine/core/random';
 
 vi.mock('../../src/board-renderer/BoardViewport', () => ({
   BoardViewport: ({ selectableTargets, onSelect }: BoardViewportProps) => (
@@ -37,6 +38,16 @@ async function addPlayer(name: string) {
   await user.clear(nameInput);
   await user.type(nameInput, name);
   await user.click(within(dialog).getByRole('button', { name: 'Add player' }));
+}
+
+function randomForTotal(total: number) {
+  for (let candidate = 0; candidate < 10_000; candidate += 1) {
+    const state = createRandomState(`ui-dice-${total}-${candidate}`);
+    const first = randomInteger(state, 1, 7);
+    const second = randomInteger(first.state, 1, 7);
+    if (first.value + second.value === total) return state;
+  }
+  throw new Error(`Could not find deterministic dice total ${total}.`);
 }
 
 describe('application flow', () => {
@@ -101,7 +112,19 @@ describe('application flow', () => {
 
     expect(screen.getByText('Waiting for roll')).toBeInTheDocument();
     expect(screen.queryByText(/Placement \d\/4/)).not.toBeInTheDocument();
-    expect(screen.getByText('Dice and production arrive in Phase 5')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll dice' })).toBeInTheDocument();
+
+    const setupState = useAppStore.getState().gameState;
+    if (setupState === null) throw new Error('Setup did not retain a game state.');
+    act(() => useAppStore.setState({ gameState: { ...setupState, random: randomForTotal(8) } }));
+    await user.click(screen.getByRole('button', { name: 'Roll dice' }));
+
+    expect(screen.getByText('Action phase')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dice total')).toHaveTextContent('Total 8');
+    expect(screen.getByText(/^Roll 8:/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'End turn' }));
+    expect(screen.getByText('Waiting for roll')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roll dice' })).toBeInTheDocument();
   });
 
   it('prevents a duplicate player name in the editor', async () => {

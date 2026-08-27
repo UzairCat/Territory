@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import type { BoardState } from '../engine/core/game-state';
+import type { HexId } from '../engine/core/ids';
 import type { BoardTarget } from './render-model';
 import type { TerritoryBoard } from './TerritoryBoard';
 import { Button } from '../ui/components/Button';
@@ -9,6 +10,7 @@ export interface BoardViewportProps {
   readonly board: BoardState;
   readonly showDebugIds: boolean;
   readonly selectableTargets: readonly BoardTarget[];
+  readonly highlightedHexIds: readonly HexId[];
   readonly playerColors: Readonly<Record<string, string>>;
   readonly onInspect: (target: BoardTarget | null) => void;
   readonly onSelect: (target: BoardTarget) => void;
@@ -18,6 +20,7 @@ export function BoardViewport({
   board,
   showDebugIds,
   selectableTargets,
+  highlightedHexIds,
   playerColors,
   onInspect,
   onSelect,
@@ -48,6 +51,7 @@ export function BoardViewport({
           onInspect: (target) => inspectRef.current(target),
           onSelect: (target) => selectRef.current(target),
           selectableTargets,
+          highlightedHexIds,
           playerColors,
         });
         rendererRef.current = renderer;
@@ -66,7 +70,7 @@ export function BoardViewport({
       rendererRef.current?.destroy();
       rendererRef.current = null;
     };
-  }, [board, playerColors, selectableTargets]);
+  }, [board, highlightedHexIds, playerColors, selectableTargets]);
 
   useEffect(() => {
     debugRef.current = showDebugIds;

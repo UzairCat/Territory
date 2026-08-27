@@ -8,12 +8,14 @@ import {
 } from 'pixi.js';
 
 import type { BoardState } from '../engine/core/game-state';
+import type { HexId } from '../engine/core/ids';
 import { createBoardRenderModel, type BoardRenderModel, type BoardTarget } from './render-model';
 
 interface TerritoryBoardOptions {
   readonly onInspect: (target: BoardTarget | null) => void;
   readonly onSelect: (target: BoardTarget) => void;
   readonly selectableTargets: readonly BoardTarget[];
+  readonly highlightedHexIds: readonly HexId[];
   readonly playerColors: Readonly<Record<string, string>>;
   readonly showDebugIds?: boolean;
 }
@@ -34,6 +36,7 @@ export class TerritoryBoard {
   private readonly onInspect: TerritoryBoardOptions['onInspect'];
   private readonly onSelect: TerritoryBoardOptions['onSelect'];
   private readonly selectableTargetKeys: ReadonlySet<string>;
+  private readonly highlightedHexIds: ReadonlySet<HexId>;
   private readonly playerColors: TerritoryBoardOptions['playerColors'];
   private readonly world = new Container();
   private readonly debugLayer = new Container();
@@ -51,6 +54,7 @@ export class TerritoryBoard {
     this.onInspect = options.onInspect;
     this.onSelect = options.onSelect;
     this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
+    this.highlightedHexIds = new Set(options.highlightedHexIds);
     this.playerColors = options.playerColors;
     this.debugLayer.visible = options.showDebugIds ?? false;
   }
@@ -139,17 +143,25 @@ export class TerritoryBoard {
     this.world.addChild(hexLayer, portLayer, edgeLayer, vertexLayer, pieceLayer, this.debugLayer);
 
     for (const hex of this.model.hexes) {
+      const highlighted = this.highlightedHexIds.has(hex.target.id);
       const polygon = flattenedPoints(hex.corners);
       const shadow = new Graphics()
         .poly(hex.corners.map((corner) => ({ x: corner.x + 3, y: corner.y + 5 })))
         .fill({ color: '#050a07', alpha: 0.42 });
       const terrain = new Graphics();
       const drawTerrain = (hovered: boolean) => {
+        const borderColor = hovered
+          ? '#fff0b8'
+          : highlighted
+            ? hex.hasRobber
+              ? '#e3777e'
+              : '#e2c26d'
+            : '#101710';
         terrain
           .clear()
           .poly(polygon)
           .fill({ color: hex.terrainColor })
-          .stroke({ color: hovered ? '#f0d58d' : '#101710', width: hovered ? 5 : 3 });
+          .stroke({ color: borderColor, width: hovered || highlighted ? 5 : 3 });
       };
       drawTerrain(false);
       terrain.eventMode = 'static';

@@ -1,4 +1,5 @@
 import { placeSetupHouse, placeSetupRoad } from '../rules/setup-rules';
+import { endTurn, rollDice } from '../rules/turn-rules';
 import type { GameAction } from './actions';
 import { rejectAction } from './dispatch-result';
 import type { DispatchResult } from './dispatch-result';
@@ -23,6 +24,8 @@ export function dispatch(state: GameState, action: GameAction): DispatchResult {
 
   if (action.type === 'PLACE_SETUP_HOUSE') return placeSetupHouse(state, action);
   if (action.type === 'PLACE_SETUP_ROAD') return placeSetupRoad(state, action);
+  if (action.type === 'ROLL_DICE') return rollDice(state, action);
+  if (action.type === 'END_TURN') return endTurn(state, action);
 
   return rejectAction(
     state,

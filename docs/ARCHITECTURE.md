@@ -58,6 +58,23 @@ and emit ordered domain events. Second-round houses receive resources from adjac
 with matching cards removed from the bank. The final road atomically clears setup state and enters
 `WAITING_FOR_ROLL` with the first player active.
 
+## Dice, production, and normal-turn handoff
+
+`ROLL_DICE` is accepted only from the active player in `WAITING_FOR_ROLL`. Both d6 values come from
+the match's persisted random state, so replays consume the same results. A non-seven roll aggregates
+all matching, non-robber hex demand before moving any cards. Houses request one card per adjacent
+matching hex and Mansions request two. If the bank cannot satisfy the complete demand for one
+resource type, that resource is canceled for every player while unrelated resources still resolve.
+
+The accepted roll stores both dice, atomically transfers bank cards, emits a public production
+summary, and enters `ACTION_PHASE`. Public UI feedback reports only card totals per player, preserving
+private resource types. `END_TURN` is legal only from action phase; it clears per-turn state, advances
+the deterministic player order, increments the turn number, and returns to `WAITING_FOR_ROLL`.
+
+A seven performs no production. It deterministically identifies players above the discard threshold
+and enters either `DISCARD_RESOURCES` or `MOVE_ROBBER`. Those pending-interaction states are already
+authoritative; their completion UI and actions belong to the dedicated robber phase.
+
 ## Intended online shape
 
 Local v0.1 calls `dispatch` in the browser. A future online client sends the same serializable action

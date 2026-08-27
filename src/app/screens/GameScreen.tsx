@@ -7,6 +7,8 @@ import type { BoardTarget } from '../../board-renderer/render-model';
 import { PLAYER_COLORS } from '../../engine/content/colors';
 import { PROGRESS_CARDS } from '../../engine/content/progress-cards';
 import { RESOURCES, TERRAINS } from '../../engine/content/resources';
+import type { ResourceBundle } from '../../engine/content/types';
+import type { GameEvent } from '../../engine/core/events';
 import type { GameState, PlayerState } from '../../engine/core/game-state';
 import { actionId } from '../../engine/core/ids';
 import type { PlayerId } from '../../engine/core/ids';
@@ -16,6 +18,7 @@ import {
   getSetupProgress,
 } from '../../engine/rules/setup-rules';
 import { Button } from '../../ui/components/Button';
+import { DicePanel } from '../../ui/game/DicePanel';
 import { PlayerPanel } from '../../ui/game/PlayerPanel';
 
 function phaseLabel(phase: GameState['turn']['phase']): string {
@@ -76,9 +79,53 @@ function activeHand(player: PlayerState | undefined) {
   }));
 }
 
+function resourceCount(resources: ResourceBundle): number {
+  return RESOURCES.reduce((total, resource) => total + (resources[resource.id] ?? 0), 0);
+}
+
+function recentEventMessage(events: readonly GameEvent[], state: GameState): string | null {
+  const production = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'RESOURCES_PRODUCED' }> =>
+      event.type === 'RESOURCES_PRODUCED',
+  );
+  if (production !== undefined) {
+    const gains = Object.entries(production.grants)
+      .map(([playerId, resources]) => {
+        const amount = resourceCount(resources);
+        const name = state.players[playerId]?.name ?? 'Unknown player';
+        return `${name} +${amount} card${amount === 1 ? '' : 's'}`;
+      })
+      .join(' · ');
+    const shortages = production.unavailableResourceIds
+      .map(
+        (resourceId) =>
+          RESOURCES.find((resource) => resource.id === resourceId)?.displayName ?? resourceId,
+      )
+      .join(', ');
+    const prefix =
+      production.source === 'SETUP' ? 'Starting resources' : `Roll ${production.rollTotal ?? '—'}`;
+    const resolved = gains.length > 0 ? gains : 'no resources produced';
+    return shortages.length > 0
+      ? `${prefix}: ${resolved}. Bank shortage canceled ${shortages}.`
+      : `${prefix}: ${resolved}.`;
+  }
+
+  const robberStarted = events.some((event) => event.type === 'ROBBER_SEQUENCE_STARTED');
+  if (robberStarted) return 'A 7 was rolled. The robber sequence must be resolved.';
+
+  const turnStarted = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'TURN_STARTED' }> =>
+      event.type === 'TURN_STARTED',
+  );
+  return turnStarted === undefined
+    ? null
+    : `${state.players[turnStarted.playerId]?.name ?? 'Next player'} starts the turn.`;
+}
+
 export function GameScreen() {
   const navigate = useNavigate();
   const gameState = useAppStore((state) => state.gameState);
+  const recentGameEvents = useAppStore((state) => state.recentGameEvents);
   const clearGame = useAppStore((state) => state.clearGame);
   const dispatchGameAction = useAppStore((state) => state.dispatchGameAction);
   const openSettings = useAppStore((state) => state.openSettings);
@@ -112,6 +159,13 @@ export function GameScreen() {
       ]),
     );
   }, [gameState]);
+  const highlightedHexIds = useMemo(() => {
+    if (gameState?.turn.dice === null || gameState?.turn.dice === undefined) return [];
+    const total = gameState.turn.dice[0] + gameState.turn.dice[1];
+    return Object.values(gameState.board.hexes)
+      .filter((hex) => hex.numberToken === total)
+      .map((hex) => hex.id);
+  }, [gameState]);
 
   if (gameState === null) {
     return <Navigate to="/lobby" replace />;
@@ -122,6 +176,7 @@ export function GameScreen() {
       ? undefined
       : gameState.players[gameState.turn.activePlayerId];
   const inspection = describeTarget(gameState, inspectedTarget);
+  const turnFeedback = recentEventMessage(recentGameEvents, gameState);
   const setupProgress = getSetupProgress(gameState);
   const setupInstruction =
     gameState.turn.phase === 'SETUP_PLACE_HOUSE'
@@ -133,6 +188,17 @@ export function GameScreen() {
   const leaveGame = (destination: '/' | '/lobby') => {
     void navigate(destination, { flushSync: true });
     clearGame();
+  };
+
+  const handleActionResult = (result: ReturnType<typeof dispatchGameAction>) => {
+    if (result === null) {
+      setActionError('No active match is available for this action.');
+    } else if (!result.ok) {
+      setActionError(result.error.message);
+    } else {
+      setActionError(null);
+      setInspectedTarget(null);
+    }
   };
 
   const selectBoardTarget = (target: BoardTarget) => {
@@ -150,14 +216,31 @@ export function GameScreen() {
           ? dispatchGameAction({ id, type: 'PLACE_SETUP_ROAD', actorId, edgeId: target.id })
           : null;
 
-    if (result === null) {
+    if (result === null)
       setActionError('That board target is not available during the current phase.');
-    } else if (!result.ok) {
-      setActionError(result.error.message);
-    } else {
-      setActionError(null);
-      setInspectedTarget(null);
-    }
+    else handleActionResult(result);
+  };
+
+  const rollDice = () => {
+    if (gameState.turn.activePlayerId === null) return;
+    handleActionResult(
+      dispatchGameAction({
+        id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+        type: 'ROLL_DICE',
+        actorId: gameState.turn.activePlayerId,
+      }),
+    );
+  };
+
+  const endTurn = () => {
+    if (gameState.turn.activePlayerId === null) return;
+    handleActionResult(
+      dispatchGameAction({
+        id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+        type: 'END_TURN',
+        actorId: gameState.turn.activePlayerId,
+      }),
+    );
   };
 
   return (
@@ -207,6 +290,7 @@ export function GameScreen() {
             board={gameState.board}
             showDebugIds={showDebug}
             selectableTargets={selectableTargets}
+            highlightedHexIds={highlightedHexIds}
             playerColors={playerColors}
             onInspect={setInspectedTarget}
             onSelect={selectBoardTarget}
@@ -215,7 +299,7 @@ export function GameScreen() {
             className={`board-inspector ${actionError === null ? '' : 'board-inspector--error'}`}
             aria-live="polite"
           >
-            {actionError ?? inspection}
+            {actionError ?? (inspectedTarget === null ? (turnFeedback ?? inspection) : inspection)}
           </p>
         </div>
 
@@ -304,7 +388,12 @@ export function GameScreen() {
           ))}
         </div>
         {setupProgress === null ? (
-          <span className="phase-placeholder">Dice and production arrive in Phase 5</span>
+          <DicePanel
+            phase={gameState.turn.phase}
+            dice={gameState.turn.dice}
+            onRoll={rollDice}
+            onEndTurn={endTurn}
+          />
         ) : (
           <div className="setup-progress" aria-live="polite">
             <strong>

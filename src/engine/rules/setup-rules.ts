@@ -225,7 +225,10 @@ export function placeSetupHouse(
     if (Object.values(grant.resources).some((amount) => (amount ?? 0) > 0)) {
       events.push({
         type: 'RESOURCES_PRODUCED',
+        source: 'SETUP',
+        rollTotal: null,
         grants: { [action.actorId]: grant.resources },
+        unavailableResourceIds: [],
       });
     }
   }

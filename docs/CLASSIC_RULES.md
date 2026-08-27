@@ -37,6 +37,18 @@ that event; other resource types resolve normally.
   removed from the bank.
 - After the last setup Road, P1 becomes active and normal play begins in `WAITING_FOR_ROLL`.
 
+## Normal turn and production
+
+- The active player must roll two six-sided dice before ending their turn or taking normal build
+  actions.
+- Every non-seven total produces from matching numbered hexes except the hex occupied by the robber.
+- Each adjacent House requests one matching resource; each adjacent Mansion requests two.
+- Production demand is aggregated before transfers. If the bank cannot satisfy all demand for a
+  resource type, nobody receives that type for the roll; other resource types still resolve.
+- After production, play enters the action phase. Ending the turn clears the dice and advances to the
+  next player in randomized turn order.
+- A total of seven produces nothing and begins the discard/robber sequence.
+
 ## Base map and trading
 
 - Nineteen terrain hexes: four Forest, three Hills, four Fields, four Pasture, three Mountains, and

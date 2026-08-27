@@ -27,12 +27,15 @@ The implementation roadmap is split into independently verified phases.
   editing, lobby validation, randomized turn order, and deterministic match initialization.
 - Phase 3 added deterministic classic board and progress-deck generation, validated shared topology,
   a responsive PixiJS board with stable interaction targets, and the first complete match-table HUD.
-- Phase 4 adds the complete initial-placement sequence: legal house and attached-road targets, placed
+- Phase 4 added the complete initial-placement sequence: legal house and attached-road targets, placed
   piece rendering, forward/reverse snake order, starting resources, and normal-turn handoff.
+- Phase 5 adds deterministic 2d6 rolls, finite-bank production, robber blocking, resource-shortage
+  handling, public gain feedback, rolled-tile highlights, and repeatable end-turn advancement.
 
 The initialized game route now renders the generated board, ports, tokens, robber, player order,
 public piece counts, resource hand, optional developer IDs, and engine-authoritative setup controls.
-Dice rolling and production begin in Phase 5.
+After setup, players can now roll, resolve non-seven production, and pass play to the next player.
+Normal construction begins in Phase 6; a roll of seven enters the reserved robber flow.
 
 See [Architecture](docs/ARCHITECTURE.md) and [Classic Rules](docs/CLASSIC_RULES.md) for the decisions
 that later phases build upon.

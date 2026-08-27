@@ -33,7 +33,10 @@ export type GameEvent =
     }
   | {
       readonly type: 'RESOURCES_PRODUCED';
+      readonly source: 'SETUP' | 'DICE';
+      readonly rollTotal: number | null;
       readonly grants: Readonly<Record<string, ResourceBundle>>;
+      readonly unavailableResourceIds: readonly ResourceId[];
     }
   | {
       readonly type: 'RESOURCES_DISCARDED';
@@ -41,6 +44,11 @@ export type GameEvent =
       readonly resources: ResourceBundle;
     }
   | { readonly type: 'ROBBER_MOVED'; readonly playerId: PlayerId; readonly hexId: HexId }
+  | {
+      readonly type: 'ROBBER_SEQUENCE_STARTED';
+      readonly playerId: PlayerId;
+      readonly discardPlayerIds: readonly PlayerId[];
+    }
   | {
       readonly type: 'RESOURCE_STOLEN';
       readonly playerId: PlayerId;

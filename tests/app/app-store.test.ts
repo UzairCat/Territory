@@ -58,6 +58,9 @@ describe('application session store', () => {
 
     expect(result?.ok).toBe(true);
     expect(useAppStore.getState().gameState?.turn.phase).toBe('SETUP_PLACE_ROAD');
+    expect(useAppStore.getState().recentGameEvents.map((event) => event.type)).toEqual([
+      'BUILDING_PLACED',
+    ]);
   });
 
   it('opens a fresh lobby with a new seed and no retained match', () => {
