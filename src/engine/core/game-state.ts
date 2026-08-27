@@ -33,8 +33,8 @@ export type GamePhase =
 export interface ProgressCardInstance {
   readonly instanceId: CardInstanceId;
   readonly definitionId: CardDefinitionId;
-  readonly ownerId: PlayerId;
-  readonly purchasedTurn: number;
+  readonly ownerId: PlayerId | null;
+  readonly purchasedTurn: number | null;
   readonly playedTurn: number | null;
 }
 
@@ -43,7 +43,7 @@ export interface PlayerState {
   readonly name: string;
   readonly colorId: ColorId;
   readonly resources: ResourceBundle;
-  readonly progressCards: readonly ProgressCardInstance[];
+  readonly progressCardIds: readonly CardInstanceId[];
   readonly roadsRemaining: number;
   readonly housesRemaining: number;
   readonly mansionsRemaining: number;
@@ -57,6 +57,8 @@ export interface HexState {
   readonly terrainId: TerrainId;
   readonly resourceId: ResourceId | null;
   readonly numberToken: number | null;
+  readonly vertexIds: readonly VertexId[];
+  readonly edgeIds: readonly EdgeId[];
 }
 
 export interface BuildingState {
@@ -68,7 +70,9 @@ export interface VertexState {
   readonly id: VertexId;
   readonly adjacentHexIds: readonly HexId[];
   readonly connectedEdgeIds: readonly EdgeId[];
+  readonly adjacentVertexIds: readonly VertexId[];
   readonly building: BuildingState | null;
+  readonly portId: PortId | null;
 }
 
 export interface EdgeState {
@@ -77,10 +81,12 @@ export interface EdgeState {
   readonly vertexBId: VertexId;
   readonly adjacentHexIds: readonly HexId[];
   readonly roadOwnerId: PlayerId | null;
+  readonly portId: PortId | null;
 }
 
 export interface PortState {
   readonly id: PortId;
+  readonly edgeId: EdgeId;
   readonly vertexIds: readonly [VertexId, VertexId];
   readonly tradeRatio: 2 | 3;
   readonly resourceId: ResourceId | null;
@@ -157,6 +163,7 @@ export interface GameState {
   readonly turn: TurnState;
   readonly progressDeck: readonly CardInstanceId[];
   readonly progressDiscard: readonly CardInstanceId[];
+  readonly progressCards: Readonly<Record<string, ProgressCardInstance>>;
   readonly pendingInteraction: PendingInteraction;
   readonly bonuses: BonusState;
   readonly winnerId: PlayerId | null;

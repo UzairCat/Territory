@@ -2,6 +2,9 @@ import { BUILDING_DEFINITIONS } from '../content/buildings';
 import { RESOURCES } from '../content/resources';
 import { resourceBundle } from '../content/types';
 import { validateClassicContent } from '../content/validate-content';
+import { generateBaseBoard } from '../board/generate-board';
+import { validateBoard } from '../board/validate-board';
+import { generateProgressDeck } from '../cards/generate-deck';
 import { BASE_MAP } from '../maps/base-map';
 import { CLASSIC_MODE } from '../modes/classic';
 import type { GameConfigIssue } from './game-config';
@@ -52,6 +55,27 @@ export function createGame(config: GameState['config']): CreateGameResult {
   const shuffledPlayers = shuffle(createRandomState(config.seed), initialPlayers);
   const orderedPlayers = shuffledPlayers.value.map((player, order) => ({ ...player, order }));
   const resolvedConfig = { ...config, players: orderedPlayers };
+  let generatedBoard: ReturnType<typeof generateBaseBoard>;
+  let generatedDeck: ReturnType<typeof generateProgressDeck>;
+
+  try {
+    generatedBoard = generateBaseBoard(shuffledPlayers.state);
+    const boardIssues = validateBoard(generatedBoard.board);
+    if (boardIssues.length > 0) {
+      return { ok: false, issues: boardIssues };
+    }
+    generatedDeck = generateProgressDeck(generatedBoard.random);
+  } catch (error) {
+    return {
+      ok: false,
+      issues: [
+        {
+          code: 'MATCH_GENERATION_FAILED',
+          message: error instanceof Error ? error.message : 'Match generation failed unexpectedly.',
+        },
+      ],
+    };
+  }
   const players = Object.fromEntries(
     orderedPlayers.map((player): readonly [string, PlayerState] => [
       player.id,
@@ -60,7 +84,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
         name: player.name.trim(),
         colorId: player.colorId,
         resources: resourceBundle([]),
-        progressCards: [],
+        progressCardIds: [],
         roadsRemaining: BUILDING_DEFINITIONS.ROAD.initialSupply,
         housesRemaining: BUILDING_DEFINITIONS.HOUSE.initialSupply,
         mansionsRemaining: BUILDING_DEFINITIONS.MANSION.initialSupply,
@@ -78,7 +102,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
       schemaVersion: GAME_STATE_VERSION,
       config: resolvedConfig,
       players,
-      board: { hexes: {}, vertices: {}, edges: {}, ports: {}, robberHexId: null },
+      board: generatedBoard.board,
       bank,
       turn: {
         activePlayerId: orderedPlayers[0]?.id ?? null,
@@ -89,13 +113,14 @@ export function createGame(config: GameState['config']): CreateGameResult {
         cardIdsBoughtThisTurn: [],
         setupPlacementVertexId: null,
       },
-      progressDeck: [],
+      progressDeck: generatedDeck.deck,
       progressDiscard: [],
+      progressCards: generatedDeck.cards,
       pendingInteraction: null,
       bonuses: { longestRoadHolderId: null, largestForceHolderId: null },
       winnerId: null,
       actionHistory: [],
-      random: shuffledPlayers.state,
+      random: generatedDeck.random,
     },
   };
 }

@@ -2,11 +2,15 @@
 
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
 import { resetAppStoreForTests } from '../../src/app/stores/app-store';
+
+vi.mock('../../src/board-renderer/BoardViewport', () => ({
+  BoardViewport: () => <section aria-label="Territory board" />,
+}));
 
 function renderApp(initialPath = '/') {
   return render(
@@ -26,7 +30,7 @@ async function addPlayer(name: string) {
   await user.click(within(dialog).getByRole('button', { name: 'Add player' }));
 }
 
-describe('Phase 2 application flow', () => {
+describe('application flow', () => {
   beforeEach(() => resetAppStoreForTests());
   afterEach(cleanup);
 
@@ -57,11 +61,17 @@ describe('Phase 2 application flow', () => {
     expect(startButton).toBeEnabled();
     await user.click(startButton);
 
-    expect(screen.getByRole('heading', { name: 'The table is ready.' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Turn order' })).toHaveTextContent('Alex');
-    expect(screen.getByRole('list', { name: 'Turn order' })).toHaveTextContent('Sam');
+    expect(screen.getByText('Board ready')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Territory board' })).toBeInTheDocument();
+    const matchSidebar = screen.getByRole('complementary', { name: 'Players and match state' });
+    expect(matchSidebar).toHaveTextContent('Alex');
+    expect(matchSidebar).toHaveTextContent('Sam');
 
-    await user.click(screen.getByRole('button', { name: 'Return to lobby' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Debug IDs' }));
+    expect(matchSidebar).toHaveTextContent('19H · 54V · 72E');
+    expect(matchSidebar).toHaveTextContent('25/25');
+
+    await user.click(screen.getByRole('button', { name: 'Lobby' }));
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
     expect(
       screen.getByText('2 of 2 seats filled · Turn order randomizes at start'),

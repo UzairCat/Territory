@@ -31,6 +31,19 @@ Gameplay handlers are intentionally introduced by roadmap phase. During Phase 1,
 rejects defined-but-unavailable actions without mutation. Each later feature replaces that fallback
 with a validated, atomic transition and focused tests.
 
+## Board generation and rendering
+
+The classic board is generated from the match's seeded random state. Terrain, number tokens, ports,
+and the progress deck are reproducible, and generation rejects a layout in which 6 and 8 tokens are
+adjacent. The generator builds shared topology rather than six independent corners per hex: the base
+map contains exactly 19 hexes, 54 vertices, 72 edges, 30 coastal edges, and 9 ports. Reciprocal
+references and starting invariants are validated before a match can be created.
+
+Topology positions use an integer lattice in the engine, so shared corners receive the same stable ID
+without relying on floating-point equality. The renderer converts that lattice into pixels in a pure
+render-model adapter. PixiJS owns canvas presentation, hit targets, pan, zoom, and hover state; React
+owns the surrounding HUD. Neither layer is allowed to mutate authoritative game state directly.
+
 ## Intended online shape
 
 Local v0.1 calls `dispatch` in the browser. A future online client sends the same serializable action
@@ -42,5 +55,6 @@ No networking code belongs in the v0.1 engine.
 - Engine tests interact through public actions except for narrowly scoped state fixtures.
 - Rejected actions must retain the identical state object and produce no domain events.
 - Configuration and board definitions are checked independently from rendering.
+- Pure render-model tests verify entity-to-target identity and geometry without requiring WebGL.
 - UI tests must verify that highlighted targets and disabled controls use engine selectors and error
   codes rather than copied rules.
