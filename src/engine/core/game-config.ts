@@ -18,6 +18,10 @@ export interface GameConfig {
   readonly playerCount: PlayerCount;
   readonly seed: string;
   readonly victoryTarget: number;
+  readonly turnTimeSeconds?: number;
+  readonly hideBankCards?: boolean;
+  readonly friendlyRobber?: boolean;
+  readonly balancedDice?: boolean;
   readonly players: readonly PlayerConfig[];
   readonly rules: ClassicRules;
 }
@@ -31,7 +35,10 @@ export type GameConfigIssueCode =
   | 'INVALID_PLAYER_NAME'
   | 'INVALID_PLAYER_ORDER'
   | 'INVALID_SEED'
-  | 'INVALID_VICTORY_TARGET';
+  | 'INVALID_TURN_TIME'
+  | 'INVALID_VICTORY_TARGET'
+  | 'INVALID_DISCARD_THRESHOLD'
+  | 'INVALID_RULE_TOGGLE';
 
 export interface GameConfigIssue {
   readonly code: GameConfigIssueCode;
@@ -106,10 +113,45 @@ export function validateGameConfig(config: GameConfig): readonly GameConfigIssue
     issues.push({ code: 'INVALID_SEED', message: 'A match seed is required.' });
   }
 
-  if (!Number.isSafeInteger(config.victoryTarget) || config.victoryTarget <= 0) {
+  if (
+    !Number.isSafeInteger(config.victoryTarget) ||
+    config.victoryTarget < 3 ||
+    config.victoryTarget > 26
+  ) {
     issues.push({
       code: 'INVALID_VICTORY_TARGET',
-      message: 'Victory target must be a positive integer.',
+      message: 'Victory target must be between 3 and 26.',
+    });
+  }
+
+  if (
+    !Number.isSafeInteger(config.rules.discardThreshold) ||
+    config.rules.discardThreshold < 5 ||
+    config.rules.discardThreshold > 20
+  ) {
+    issues.push({
+      code: 'INVALID_DISCARD_THRESHOLD',
+      message: 'Discard threshold must be between 5 and 20.',
+    });
+  }
+
+  if (
+    [config.hideBankCards, config.friendlyRobber, config.balancedDice].some(
+      (value) => value !== undefined && typeof value !== 'boolean',
+    )
+  ) {
+    issues.push({ code: 'INVALID_RULE_TOGGLE', message: 'Rule toggles must be boolean values.' });
+  }
+
+  if (
+    config.turnTimeSeconds !== undefined &&
+    (!Number.isSafeInteger(config.turnTimeSeconds) ||
+      config.turnTimeSeconds < 20 ||
+      config.turnTimeSeconds > 600)
+  ) {
+    issues.push({
+      code: 'INVALID_TURN_TIME',
+      message: 'Turn time must be between 20 seconds and 10 minutes.',
     });
   }
 

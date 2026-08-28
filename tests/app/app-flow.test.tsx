@@ -8,20 +8,56 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '../../src/app/App';
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
+import { COMMODITY_IDS } from '../../src/engine/content/commodities';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
+import { getKNProgressCardDefinition } from '../../src/engine/content/kn-progress-cards';
 import { resourceBundle } from '../../src/engine/content/types';
 import { createRandomState, randomInteger } from '../../src/engine/core/random';
+import { KN_MODE } from '../../src/engine/modes/kn';
 
 vi.mock('../../src/board-renderer/BoardViewport', () => ({
-  BoardViewport: ({ selectableTargets, onSelect }: BoardViewportProps) => (
-    <section aria-label="Territory board">
-      {selectableTargets[0] === undefined ? null : (
-        <button type="button" onClick={() => onSelect(selectableTargets[0]!)}>
-          Place first legal target
-        </button>
-      )}
-    </section>
-  ),
+  BoardViewport: ({
+    selectableTargets,
+    showKeyboardTargetControls,
+    showRobberAttention,
+    showTargetPulses,
+    onSelect,
+  }: BoardViewportProps) => {
+    const firstVertex = selectableTargets.find((target) => target.kind === 'VERTEX');
+    const distinctTargets = [
+      ...new Map(
+        selectableTargets.map((target) => [`${target.kind}:${target.id}`, target] as const),
+      ).values(),
+    ];
+    return (
+      <section
+        aria-label="Territory board"
+        data-keyboard-target-controls={String(showKeyboardTargetControls)}
+        data-robber-attention={String(showRobberAttention)}
+        data-target-pulses={String(showTargetPulses)}
+      >
+        {selectableTargets[0] === undefined ? null : (
+          <button type="button" onClick={() => onSelect(selectableTargets[0]!)}>
+            Place first legal target
+          </button>
+        )}
+        {firstVertex === undefined ? null : (
+          <button type="button" onClick={() => onSelect(firstVertex)}>
+            Place first legal vertex target
+          </button>
+        )}
+        {distinctTargets.map((target) => (
+          <button
+            key={`${target.kind}:${target.id}`}
+            type="button"
+            onClick={() => onSelect(target, { x: 500, y: 300 })}
+          >
+            Select board target {target.kind} {target.id}
+          </button>
+        ))}
+      </section>
+    );
+  },
 }));
 
 function renderApp(initialPath = '/') {
@@ -53,7 +89,9 @@ function randomForTotal(total: number) {
 }
 
 describe('application flow', () => {
-  beforeEach(() => resetAppStoreForTests());
+  beforeEach(() => {
+    resetAppStoreForTests();
+  });
   afterEach(cleanup);
 
   it('opens and dismisses settings from the main menu', async () => {
@@ -62,6 +100,10 @@ describe('application flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    const timerSounds = screen.getByRole('checkbox', { name: /Timer warning sounds/i });
+    expect(timerSounds).toBeChecked();
+    await user.click(timerSounds);
+    expect(useAppStore.getState().settings.timerSounds).toBe(false);
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
@@ -88,16 +130,94 @@ describe('application flow', () => {
     const matchSidebar = screen.getByRole('complementary', { name: 'Players and match state' });
     expect(matchSidebar).toHaveTextContent('Alex');
     expect(matchSidebar).toHaveTextContent('Sam');
+    expect(screen.getByRole('heading', { name: 'Game log' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Bank' })).toBeInTheDocument();
+
+    const actionBar = screen.getByRole('navigation', { name: 'Turn actions' });
+    expect(
+      within(actionBar)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Trade', 'Buy Progress card', 'Buy Road', 'Buy House', 'Buy City', 'End Turn']);
+    const cityButton = within(actionBar).getByRole('button', { name: 'Buy City' });
+    expect(cityButton.querySelectorAll('.purchase-cost-card')).toHaveLength(5);
+    expect(cityButton.querySelectorAll('.purchase-cost-card strong')).toHaveLength(0);
+
+    const adminButton = screen.getByRole('button', {
+      name: 'Enable admin mode and give active player 99 of every resource',
+    });
+    expect(adminButton).toHaveAttribute('aria-pressed', 'false');
+    await user.click(adminButton);
+    expect(screen.getByRole('button', { name: 'Disable admin mode' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const adminState = useAppStore.getState().gameState;
+    const activePlayerId = adminState?.turn.activePlayerId;
+    if (
+      adminState === null ||
+      adminState === undefined ||
+      activePlayerId === null ||
+      activePlayerId === undefined
+    ) {
+      throw new Error('Admin resource grant had no active player.');
+    }
+    expect(adminState.players[activePlayerId]?.resources).toEqual({
+      [RESOURCE_IDS.wood]: 99,
+      [RESOURCE_IDS.brick]: 99,
+      [RESOURCE_IDS.grain]: 99,
+      [RESOURCE_IDS.livestock]: 99,
+      [RESOURCE_IDS.ore]: 99,
+    });
+    expect(screen.getByText(/Admin mode enabled/)).toHaveTextContent(
+      'seven-roll discards are skipped',
+    );
+    await user.click(screen.getByRole('button', { name: 'Disable admin mode' }));
+    expect(
+      screen.getByRole('button', {
+        name: 'Enable admin mode and give active player 99 of every resource',
+      }),
+    ).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText(/Admin mode disabled/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('checkbox', { name: 'Debug IDs' }));
-    expect(matchSidebar).toHaveTextContent('19H · 54V · 72E');
-    expect(matchSidebar).toHaveTextContent('25/25');
+    expect(screen.getByText('19H · 54V · 72E')).toBeInTheDocument();
+    expect(screen.getByText('25/25')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Lobby' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Leave this match?' })).getByRole('button', {
+        name: 'Leave match',
+      }),
+    );
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
     expect(
       screen.getByText('2 of 2 seats filled · Turn order randomizes at start'),
     ).toBeInTheDocument();
+  });
+
+  it('configures functional room rules and advanced match limits from the lobby', async () => {
+    const user = userEvent.setup();
+    renderApp('/lobby');
+
+    expect(screen.getByRole('slider', { name: 'Points to win' })).toHaveValue('10');
+    expect(screen.getByRole('slider', { name: 'Card discard limit' })).toHaveValue('7');
+    for (const label of ['Hide Bank Cards', 'Friendly Robber', 'Balanced Dice']) {
+      const toggle = screen.getByRole('button', { name: label });
+      expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    }
+    await user.click(screen.getByRole('button', { name: 'Increase Points to win' }));
+    await user.click(screen.getByRole('button', { name: 'Increase Card discard limit' }));
+
+    expect(useAppStore.getState().lobby).toMatchObject({
+      victoryTarget: 11,
+      discardThreshold: 8,
+      hideBankCards: true,
+      friendlyRobber: true,
+      balancedDice: true,
+    });
   });
 
   it('completes a two-player setup through board selections', async () => {
@@ -108,11 +228,19 @@ describe('application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }));
 
     expect(screen.getByText(/Placement 1\/4/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Territory board' })).toHaveAttribute(
+      'data-keyboard-target-controls',
+      'false',
+    );
     for (let action = 0; action < 8; action += 1) {
       await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
     }
 
     expect(screen.getByText('Waiting for roll')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Territory board' })).toHaveAttribute(
+      'data-keyboard-target-controls',
+      'true',
+    );
     expect(screen.queryByText(/Placement \d\/4/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Roll dice' })).toBeInTheDocument();
 
@@ -122,7 +250,7 @@ describe('application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Roll dice' }));
 
     expect(screen.getByText('Action phase')).toBeInTheDocument();
-    expect(screen.getByLabelText('Dice total')).toHaveTextContent('Total 8');
+    expect(screen.getByRole('button', { name: /Dice result:/ })).toBeInTheDocument();
     expect(screen.getByText(/^Roll 8:/)).toBeInTheDocument();
 
     const actionState = useAppStore.getState().gameState;
@@ -153,32 +281,54 @@ describe('application flow', () => {
       }),
     );
 
-    await user.click(screen.getByRole('button', { name: /^Build road/ }));
-    expect(screen.getByText(/Choose a glowing edge for the new road/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    const resourceHand = screen.getByLabelText('Resource cards');
+    expect(within(resourceHand).getByLabelText('Wood: 2 cards')).toBeInTheDocument();
+    expect(within(resourceHand).getByLabelText('Brick: 2 cards')).toBeInTheDocument();
+    expect(within(resourceHand).queryByLabelText(/^Grain:/)).not.toBeInTheDocument();
+    expect(within(resourceHand).queryByLabelText(/^Livestock:/)).not.toBeInTheDocument();
+    expect(within(resourceHand).queryByLabelText(/^Ore:/)).not.toBeInTheDocument();
+    expect(resourceHand.querySelectorAll('.resource-card-stack__layer')).toHaveLength(2);
 
-    await user.click(screen.getByRole('button', { name: /^Build road/ }));
+    await user.click(screen.getByRole('button', { name: 'Place first legal vertex target' }));
+    const directCityMenu = screen.getByRole('dialog', { name: 'Build City' });
+    expect(within(directCityMenu).getByRole('button', { name: 'Build City' })).toBeDisabled();
+    expect(directCityMenu.querySelectorAll('.purchase-cost-card')).toHaveLength(5);
+    await user.keyboard('{Escape}');
+
     await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
-    expect(screen.getByText(/built a road/)).toBeInTheDocument();
+    const directBuildMenu = screen.getByRole('dialog', { name: 'Build Road' });
+    expect(within(directBuildMenu).getByRole('button', { name: 'Build Road' })).toBeEnabled();
+    expect(directBuildMenu.querySelectorAll('.purchase-cost-card')).toHaveLength(2);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Build Road' })).not.toBeInTheDocument();
+
+    const roadButton = screen.getByRole('button', { name: 'Buy Road' });
+    await user.click(roadButton);
+    expect(screen.getByText(/Choose a glowing edge for the new road/)).toBeInTheDocument();
+    expect(roadButton).toHaveAttribute('aria-pressed', 'true');
+    await user.keyboard('{Escape}');
+    expect(roadButton).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(roadButton);
+    await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
+    expect(screen.getAllByText(/built a road/).length).toBeGreaterThan(0);
     expect(useAppStore.getState().recentGameEvents.map((event) => event.type)).toEqual([
       'RESOURCES_SPENT',
       'ROAD_BUILT',
     ]);
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(roadButton).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'Place first legal target' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Place first legal target' }));
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Build road/ })).toBeDisabled();
+    const secondDirectBuildMenu = screen.getByRole('dialog', { name: 'Build Road' });
+    await user.click(within(secondDirectBuildMenu).getByRole('button', { name: 'Build Road' }));
+    expect(roadButton).toHaveAttribute('aria-pressed', 'false');
+    expect(roadButton).toBeDisabled();
     expect(useAppStore.getState().gameState?.players[actorId]?.resources).toMatchObject({
       wood: 0,
       brick: 0,
     });
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    await user.click(screen.getByRole('button', { name: 'End turn' }));
+    await user.click(screen.getByRole('button', { name: 'End Turn' }));
     expect(screen.getByText('Waiting for roll')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Roll dice' })).toBeInTheDocument();
   });
@@ -196,6 +346,429 @@ describe('application flow', () => {
 
     expect(within(dialog).getByText('That name is already in the lobby.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Add player' })).toBeDisabled();
+  });
+
+  it('keeps K+N turns moving without device handoffs or automatic card explanations', async () => {
+    const user = userEvent.setup();
+    renderApp('/lobby');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Game mode' }), KN_MODE.id);
+    await addPlayer('Alex');
+    await addPlayer('Sam');
+    await user.click(screen.getByRole('button', { name: 'Start game' }));
+
+    const initial = useAppStore.getState().gameState;
+    const activePlayerId = initial?.turn.activePlayerId;
+    if (
+      initial === null ||
+      initial.kn === null ||
+      activePlayerId === null ||
+      activePlayerId === undefined
+    ) {
+      throw new Error('K+N privacy fixture did not initialize.');
+    }
+    const kn = initial.kn;
+    const actionBar = screen.getByRole('navigation', { name: 'Turn actions' });
+    expect(
+      within(actionBar)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Trade', 'Buy City Wall', 'Buy Road', 'Buy House', 'Buy City', 'End Turn']);
+    const knControls = screen.getByRole('region', { name: 'K+N actions' });
+    expect(within(knControls).getByRole('button', { name: 'Knight actions' })).toBeInTheDocument();
+    expect(
+      within(knControls).getByRole('button', { name: 'City improvements' }),
+    ).toBeInTheDocument();
+    expect(document.querySelector('.dice-panel--kn')).toBeInTheDocument();
+    expect(screen.getByLabelText(/spaces until the barbarian attack/)).toBeInTheDocument();
+    expect(document.querySelector('.game-player-list--kn')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Pass to / })).not.toBeInTheDocument();
+    act(() =>
+      useAppStore.setState({
+        gameState: {
+          ...initial,
+          kn: {
+            ...kn,
+            attackSummary: {
+              barbarianStrength: 2,
+              defenderStrength: 1,
+              contributions: { [activePlayerId]: 1 },
+              defended: false,
+              defenderAwardPlayerId: null,
+              affectedPlayerIds: [activePlayerId],
+            },
+          },
+        },
+      }),
+    );
+    expect(screen.queryByText('The barbarians broke through')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue resolution' })).not.toBeInTheDocument();
+
+    const connectedEdge = Object.values(initial.board.edges)[0];
+    if (connectedEdge === undefined) throw new Error('K+N Knight placement fixture has no edge.');
+    act(() =>
+      useAppStore.setState({
+        gameState: {
+          ...initial,
+          players: {
+            ...initial.players,
+            [activePlayerId]: {
+              ...initial.players[activePlayerId]!,
+              resources: resourceBundle([
+                [RESOURCE_IDS.livestock, 1],
+                [RESOURCE_IDS.ore, 1],
+              ]),
+            },
+          },
+          board: {
+            ...initial.board,
+            edges: {
+              ...initial.board.edges,
+              [connectedEdge.id]: { ...connectedEdge, roadOwnerId: activePlayerId },
+            },
+          },
+          turn: {
+            ...initial.turn,
+            phase: 'ACTION_PHASE',
+            dice: [2, 3],
+            setupPlacementIndex: null,
+            setupPlacementVertexId: null,
+          },
+          pendingInteraction: null,
+        },
+      }),
+    );
+
+    const knightActions = screen.getByRole('button', { name: 'Knight actions' });
+    await user.click(knightActions);
+    expect(within(knControls).getByRole('button', { name: /Build Knight/ })).toBeInTheDocument();
+    expect(within(knControls).getByRole('button', { name: /Activate Knight/ })).toBeInTheDocument();
+    expect(within(knControls).getByRole('button', { name: /Upgrade Knight/ })).toBeInTheDocument();
+    expect(within(knControls).getByRole('button', { name: /Move Knight/ })).toBeInTheDocument();
+    await user.click(knightActions);
+    const improvements = screen.getByRole('button', { name: 'City improvements' });
+    await user.click(improvements);
+    expect(within(knControls).getByRole('button', { name: /Science/ })).toBeInTheDocument();
+    expect(within(knControls).getByRole('button', { name: /Trade/ })).toBeInTheDocument();
+    expect(within(knControls).getByRole('button', { name: /Politics/ })).toBeInTheDocument();
+    await user.click(improvements);
+
+    await user.click(screen.getByRole('button', { name: 'Place first legal vertex target' }));
+    const knightBuildMenu = screen.getByRole('dialog', {
+      name: 'Build on this board location',
+    });
+    await user.click(within(knightBuildMenu).getByRole('button', { name: 'Build Basic Knight' }));
+    expect(useAppStore.getState().gameState?.players[activePlayerId]?.knights).toHaveLength(1);
+    expect(
+      screen.queryByRole('dialog', { name: 'Build on this board location' }),
+    ).not.toBeInTheDocument();
+
+    const builtKnight = useAppStore.getState().gameState?.players[activePlayerId]?.knights[0];
+    if (builtKnight === undefined) throw new Error('The board purchase did not create a Knight.');
+    act(() => {
+      const current = useAppStore.getState().gameState;
+      if (current === null) return;
+      useAppStore.setState({
+        gameState: {
+          ...current,
+          players: {
+            ...current.players,
+            [activePlayerId]: {
+              ...current.players[activePlayerId]!,
+              resources: resourceBundle([
+                [RESOURCE_IDS.grain, 1],
+                [RESOURCE_IDS.livestock, 1],
+                [RESOURCE_IDS.ore, 1],
+              ]),
+            },
+          },
+        },
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Knight actions' }));
+    const quickBuildKnight = within(knControls).getByRole('button', { name: 'Build Knight' });
+    await user.click(quickBuildKnight);
+    expect(quickBuildKnight).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Place Basic Knight')).not.toBeInTheDocument();
+    await user.click(quickBuildKnight);
+    expect(quickBuildKnight).toHaveAttribute('aria-pressed', 'false');
+
+    const quickActivateKnight = within(knControls).getByRole('button', {
+      name: 'Activate Knight',
+    });
+    await user.click(quickActivateKnight);
+    expect(quickActivateKnight).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('.kn-piece-picker')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Territory board' })).toHaveAttribute(
+      'data-target-pulses',
+      'true',
+    );
+    await user.click(
+      screen.getByRole('button', {
+        name: `Select board target VERTEX ${builtKnight.vertexId}`,
+      }),
+    );
+    expect(useAppStore.getState().gameState?.players[activePlayerId]?.knights[0]?.active).toBe(
+      true,
+    );
+    expect(document.querySelector('.board-barbarian-tracker__stat--defense')).toHaveClass(
+      'is-advantaged',
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: `Select board target VERTEX ${builtKnight.vertexId}`,
+      }),
+    );
+    const activeKnightMenu = screen.getByRole('dialog', {
+      name: 'Level 1 active Knight actions',
+    });
+    expect(within(activeKnightMenu).getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+    expect(within(activeKnightMenu).queryByRole('button', { name: 'Move' })).toBeNull();
+    expect(within(activeKnightMenu).queryByRole('button', { name: 'Activate' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Close Knight menu' }));
+
+    act(() => {
+      const current = useAppStore.getState().gameState;
+      const robberHexId = current?.board.vertices[builtKnight.vertexId]?.adjacentHexIds[0];
+      if (current?.kn === null || current?.kn === undefined || robberHexId === undefined) return;
+      useAppStore.setState({
+        gameState: {
+          ...current,
+          players: {
+            ...current.players,
+            [activePlayerId]: {
+              ...current.players[activePlayerId]!,
+              knights: current.players[activePlayerId]!.knights.map((knight) =>
+                knight.id === builtKnight.id
+                  ? {
+                      ...knight,
+                      active: true,
+                      activeSinceTurn: current.turn.turnNumber - 1,
+                      lastActionTurn: null,
+                    }
+                  : knight,
+              ),
+            },
+          },
+          board: { ...current.board, robberHexId },
+          kn: { ...current.kn, firstBarbarianAttackResolved: true },
+        },
+      });
+    });
+    await user.click(
+      screen.getByRole('button', {
+        name: `Select board target VERTEX ${builtKnight.vertexId}`,
+      }),
+    );
+    const robberKnightMenu = screen.getByRole('dialog', {
+      name: 'Level 1 active Knight actions',
+    });
+    const moveKnight = within(robberKnightMenu).getByRole('button', { name: 'Move' });
+    expect(moveKnight).toBeEnabled();
+    await user.click(moveKnight);
+    await user.click(
+      screen.getByRole('button', {
+        name: `Select board target VERTEX ${builtKnight.vertexId}`,
+      }),
+    );
+    expect(useAppStore.getState().gameState?.turn.phase).toBe('MOVE_ROBBER');
+    expect(useAppStore.getState().gameState?.pendingInteraction).toMatchObject({
+      type: 'MOVE_ROBBER',
+      sourceKnightId: builtKnight.id,
+    });
+
+    const improvementVertex = Object.values(initial.board.vertices).find(
+      (vertex) => vertex.id !== builtKnight.vertexId,
+    );
+    if (improvementVertex === undefined) throw new Error('No City improvement fixture vertex.');
+    act(() => {
+      const current = useAppStore.getState().gameState;
+      if (current === null) return;
+      useAppStore.setState({
+        gameState: {
+          ...current,
+          turn: { ...current.turn, phase: 'ACTION_PHASE' },
+          pendingInteraction: null,
+          players: {
+            ...current.players,
+            [activePlayerId]: {
+              ...current.players[activePlayerId]!,
+              commodities: resourceBundle([[COMMODITY_IDS.paper, 1]]),
+            },
+          },
+          board: {
+            ...current.board,
+            vertices: {
+              ...current.board.vertices,
+              [improvementVertex.id]: {
+                ...current.board.vertices[improvementVertex.id]!,
+                building: { ownerId: activePlayerId, type: 'MANSION' },
+              },
+            },
+          },
+        },
+      });
+    });
+    await user.click(screen.getByRole('button', { name: 'City improvements' }));
+    await user.click(within(knControls).getByRole('button', { name: 'Buy Science improvement' }));
+    expect(
+      within(knControls).getByRole('button', { name: 'Buy Science improvement' }),
+    ).toHaveTextContent('Level 1');
+
+    act(() => {
+      const current = useAppStore.getState().gameState;
+      if (current?.kn === null || current?.kn === undefined) return;
+      useAppStore.setState({
+        gameState: {
+          ...current,
+          players: {
+            ...current.players,
+            [activePlayerId]: {
+              ...current.players[activePlayerId]!,
+              cityImprovements: { SCIENCE: 3, TRADE: 4, POLITICS: 0 },
+              commodities: resourceBundle([[COMMODITY_IDS.paper, 4]]),
+            },
+          },
+          board: {
+            ...current.board,
+            vertices: {
+              ...current.board.vertices,
+              [improvementVertex.id]: {
+                ...current.board.vertices[improvementVertex.id]!,
+                building: {
+                  ownerId: activePlayerId,
+                  type: 'MANSION',
+                  metropolis: 'TRADE',
+                },
+              },
+            },
+          },
+          kn: {
+            ...current.kn,
+            metropolisOwners: { ...current.kn.metropolisOwners, TRADE: activePlayerId },
+          },
+        },
+      });
+    });
+    await user.click(within(knControls).getByRole('button', { name: 'Buy Science improvement' }));
+    expect(within(knControls).getByRole('alert')).toHaveTextContent(
+      'An eligible City is required to claim this Metropolis.',
+    );
+    expect(
+      within(knControls).getByRole('button', { name: 'Buy Science improvement' }),
+    ).toBeInTheDocument();
+
+    const metropolisVertexId = Object.values(initial.board.vertices)[0]?.id;
+    const merchantHexId = Object.values(initial.board.hexes).find(
+      (hex) => hex.resourceId !== null,
+    )?.id;
+    if (metropolisVertexId === undefined || merchantHexId === undefined) {
+      throw new Error('K+N board-choice fixture is incomplete.');
+    }
+    act(() =>
+      useAppStore.setState({
+        gameState: {
+          ...initial,
+          turn: {
+            ...initial.turn,
+            phase: 'CARD_RESOLUTION',
+            setupPlacementIndex: null,
+            setupPlacementVertexId: null,
+          },
+          pendingInteraction: {
+            type: 'KN_SELECTION',
+            playerId: activePlayerId,
+            purpose: 'METROPOLIS_CITY',
+            eligibleIds: [metropolisVertexId],
+            minimumSelections: 1,
+            maximumSelections: 1,
+            queue: [activePlayerId],
+            canCancel: false,
+            context: { track: 'SCIENCE' },
+          },
+        },
+      }),
+    );
+    expect(screen.getByText('Place Metropolis').closest('.turn-timer-wrap')).toBeInTheDocument();
+
+    act(() =>
+      useAppStore.setState({
+        gameState: {
+          ...initial,
+          turn: {
+            ...initial.turn,
+            phase: 'CARD_RESOLUTION',
+            setupPlacementIndex: null,
+            setupPlacementVertexId: null,
+          },
+          pendingInteraction: {
+            type: 'KN_SELECTION',
+            playerId: activePlayerId,
+            purpose: 'MERCHANT_HEX',
+            eligibleIds: [merchantHexId],
+            minimumSelections: 1,
+            maximumSelections: 1,
+            queue: [activePlayerId],
+            canCancel: true,
+            context: {},
+          },
+        },
+      }),
+    );
+    expect(screen.getByRole('region', { name: 'Territory board' })).toHaveAttribute(
+      'data-robber-attention',
+      'false',
+    );
+
+    const opponent = Object.values(initial.players).find((player) => player.id !== activePlayerId);
+    const card = Object.values(kn.progressCards).find((candidate) => {
+      const definition = getKNProgressCardDefinition(candidate.definitionId);
+      return definition !== undefined && definition.revealedVictoryPoints === 0;
+    });
+    const definition =
+      card === undefined ? undefined : getKNProgressCardDefinition(card.definitionId);
+    if (opponent === undefined || card === undefined || definition === undefined) {
+      throw new Error('K+N private draw fixture is incomplete.');
+    }
+
+    act(() =>
+      useAppStore.setState({
+        gameState: {
+          ...initial,
+          players: {
+            ...initial.players,
+            [opponent.id]: {
+              ...opponent,
+              knProgressCardIds: [...opponent.knProgressCardIds, card.instanceId],
+            },
+          },
+          kn: {
+            ...kn,
+            progressCards: {
+              ...kn.progressCards,
+              [card.instanceId]: {
+                ...card,
+                ownerId: opponent.id,
+                drawnTurn: initial.turn.turnNumber,
+              },
+            },
+          },
+        },
+        recentGameEvents: [
+          {
+            type: 'KN_PROGRESS_CARD_DRAWN',
+            playerId: opponent.id,
+            family: definition.family,
+            cardInstanceId: card.instanceId,
+            revealed: false,
+          },
+        ],
+      }),
+    );
+
+    expect(screen.queryByRole('dialog', { name: /Pass to / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Your Progress Card' })).not.toBeInTheDocument();
   });
 
   it('opens a fresh lobby each time Local game is selected from the menu', async () => {

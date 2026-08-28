@@ -3,6 +3,8 @@ import type { CardDefinitionId, ColorId, MapId, ModeId, ResourceId, TerrainId } 
 export type PlayerCount = 2 | 3 | 4;
 export type BuildingType = 'ROAD' | 'HOUSE' | 'MANSION';
 export type ResourceBundle = Readonly<Partial<Record<ResourceId, number>>>;
+export type GameModeKind = 'CLASSIC' | 'K_N';
+export type KNProgressFamily = 'SCIENCE' | 'TRADE' | 'POLITICS';
 
 export interface ResourceDefinition {
   readonly id: ResourceId;
@@ -30,12 +32,24 @@ export interface BuildingDefinition {
 export type ProgressCardEffect =
   'MOVE_ROBBER' | 'PLACE_TWO_ROADS' | 'TAKE_TWO_RESOURCES' | 'MONOPOLY' | 'VICTORY_POINT';
 
+export type ProgressCardArtworkId =
+  | 'KNIGHT'
+  | 'ROAD_BUILDING'
+  | 'YEAR_OF_PLENTY'
+  | 'MONOPOLY'
+  | 'CHAPEL'
+  | 'LIBRARY'
+  | 'MARKET'
+  | 'PALACE'
+  | 'UNIVERSITY';
+
 export interface ProgressCardDefinition {
   readonly id: CardDefinitionId;
   readonly displayName: string;
   readonly description: string;
   readonly count: number;
   readonly effect: ProgressCardEffect;
+  readonly artwork: ProgressCardArtworkId;
   readonly countsTowardForce: boolean;
   readonly victoryPoints: number;
 }
@@ -103,6 +117,8 @@ export interface ClassicRules {
 export interface GameModeDefinition {
   readonly id: ModeId;
   readonly displayName: string;
+  readonly description: string;
+  readonly kind: GameModeKind;
   readonly rules: ClassicRules;
 }
 

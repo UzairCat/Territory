@@ -48,6 +48,30 @@ describe('board render model', () => {
     expect(model.bounds.minimumY).toBeLessThan(model.bounds.maximumY);
   });
 
+  it('carries both buildable shoreline connections and trade details into every port', () => {
+    const { board, model } = modelFor('render-port-connections');
+
+    for (const port of model.ports) {
+      const edge = model.edges.find((candidate) => candidate.target.id === port.edgeId);
+      const source = board.ports[port.target.id];
+      expect(edge).toBeDefined();
+      expect(source).toBeDefined();
+      expect(port.shoreConnections).toEqual([edge?.first, edge?.second]);
+      expect(port.tradeRatio).toBe(source?.tradeRatio);
+      expect(port.resourceId).toBe(source?.resourceId);
+      const [firstConnection, secondConnection] = port.shoreConnections;
+      const firstDistance = Math.hypot(
+        port.position.x - firstConnection.x,
+        port.position.y - firstConnection.y,
+      );
+      const secondDistance = Math.hypot(
+        port.position.x - secondConnection.x,
+        port.position.y - secondConnection.y,
+      );
+      expect(firstDistance).toBeCloseTo(secondDistance, 8);
+    }
+  });
+
   it('keeps target geometry stable when a different seed changes board content', () => {
     const first = modelFor('render-first').model;
     const second = modelFor('render-second').model;

@@ -29,7 +29,7 @@ export const BUILDING_DEFINITIONS = {
   },
   MANSION: {
     type: 'MANSION',
-    displayName: 'Mansion',
+    displayName: 'City',
     cost: resourceBundle([
       [RESOURCE_IDS.grain, 2],
       [RESOURCE_IDS.ore, 3],

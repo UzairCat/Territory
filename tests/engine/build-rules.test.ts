@@ -8,6 +8,9 @@ import { actionId, edgeId, vertexId } from '../../src/engine/core/ids';
 import { isJsonSerializable } from '../../src/engine/core/json';
 import {
   getConstructionAvailability,
+  getPotentialHouseVertexIds,
+  getPotentialMansionVertexIds,
+  getPotentialRoadEdgeIds,
   getValidHouseVertexIds,
   getValidMansionVertexIds,
   getValidRoadEdgeIds,
@@ -191,6 +194,27 @@ function constructionState(): GameState {
 }
 
 describe('normal construction rules', () => {
+  it('exposes structurally legal board targets even when the player cannot pay', () => {
+    const original = constructionState();
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [TEST_PLAYER_IDS[0]]: {
+          ...original.players[TEST_PLAYER_IDS[0]]!,
+          resources: resourceBundle([]),
+        },
+      },
+    };
+
+    expect(getPotentialRoadEdgeIds(state, TEST_PLAYER_IDS[0])).toContain(EDGE_CD);
+    expect(getPotentialHouseVertexIds(state, TEST_PLAYER_IDS[0])).toContain(VERTEX_C);
+    expect(getPotentialMansionVertexIds(state, TEST_PLAYER_IDS[0])).toContain(VERTEX_A);
+    expect(getValidRoadEdgeIds(state, TEST_PLAYER_IDS[0])).toEqual([]);
+    expect(getValidHouseVertexIds(state, TEST_PLAYER_IDS[0])).toEqual([]);
+    expect(getValidMansionVertexIds(state, TEST_PLAYER_IDS[0])).toEqual([]);
+  });
+
   it('checks affordability against a generic resource bundle', () => {
     expect(
       canAfford(

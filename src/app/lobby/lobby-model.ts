@@ -4,9 +4,10 @@ import type { GameConfig } from '../../engine/core/game-config';
 import type { ColorId, GameId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
 import { BASE_MAP } from '../../engine/maps/base-map';
 import { CLASSIC_MODE } from '../../engine/modes/classic';
+import { KN_MODE } from '../../engine/modes/kn';
 
 export const AVAILABLE_MAPS = [BASE_MAP] as const;
-export const AVAILABLE_MODES = [CLASSIC_MODE] as const;
+export const AVAILABLE_MODES = [CLASSIC_MODE, KN_MODE] as const;
 export const LOBBY_SIZES: readonly PlayerCount[] = [2, 3, 4];
 
 export interface LocalLobbyPlayer {
@@ -20,8 +21,16 @@ export interface LobbyConfig {
   readonly modeId: ModeId;
   readonly size: PlayerCount;
   readonly seed: string;
+  readonly turnTimeSeconds: number;
+  readonly victoryTarget: number;
+  readonly discardThreshold: number;
+  readonly hideBankCards: boolean;
+  readonly friendlyRobber: boolean;
+  readonly balancedDice: boolean;
   readonly players: readonly LocalLobbyPlayer[];
 }
+
+export type LobbyRuleKey = 'hideBankCards' | 'friendlyRobber' | 'balancedDice';
 
 export type LobbyIssueCode =
   | 'PLAYER_COUNT_INCOMPLETE'
@@ -33,6 +42,9 @@ export type LobbyIssueCode =
   | 'INVALID_SEED'
   | 'INVALID_MAP'
   | 'INVALID_MODE'
+  | 'INVALID_TURN_TIME'
+  | 'INVALID_VICTORY_TARGET'
+  | 'INVALID_DISCARD_THRESHOLD'
   | 'INCOMPATIBLE_MAP_MODE'
   | 'UNSUPPORTED_MAP_SIZE';
 
@@ -51,6 +63,12 @@ export function createDefaultLobby(seed: string): LobbyConfig {
     modeId: CLASSIC_MODE.id,
     size: 2,
     seed,
+    turnTimeSeconds: 60,
+    victoryTarget: CLASSIC_MODE.rules.victoryTarget,
+    discardThreshold: CLASSIC_MODE.rules.discardThreshold,
+    hideBankCards: false,
+    friendlyRobber: false,
+    balancedDice: false,
     players: [],
   };
 }
@@ -113,6 +131,28 @@ export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
     });
   }
 
+  if (
+    !Number.isSafeInteger(lobby.victoryTarget) ||
+    lobby.victoryTarget < 3 ||
+    lobby.victoryTarget > 26
+  ) {
+    issues.push({
+      code: 'INVALID_VICTORY_TARGET',
+      message: 'Points to win must be between 3 and 26.',
+    });
+  }
+
+  if (
+    !Number.isSafeInteger(lobby.discardThreshold) ||
+    lobby.discardThreshold < 5 ||
+    lobby.discardThreshold > 20
+  ) {
+    issues.push({
+      code: 'INVALID_DISCARD_THRESHOLD',
+      message: 'The card discard limit must be between 5 and 20.',
+    });
+  }
+
   if (new Set(normalizedNames).size !== normalizedNames.length) {
     issues.push({
       code: 'DUPLICATE_PLAYER_NAME',
@@ -130,6 +170,17 @@ export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
 
   if (lobby.seed.trim().length === 0) {
     issues.push({ code: 'INVALID_SEED', message: 'Enter or generate a match seed.' });
+  }
+
+  if (
+    !Number.isSafeInteger(lobby.turnTimeSeconds) ||
+    lobby.turnTimeSeconds < 20 ||
+    lobby.turnTimeSeconds > 600
+  ) {
+    issues.push({
+      code: 'INVALID_TURN_TIME',
+      message: 'Turn time must be between 20 seconds and 10 minutes.',
+    });
   }
 
   if (map === undefined) {
@@ -163,6 +214,7 @@ export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfig
     return { ok: false, issues };
   }
 
+  const mode = AVAILABLE_MODES.find((entry) => entry.id === lobby.modeId) ?? CLASSIC_MODE;
   return {
     ok: true,
     config: {
@@ -172,14 +224,22 @@ export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfig
       mapId: lobby.mapId,
       playerCount: lobby.size,
       seed: lobby.seed.trim(),
-      victoryTarget: CLASSIC_MODE.rules.victoryTarget,
+      victoryTarget: lobby.victoryTarget,
+      turnTimeSeconds: lobby.turnTimeSeconds,
+      hideBankCards: lobby.hideBankCards,
+      friendlyRobber: lobby.friendlyRobber,
+      balancedDice: lobby.balancedDice,
       players: lobby.players.map((player, order) => ({
         id: player.id,
         name: player.name.trim(),
         colorId: player.colorId,
         order,
       })),
-      rules: CLASSIC_MODE.rules,
+      rules: {
+        ...mode.rules,
+        victoryTarget: lobby.victoryTarget,
+        discardThreshold: lobby.discardThreshold,
+      },
     },
   };
 }

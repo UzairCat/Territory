@@ -10,6 +10,9 @@ interface ModalProps {
   readonly onClose: () => void;
   readonly description?: string;
   readonly closeLabel?: string;
+  readonly dismissible?: boolean;
+  readonly backdropClassName?: string;
+  readonly className?: string;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -22,10 +25,20 @@ export function Modal({
   onClose,
   description,
   closeLabel = 'Close dialog',
+  dismissible = true,
+  backdropClassName = '',
+  className = '',
 }: ModalProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    dismissibleRef.current = dismissible;
+  }, [dismissible, onClose]);
 
   useEffect(() => {
     if (!open) {
@@ -41,9 +54,9 @@ export function Modal({
     focusTarget?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && dismissibleRef.current) {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -70,7 +83,7 @@ export function Modal({
       document.removeEventListener('keydown', handleKeyDown);
       previousFocus?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open) {
     return null;
@@ -78,16 +91,16 @@ export function Modal({
 
   return createPortal(
     <div
-      className="modal-backdrop"
+      className={['modal-backdrop', backdropClassName].filter(Boolean).join(' ')}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (dismissible && event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
       <div
         ref={dialogRef}
-        className="modal"
+        className={['modal', className].filter(Boolean).join(' ')}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -102,9 +115,16 @@ export function Modal({
               </p>
             )}
           </div>
-          <Button className="icon-button" variant="ghost" aria-label={closeLabel} onClick={onClose}>
-            ×
-          </Button>
+          {dismissible ? (
+            <Button
+              className="icon-button"
+              variant="ghost"
+              aria-label={closeLabel}
+              onClick={onClose}
+            >
+              ×
+            </Button>
+          ) : null}
         </header>
         <div className="modal__body">{children}</div>
       </div>

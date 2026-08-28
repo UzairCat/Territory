@@ -1,5 +1,5 @@
 export type RuleErrorCode =
-  | 'ACTION_NOT_IMPLEMENTED'
+  | 'UNKNOWN_ACTION'
   | 'GAME_ALREADY_OVER'
   | 'NOT_YOUR_TURN'
   | 'WRONG_PHASE'
@@ -19,6 +19,8 @@ export type RuleErrorCode =
   | 'INVALID_DISCARD'
   | 'INVALID_ROBBER_DESTINATION'
   | 'INVALID_STEAL_TARGET'
+  | 'INVALID_TRADE'
+  | 'TRADE_ID_IN_USE'
   | 'TRADE_NOT_FOUND'
   | 'TRADE_STALE'
   | 'CARD_NOT_OWNED'

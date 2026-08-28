@@ -39,4 +39,32 @@ describe('game configuration validation', () => {
       'INVALID_PLAYER_ORDER',
     );
   });
+
+  it('rejects an out-of-range serialized turn time', () => {
+    const invalid: GameConfig = { ...createTestConfig(), turnTimeSeconds: 601 };
+
+    expect(validateGameConfig(invalid).map((entry) => entry.code)).toContain('INVALID_TURN_TIME');
+  });
+
+  it('rejects out-of-range scoring and discard settings', () => {
+    const original = createTestConfig();
+    const invalid: GameConfig = {
+      ...original,
+      victoryTarget: 27,
+      rules: { ...original.rules, discardThreshold: 4 },
+    };
+
+    expect(validateGameConfig(invalid).map((entry) => entry.code)).toEqual(
+      expect.arrayContaining(['INVALID_VICTORY_TARGET', 'INVALID_DISCARD_THRESHOLD']),
+    );
+  });
+
+  it('rejects malformed serialized rule toggles', () => {
+    const invalid = {
+      ...createTestConfig(),
+      balancedDice: 'yes',
+    } as unknown as GameConfig;
+
+    expect(validateGameConfig(invalid).map((entry) => entry.code)).toContain('INVALID_RULE_TOGGLE');
+  });
 });

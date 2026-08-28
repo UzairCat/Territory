@@ -8,7 +8,6 @@ import type { GameEvent } from '../core/events';
 import type { GameState, PlayerState } from '../core/game-state';
 import type { EdgeId, PlayerId, VertexId } from '../core/ids';
 import { addResourceBundles, canAfford, subtractResourceBundles } from './resource-rules';
-import { calculatePublicScore } from './scoring-rules';
 
 export type ConstructionType = Extract<BuildingType, 'ROAD' | 'HOUSE' | 'MANSION'>;
 
@@ -26,11 +25,7 @@ function remainingPieces(player: PlayerState, type: ConstructionType): number {
   return player.mansionsRemaining;
 }
 
-function constructionPrerequisiteError(
-  state: GameState,
-  actorId: PlayerId,
-  type: ConstructionType,
-): RuleError | null {
+function constructionContextError(state: GameState, actorId: PlayerId): RuleError | null {
   if (state.turn.phase !== 'ACTION_PHASE') {
     return { code: 'WRONG_PHASE', message: 'Construction is only available during action phase.' };
   }
@@ -43,6 +38,22 @@ function constructionPrerequisiteError(
       message: 'Resolve the current interaction before constructing a piece.',
     };
   }
+
+  const player = state.players[actorId];
+  if (player === undefined) {
+    return { code: 'NOT_YOUR_TURN', message: 'The active construction player does not exist.' };
+  }
+
+  return null;
+}
+
+function constructionPrerequisiteError(
+  state: GameState,
+  actorId: PlayerId,
+  type: ConstructionType,
+): RuleError | null {
+  const contextError = constructionContextError(state, actorId);
+  if (contextError !== null) return contextError;
 
   const player = state.players[actorId];
   if (player === undefined) {
@@ -69,6 +80,10 @@ function constructionPrerequisiteError(
 function roadConnectsAtVertex(state: GameState, playerId: PlayerId, vertexId: VertexId): boolean {
   const vertex = state.board.vertices[vertexId];
   if (vertex === undefined) return false;
+  const occupyingKnight = Object.values(state.players)
+    .flatMap((player) => player.knights)
+    .find((knight) => knight.id === vertex.knightId);
+  if (occupyingKnight !== undefined && occupyingKnight.ownerId !== playerId) return false;
   if (vertex.building !== null) return vertex.building.ownerId === playerId;
   return vertex.connectedEdgeIds.some(
     (connectedEdgeId) => state.board.edges[connectedEdgeId]?.roadOwnerId === playerId,
@@ -94,6 +109,7 @@ export function isLegalHouseVertex(
   return (
     vertex !== undefined &&
     vertex.building === null &&
+    (vertex.knightId ?? null) === null &&
     vertex.adjacentVertexIds.every(
       (adjacentId) => state.board.vertices[adjacentId]?.building === null,
     ) &&
@@ -109,7 +125,12 @@ export function isLegalMansionVertex(
   vertexId: VertexId,
 ): boolean {
   const building = state.board.vertices[vertexId]?.building;
-  return building?.ownerId === playerId && building.type === 'HOUSE';
+  const forcedRebuilds = state.players[playerId]?.forcedMansionRebuildVertexIds ?? [];
+  return (
+    building?.ownerId === playerId &&
+    building.type === 'HOUSE' &&
+    (forcedRebuilds.length === 0 || forcedRebuilds.includes(vertexId))
+  );
 }
 
 function validRoadTargets(state: GameState, playerId: PlayerId): readonly EdgeId[] {
@@ -128,6 +149,34 @@ function validMansionTargets(state: GameState, playerId: PlayerId): readonly Ver
   return Object.values(state.board.vertices)
     .filter((vertex) => isLegalMansionVertex(state, playerId, vertex.id))
     .map((vertex) => vertex.id);
+}
+
+/**
+ * Structurally legal targets are intentionally independent from the player's hand and remaining
+ * supply. They power board hover affordances; the purchase itself still runs every prerequisite.
+ */
+export function getPotentialRoadEdgeIds(state: GameState, playerId: PlayerId): readonly EdgeId[] {
+  return constructionContextError(state, playerId) === null
+    ? validRoadTargets(state, playerId)
+    : [];
+}
+
+export function getPotentialHouseVertexIds(
+  state: GameState,
+  playerId: PlayerId,
+): readonly VertexId[] {
+  return constructionContextError(state, playerId) === null
+    ? validHouseTargets(state, playerId)
+    : [];
+}
+
+export function getPotentialMansionVertexIds(
+  state: GameState,
+  playerId: PlayerId,
+): readonly VertexId[] {
+  return constructionContextError(state, playerId) === null
+    ? validMansionTargets(state, playerId)
+    : [];
 }
 
 export function getValidRoadEdgeIds(state: GameState, playerId: PlayerId): readonly EdgeId[] {
@@ -323,11 +372,6 @@ export function buildHouse(
       vertexId: action.vertexId,
       buildingType: 'HOUSE',
     },
-    {
-      type: 'SCORE_CHANGED',
-      playerId: action.actorId,
-      score: calculatePublicScore(nextState, action.actorId),
-    },
   ];
   return acceptAction(state, action, nextState, events);
 }
@@ -341,13 +385,13 @@ export function upgradeMansion(
 
   const vertex = state.board.vertices[action.vertexId];
   if (vertex === undefined) {
-    return rejectAction(state, 'INVALID_TARGET', 'The selected mansion vertex does not exist.');
+    return rejectAction(state, 'INVALID_TARGET', 'The selected city vertex does not exist.');
   }
   if (!isLegalMansionVertex(state, action.actorId, action.vertexId)) {
     return rejectAction(
       state,
       'HOUSE_REQUIRED_FOR_UPGRADE',
-      'A mansion can only replace one of your houses.',
+      'A city can only replace one of your houses.',
     );
   }
 
@@ -355,15 +399,33 @@ export function upgradeMansion(
   if (player === undefined) {
     return rejectAction(state, 'NOT_YOUR_TURN', 'The active construction player does not exist.');
   }
+  if (
+    player.forcedMansionRebuildVertexIds.length > 0 &&
+    !player.forcedMansionRebuildVertexIds.includes(action.vertexId)
+  ) {
+    return rejectAction(
+      state,
+      'INVALID_TARGET',
+      'Rebuild the City lost to the barbarians before upgrading a different House.',
+    );
+  }
   const payment = payConstructionCost(state, player, 'MANSION');
+  const rebuildingVirtualHouse = player.forcedMansionRebuildVertexIds.includes(action.vertexId);
+  const forcedMansionRebuildVertexIds = player.forcedMansionRebuildVertexIds.filter(
+    (vertexId) => vertexId !== action.vertexId,
+  );
   const nextState: GameState = {
     ...state,
     players: {
       ...state.players,
       [action.actorId]: {
         ...payment.player,
-        housesRemaining: player.housesRemaining + 1,
+        housesRemaining: rebuildingVirtualHouse
+          ? player.housesRemaining
+          : player.housesRemaining + 1,
         mansionsRemaining: player.mansionsRemaining - 1,
+        forcedMansionRebuildVertexIds,
+        mustRebuildDestroyedMansion: forcedMansionRebuildVertexIds.length > 0,
       },
     },
     bank: payment.bank,
@@ -383,11 +445,6 @@ export function upgradeMansion(
       reason: 'MANSION',
     },
     { type: 'BUILDING_UPGRADED', playerId: action.actorId, vertexId: action.vertexId },
-    {
-      type: 'SCORE_CHANGED',
-      playerId: action.actorId,
-      score: calculatePublicScore(nextState, action.actorId),
-    },
   ];
   return acceptAction(state, action, nextState, events);
 }

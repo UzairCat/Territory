@@ -140,9 +140,60 @@ describe('normal turn rules', () => {
     });
   });
 
+  it('skips the seven discard queue only when explicitly requested', () => {
+    const random = randomForTotal(7);
+    const original = createTestGameState('WAITING_FOR_ROLL');
+    const state = withRobberFlowEnabled({
+      ...original,
+      random: random.state,
+      players: {
+        ...original.players,
+        [TEST_PLAYER_IDS[0]]: {
+          ...original.players[TEST_PLAYER_IDS[0]]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 99]]),
+        },
+        [TEST_PLAYER_IDS[1]]: {
+          ...original.players[TEST_PLAYER_IDS[1]]!,
+          resources: resourceBundle([[RESOURCE_IDS.brick, 9]]),
+        },
+      },
+    });
+    const result = dispatch(
+      state,
+      {
+        id: actionId('roll-seven-without-discards'),
+        type: 'ROLL_DICE',
+        actorId: TEST_PLAYER_IDS[0],
+      },
+      { skipSevenDiscards: true },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.turn.phase).toBe('MOVE_ROBBER');
+    expect(result.state.pendingInteraction).toEqual({
+      type: 'MOVE_ROBBER',
+      playerId: TEST_PLAYER_IDS[0],
+    });
+    expect(result.state.players).toBe(state.players);
+    expect(result.events).toContainEqual({
+      type: 'ROBBER_SEQUENCE_STARTED',
+      playerId: TEST_PLAYER_IDS[0],
+      discardPlayerIds: [],
+    });
+  });
+
   it('deterministically rerolls sevens while the robber flow is disabled', () => {
     const random = randomForTotal(7);
-    const state: GameState = { ...createTestGameState('WAITING_FOR_ROLL'), random: random.state };
+    const original = createTestGameState('WAITING_FOR_ROLL');
+    const state: GameState = {
+      ...original,
+      config: {
+        ...original.config,
+        rules: { ...original.config.rules, robberFlowEnabled: false },
+      },
+      random: random.state,
+    };
     const action = {
       id: actionId('reroll-seven'),
       type: 'ROLL_DICE' as const,

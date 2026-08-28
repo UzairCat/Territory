@@ -57,6 +57,21 @@ export function SettingsModal() {
           </select>
         </label>
 
+        <label className="check-field" htmlFor="timer-sounds">
+          <input
+            id="timer-sounds"
+            type="checkbox"
+            checked={settings.timerSounds}
+            onChange={(event) => update({ timerSounds: event.target.checked })}
+          />
+          <span>
+            <strong>Timer warning sounds</strong>
+            <small>
+              Play countdown ticks during timed choices. Dice and robber timers stay silent.
+            </small>
+          </span>
+        </label>
+
         <label className="check-field" htmlFor="reduced-motion">
           <input
             id="reduced-motion"
@@ -67,19 +82,6 @@ export function SettingsModal() {
           <span>
             <strong>Reduced motion</strong>
             <small>Shorten or remove nonessential animation.</small>
-          </span>
-        </label>
-
-        <label className="check-field" htmlFor="turn-privacy">
-          <input
-            id="turn-privacy"
-            type="checkbox"
-            checked={settings.turnPrivacy}
-            onChange={(event) => update({ turnPrivacy: event.target.checked })}
-          />
-          <span>
-            <strong>Pass-device privacy</strong>
-            <small>Hide private hands until the active player confirms.</small>
           </span>
         </label>
       </div>

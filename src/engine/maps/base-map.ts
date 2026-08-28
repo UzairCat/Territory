@@ -2,6 +2,7 @@ import { mapId } from '../core/ids';
 import { RESOURCE_IDS, TERRAIN_IDS } from '../content/resources';
 import type { AxialCoordinate, MapDefinition, PortPoolEntry } from '../content/types';
 import { CLASSIC_MODE_ID } from '../modes/classic';
+import { KN_MODE_ID } from '../modes/kn';
 
 export const BASE_MAP_ID = mapId('base-map');
 
@@ -52,7 +53,7 @@ export const BASE_MAP = {
   id: BASE_MAP_ID,
   displayName: 'Base Map',
   supportedPlayerCounts: [2, 3, 4],
-  supportedModeIds: [CLASSIC_MODE_ID],
+  supportedModeIds: [CLASSIC_MODE_ID, KN_MODE_ID],
   coordinates: BASE_MAP_COORDINATES,
   terrainPool: TERRAIN_POOL,
   numberTokenPool: [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12],

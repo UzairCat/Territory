@@ -1,12 +1,15 @@
 import { BUILDING_DEFINITIONS } from '../content/buildings';
 import { RESOURCES } from '../content/resources';
+import { COMMODITIES } from '../content/commodities';
 import { resourceBundle } from '../content/types';
 import { validateClassicContent } from '../content/validate-content';
 import { generateBaseBoard } from '../board/generate-board';
 import { validateBoard } from '../board/validate-board';
 import { generateProgressDeck } from '../cards/generate-deck';
+import { generateKNProgressDecks } from '../cards/generate-kn-decks';
 import { BASE_MAP } from '../maps/base-map';
 import { CLASSIC_MODE } from '../modes/classic';
+import { KN_MODE } from '../modes/kn';
 import type { GameConfigIssue } from './game-config';
 import { validateGameConfig } from './game-config';
 import { GAME_STATE_VERSION } from './game-state';
@@ -32,7 +35,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
     ...validateClassicContent(),
   ];
 
-  if (config.modeId !== CLASSIC_MODE.id) {
+  if (config.modeId !== CLASSIC_MODE.id && config.modeId !== KN_MODE.id) {
     issues.push({ code: 'UNSUPPORTED_MODE', message: 'The requested game mode is unavailable.' });
   }
 
@@ -56,7 +59,8 @@ export function createGame(config: GameState['config']): CreateGameResult {
   const orderedPlayers = shuffledPlayers.value.map((player, order) => ({ ...player, order }));
   const resolvedConfig = { ...config, players: orderedPlayers };
   let generatedBoard: ReturnType<typeof generateBaseBoard>;
-  let generatedDeck: ReturnType<typeof generateProgressDeck>;
+  let generatedDeck: ReturnType<typeof generateProgressDeck> | null = null;
+  let generatedKNDecks: ReturnType<typeof generateKNProgressDecks> | null = null;
 
   try {
     generatedBoard = generateBaseBoard(shuffledPlayers.state);
@@ -64,7 +68,11 @@ export function createGame(config: GameState['config']): CreateGameResult {
     if (boardIssues.length > 0) {
       return { ok: false, issues: boardIssues };
     }
-    generatedDeck = generateProgressDeck(generatedBoard.random);
+    if (config.modeId === KN_MODE.id) {
+      generatedKNDecks = generateKNProgressDecks(generatedBoard.random);
+    } else {
+      generatedDeck = generateProgressDeck(generatedBoard.random);
+    }
   } catch (error) {
     return {
       ok: false,
@@ -84,17 +92,41 @@ export function createGame(config: GameState['config']): CreateGameResult {
         name: player.name.trim(),
         colorId: player.colorId,
         resources: resourceBundle([]),
+        commodities: resourceBundle([]),
         progressCardIds: [],
         roadsRemaining: BUILDING_DEFINITIONS.ROAD.initialSupply,
         housesRemaining: BUILDING_DEFINITIONS.HOUSE.initialSupply,
         mansionsRemaining: BUILDING_DEFINITIONS.MANSION.initialSupply,
         playedForceCards: 0,
+        cityImprovements: { SCIENCE: 0, TRADE: 0, POLITICS: 0 },
+        knights: [],
+        cityWallsRemaining: 3,
+        knProgressCardIds: [],
+        revealedKNProgressCardIds: [],
+        defenderPoints: 0,
+        mustRebuildDestroyedMansion: false,
+        forcedMansionRebuildVertexIds: [],
+        craneDiscountAvailable: false,
+        merchantFleetGoodId: null,
       },
     ]),
   );
   const bank = resourceBundle(
     RESOURCES.map((resource) => [resource.id, config.rules.bankCardsPerResource] as const),
   );
+  const commodityBank = resourceBundle(
+    COMMODITIES.map((commodity) => [commodity.id, config.rules.bankCardsPerResource] as const),
+  );
+  const isKN = config.modeId === KN_MODE.id;
+  const random = generatedKNDecks?.random ?? generatedDeck?.random;
+  if (random === undefined) {
+    return {
+      ok: false,
+      issues: [
+        { code: 'MATCH_GENERATION_FAILED', message: 'Card deck generation did not complete.' },
+      ],
+    };
+  }
 
   return {
     ok: true,
@@ -104,6 +136,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
       players,
       board: generatedBoard.board,
       bank,
+      commodityBank,
       turn: {
         activePlayerId: orderedPlayers[0]?.id ?? null,
         turnNumber: 0,
@@ -114,14 +147,36 @@ export function createGame(config: GameState['config']): CreateGameResult {
         setupPlacementIndex: 0,
         setupPlacementVertexId: null,
       },
-      progressDeck: generatedDeck.deck,
+      progressDeck: generatedDeck?.deck ?? [],
       progressDiscard: [],
-      progressCards: generatedDeck.cards,
+      progressCards: generatedDeck?.cards ?? {},
+      tradeOffers: {},
       pendingInteraction: null,
       bonuses: { longestRoadHolderId: null, largestForceHolderId: null },
       winnerId: null,
       actionHistory: [],
-      random: generatedDeck.random,
+      random,
+      balancedDice: config.balancedDice
+        ? { remainingPairIds: Array.from({ length: 36 }, (_, index) => index), recentTotals: [] }
+        : null,
+      kn:
+        !isKN || generatedKNDecks === null
+          ? null
+          : {
+              barbarianPosition: 0,
+              barbarianTrackLength: 7,
+              firstBarbarianAttackResolved: false,
+              eventDieResult: null,
+              redDieResult: null,
+              regularDieResult: null,
+              progressDecks: generatedKNDecks.decks,
+              progressDiscards: { SCIENCE: [], TRADE: [], POLITICS: [] },
+              progressCards: generatedKNDecks.cards,
+              metropolisOwners: { SCIENCE: null, TRADE: null, POLITICS: null },
+              merchant: null,
+              pendingRoll: null,
+              attackSummary: null,
+            },
     },
   };
 }

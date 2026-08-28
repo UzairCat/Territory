@@ -12,7 +12,7 @@ const unavailableAction: GameAction = {
 };
 
 describe('engine dispatch boundary', () => {
-  it('rejects an unavailable action without changing state', () => {
+  it('rejects an action in the wrong phase without changing state', () => {
     const state = createTestGameState();
     const snapshot = structuredClone(state);
     const result = dispatch(state, unavailableAction);
@@ -22,7 +22,7 @@ describe('engine dispatch boundary', () => {
     expect(result.state).toEqual(snapshot);
     expect(result.events).toEqual([]);
     if (!result.ok) {
-      expect(result.error.code).toBe('ACTION_NOT_IMPLEMENTED');
+      expect(result.error.code).toBe('WRONG_PHASE');
     }
   });
 

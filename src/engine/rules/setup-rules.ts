@@ -7,6 +7,7 @@ import type { DispatchResult } from '../core/dispatch-result';
 import type { GameEvent } from '../core/events';
 import type { GameState, PlayerState, VertexState } from '../core/game-state';
 import type { EdgeId, PlayerId, ResourceId, VertexId } from '../core/ids';
+import { KN_MODE_ID } from '../modes/kn';
 
 export type SetupRound = 'FORWARD' | 'REVERSE';
 
@@ -41,9 +42,17 @@ export function getSetupProgress(state: GameState): SetupProgress | null {
   };
 }
 
+export function getSetupBuildingType(state: GameState): 'HOUSE' | 'MANSION' {
+  const placementIndex = state.turn.setupPlacementIndex ?? 0;
+  return state.config.modeId === KN_MODE_ID && placementIndex >= state.config.playerCount
+    ? 'MANSION'
+    : 'HOUSE';
+}
+
 export function isLegalSetupHouseVertex(state: GameState, vertexId: VertexId): boolean {
   const vertex = state.board.vertices[vertexId];
-  if (vertex === undefined || vertex.building !== null) return false;
+  if (vertex === undefined || vertex.building !== null || (vertex.knightId ?? null) !== null)
+    return false;
 
   return vertex.adjacentVertexIds.every(
     (adjacentId) => state.board.vertices[adjacentId]?.building === null,
@@ -56,7 +65,9 @@ export function getLegalSetupHouseVertexIds(state: GameState): readonly VertexId
   if (
     state.turn.phase !== 'SETUP_PLACE_HOUSE' ||
     player === undefined ||
-    player.housesRemaining < 1
+    (getSetupBuildingType(state) === 'HOUSE'
+      ? player.housesRemaining < 1
+      : player.mansionsRemaining < 1)
   ) {
     return [];
   }
@@ -77,7 +88,7 @@ export function isLegalSetupRoadEdge(state: GameState, edgeId: EdgeId): boolean 
     setupVertexId !== null &&
     activePlayerId !== null &&
     setupVertex?.building?.ownerId === activePlayerId &&
-    setupVertex?.building?.type === 'HOUSE' &&
+    setupVertex?.building !== null &&
     (edge.vertexAId === setupVertexId || edge.vertexBId === setupVertexId)
   );
 }
@@ -183,8 +194,16 @@ export function placeSetupHouse(
   if (player === undefined) {
     return rejectAction(state, 'NOT_YOUR_TURN', 'The setup player does not exist.');
   }
-  if (player.housesRemaining < 1) {
-    return rejectAction(state, 'NO_PIECES_REMAINING', 'The active player has no houses remaining.');
+  const buildingType = getSetupBuildingType(state);
+  if (
+    (buildingType === 'HOUSE' && player.housesRemaining < 1) ||
+    (buildingType === 'MANSION' && player.mansionsRemaining < 1)
+  ) {
+    return rejectAction(
+      state,
+      'NO_PIECES_REMAINING',
+      `The active player has no ${buildingType === 'HOUSE' ? 'houses' : 'cities'} remaining.`,
+    );
   }
 
   const vertex = state.board.vertices[action.vertexId];
@@ -207,14 +226,17 @@ export function placeSetupHouse(
     return rejectAction(state, 'WRONG_PHASE', 'The setup placement sequence is not active.');
   }
 
-  let nextPlayer: PlayerState = { ...player, housesRemaining: player.housesRemaining - 1 };
+  let nextPlayer: PlayerState =
+    buildingType === 'HOUSE'
+      ? { ...player, housesRemaining: player.housesRemaining - 1 }
+      : { ...player, mansionsRemaining: player.mansionsRemaining - 1 };
   let nextBank = state.bank;
   const events: GameEvent[] = [
     {
       type: 'BUILDING_PLACED',
       playerId: action.actorId,
       vertexId: action.vertexId,
-      buildingType: 'HOUSE',
+      buildingType,
     },
   ];
 
@@ -242,7 +264,7 @@ export function placeSetupHouse(
         ...state.board.vertices,
         [action.vertexId]: {
           ...vertex,
-          building: { ownerId: action.actorId, type: 'HOUSE' },
+          building: { ownerId: action.actorId, type: buildingType },
         },
       },
     },

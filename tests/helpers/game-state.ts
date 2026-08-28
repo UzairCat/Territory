@@ -2,6 +2,7 @@ import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
 import type { PlayerCount } from '../../src/engine/content/types';
 import { CLASSIC_MODE } from '../../src/engine/modes/classic';
+import { KN_MODE } from '../../src/engine/modes/kn';
 import { BASE_MAP_ID } from '../../src/engine/maps/base-map';
 import type { GameConfig } from '../../src/engine/core/game-config';
 import type { GamePhase, GameState } from '../../src/engine/core/game-state';
@@ -36,6 +37,16 @@ export function createTestConfig(playerCount: PlayerCount = 2): GameConfig {
   };
 }
 
+export function createTestKNConfig(playerCount: PlayerCount = 2): GameConfig {
+  const classic = createTestConfig(playerCount);
+  return {
+    ...classic,
+    modeId: KN_MODE.id,
+    victoryTarget: KN_MODE.rules.victoryTarget,
+    rules: KN_MODE.rules,
+  };
+}
+
 export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameState {
   const config = createTestConfig();
 
@@ -48,22 +59,44 @@ export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameStat
         name: 'Alex',
         colorId: colorId('cobalt'),
         resources: resourceBundle([]),
+        commodities: resourceBundle([]),
         progressCardIds: [],
         roadsRemaining: 15,
         housesRemaining: 5,
         mansionsRemaining: 4,
         playedForceCards: 0,
+        cityImprovements: { SCIENCE: 0, TRADE: 0, POLITICS: 0 },
+        knights: [],
+        cityWallsRemaining: 3,
+        knProgressCardIds: [],
+        revealedKNProgressCardIds: [],
+        defenderPoints: 0,
+        mustRebuildDestroyedMansion: false,
+        forcedMansionRebuildVertexIds: [],
+        craneDiscountAvailable: false,
+        merchantFleetGoodId: null,
       },
       [TEST_PLAYER_IDS[1]]: {
         id: TEST_PLAYER_IDS[1],
         name: 'Sam',
         colorId: colorId('crimson'),
         resources: resourceBundle([[RESOURCE_IDS.wood, 1]]),
+        commodities: resourceBundle([]),
         progressCardIds: [],
         roadsRemaining: 15,
         housesRemaining: 5,
         mansionsRemaining: 4,
         playedForceCards: 0,
+        cityImprovements: { SCIENCE: 0, TRADE: 0, POLITICS: 0 },
+        knights: [],
+        cityWallsRemaining: 3,
+        knProgressCardIds: [],
+        revealedKNProgressCardIds: [],
+        defenderPoints: 0,
+        mustRebuildDestroyedMansion: false,
+        forcedMansionRebuildVertexIds: [],
+        craneDiscountAvailable: false,
+        merchantFleetGoodId: null,
       },
     },
     board: { hexes: {}, vertices: {}, edges: {}, ports: {}, robberHexId: null },
@@ -74,6 +107,7 @@ export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameStat
       [RESOURCE_IDS.livestock, 19],
       [RESOURCE_IDS.ore, 19],
     ]),
+    commodityBank: resourceBundle([]),
     turn: {
       activePlayerId: TEST_PLAYER_IDS[0],
       turnNumber: 0,
@@ -87,10 +121,13 @@ export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameStat
     progressDeck: [],
     progressDiscard: [],
     progressCards: {},
+    tradeOffers: {},
     pendingInteraction: null,
     bonuses: { longestRoadHolderId: null, largestForceHolderId: null },
     winnerId: null,
     actionHistory: [],
     random: createRandomState(config.seed),
+    balancedDice: null,
+    kn: null,
   };
 }

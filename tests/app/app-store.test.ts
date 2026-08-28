@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import { PLAYER_COLORS } from '../../src/engine/content/colors';
+import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
 import { actionId } from '../../src/engine/core/ids';
+import { KN_MODE } from '../../src/engine/modes/kn';
 import { getLegalSetupHouseVertexIds } from '../../src/engine/rules/setup-rules';
 
 describe('application session store', () => {
@@ -38,6 +40,29 @@ describe('application session store', () => {
     expect([...initializedNames].sort()).toEqual(['Alex', 'Sam']);
   });
 
+  it('applies mode defaults and carries custom lobby rules into the match', () => {
+    const actions = useAppStore.getState();
+    actions.setLobbyMode(KN_MODE.id);
+    expect(useAppStore.getState().lobby.victoryTarget).toBe(13);
+    actions.setLobbyVictoryTarget(17);
+    actions.setLobbyDiscardThreshold(11);
+    actions.setLobbyRule('hideBankCards', true);
+    actions.setLobbyRule('friendlyRobber', true);
+    actions.setLobbyRule('balancedDice', true);
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+
+    expect(actions.beginGame().ok).toBe(true);
+    expect(useAppStore.getState().gameState?.config).toMatchObject({
+      victoryTarget: 17,
+      hideBankCards: true,
+      friendlyRobber: true,
+      balancedDice: true,
+      rules: { discardThreshold: 11 },
+    });
+    expect(useAppStore.getState().gameState?.balancedDice?.remainingPairIds).toHaveLength(36);
+  });
+
   it('submits setup actions through the engine and stores only accepted state', () => {
     const actions = useAppStore.getState();
     actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
@@ -63,6 +88,36 @@ describe('application session store', () => {
     ]);
   });
 
+  it('blocks game actions while paused and starts new matches unpaused', () => {
+    const actions = useAppStore.getState();
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+    expect(actions.beginGame().ok).toBe(true);
+    const gameState = useAppStore.getState().gameState;
+    const target = gameState === null ? undefined : getLegalSetupHouseVertexIds(gameState)[0];
+    if (gameState?.turn.activePlayerId === null || gameState === null || target === undefined) {
+      throw new Error('Paused-game fixture has no legal setup action.');
+    }
+
+    actions.pauseGame();
+    expect(useAppStore.getState().gamePaused).toBe(true);
+    expect(
+      actions.dispatchGameAction({
+        id: actionId('paused-setup-house'),
+        type: 'PLACE_SETUP_HOUSE',
+        actorId: gameState.turn.activePlayerId,
+        vertexId: target,
+      }),
+    ).toBeNull();
+    expect(useAppStore.getState().gameState?.turn.phase).toBe('SETUP_PLACE_HOUSE');
+
+    actions.unpauseGame();
+    expect(useAppStore.getState().gamePaused).toBe(false);
+    actions.pauseGame();
+    expect(actions.rematch().ok).toBe(true);
+    expect(useAppStore.getState().gamePaused).toBe(false);
+  });
+
   it('opens a fresh lobby with a new seed and no retained match', () => {
     const actions = useAppStore.getState();
     const originalSeed = useAppStore.getState().lobby.seed;
@@ -74,5 +129,53 @@ describe('application session store', () => {
     expect(useAppStore.getState().lobby.players).toEqual([]);
     expect(useAppStore.getState().lobby.seed).not.toBe(originalSeed);
     expect(useAppStore.getState().gameState).toBeNull();
+  });
+
+  it('starts a rematch with the same lobby and a fresh deterministic seed', () => {
+    const actions = useAppStore.getState();
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+    expect(actions.beginGame().ok).toBe(true);
+    const firstMatch = useAppStore.getState().gameState;
+    if (firstMatch === null) throw new Error('First match was not created.');
+
+    expect(actions.rematch().ok).toBe(true);
+    const rematch = useAppStore.getState().gameState;
+    expect(rematch?.config.seed).not.toBe(firstMatch.config.seed);
+    expect(useAppStore.getState().lobby.players.map((player) => player.name)).toEqual([
+      'Alex',
+      'Sam',
+    ]);
+    expect(rematch?.turn.phase).toBe('SETUP_PLACE_HOUSE');
+    expect(useAppStore.getState().gameEventHistory).toEqual([]);
+  });
+
+  it('grants one fresh copy of every Progress Card on each developer-button press', () => {
+    const actions = useAppStore.getState();
+    actions.setLobbyMode(KN_MODE.id);
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+    expect(actions.beginGame().ok).toBe(true);
+    const activePlayerId = useAppStore.getState().gameState?.turn.activePlayerId;
+    if (activePlayerId === null || activePlayerId === undefined) {
+      throw new Error('Developer Progress Card fixture has no active player.');
+    }
+
+    actions.grantAllProgressCards();
+    actions.grantAllProgressCards();
+
+    const gameState = useAppStore.getState().gameState;
+    const player = gameState?.players[activePlayerId];
+    const grantedIds = [
+      ...(player?.knProgressCardIds ?? []),
+      ...(player?.revealedKNProgressCardIds ?? []),
+    ];
+    expect(grantedIds).toHaveLength(KN_PROGRESS_CARDS.length * 2);
+    expect(new Set(grantedIds).size).toBe(grantedIds.length);
+    expect(
+      new Set(
+        grantedIds.map((id) => gameState?.kn?.progressCards[id]?.definitionId).filter(Boolean),
+      ).size,
+    ).toBe(KN_PROGRESS_CARDS.length);
   });
 });

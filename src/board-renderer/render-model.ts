@@ -4,9 +4,19 @@ import type {
   BuildingState,
   EdgeState,
   HexState,
+  KnightState,
+  KNState,
   PortState,
 } from '../engine/core/game-state';
-import type { EdgeId, HexId, PlayerId, PortId, VertexId } from '../engine/core/ids';
+import type {
+  CardDefinitionId,
+  EdgeId,
+  HexId,
+  PlayerId,
+  PortId,
+  ResourceId,
+  VertexId,
+} from '../engine/core/ids';
 import {
   axialToWorld,
   hexCornerToTopology,
@@ -20,6 +30,29 @@ export type BoardTarget =
   | { readonly kind: 'VERTEX'; readonly id: VertexId }
   | { readonly kind: 'PORT'; readonly id: PortId };
 
+export interface BoardViewportPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface ResourceFlyover {
+  readonly id: string;
+  readonly source:
+    | { readonly kind: 'HEX'; readonly hexId: HexId }
+    | { readonly kind: 'BANK' }
+    | { readonly kind: 'PLAYER'; readonly playerId: PlayerId };
+  readonly resourceId: ResourceId;
+  readonly delayMs: number;
+  readonly targetPlayerId?: PlayerId;
+}
+
+export interface ProgressCardFlyover {
+  readonly id: string;
+  readonly sourcePlayerId: PlayerId;
+  readonly cardDefinitionId: CardDefinitionId;
+  readonly delayMs: number;
+}
+
 export interface RenderHex {
   readonly target: Extract<BoardTarget, { readonly kind: 'HEX' }>;
   readonly center: WorldPoint;
@@ -28,6 +61,7 @@ export interface RenderHex {
   readonly terrainColor: string;
   readonly numberToken: number | null;
   readonly hasRobber: boolean;
+  readonly merchantOwnerId: PlayerId | null;
 }
 
 export interface RenderEdge {
@@ -35,19 +69,24 @@ export interface RenderEdge {
   readonly first: WorldPoint;
   readonly second: WorldPoint;
   readonly roadOwnerId: PlayerId | null;
+  readonly isBoundary: boolean;
 }
 
 export interface RenderVertex {
   readonly target: Extract<BoardTarget, { readonly kind: 'VERTEX' }>;
   readonly position: WorldPoint;
   readonly building: BuildingState | null;
+  readonly knight: KnightState | null;
 }
 
 export interface RenderPort {
   readonly target: Extract<BoardTarget, { readonly kind: 'PORT' }>;
   readonly edgeId: EdgeId;
   readonly position: WorldPoint;
+  readonly shoreConnections: readonly [WorldPoint, WorldPoint];
   readonly label: string;
+  readonly tradeRatio: 2 | 3;
+  readonly resourceId: ResourceId | null;
 }
 
 export interface BoardRenderModel {
@@ -89,6 +128,7 @@ function renderHex(
   hex: HexState,
   positions: ReadonlyMap<VertexId, WorldPoint>,
   robberHexId: HexId | null,
+  merchant: KNState['merchant'],
   hexSize: number,
 ): RenderHex {
   const terrain = TERRAINS.find((definition) => definition.id === hex.terrainId);
@@ -106,6 +146,7 @@ function renderHex(
     terrainColor: terrain.color,
     numberToken: hex.numberToken,
     hasRobber: robberHexId === hex.id,
+    merchantOwnerId: merchant?.hexId === hex.id ? merchant.ownerId : null,
   };
 }
 
@@ -120,6 +161,7 @@ function renderEdge(edge: EdgeState, positions: ReadonlyMap<VertexId, WorldPoint
     first,
     second,
     roadOwnerId: edge.roadOwnerId,
+    isBoundary: edge.adjacentHexIds.length === 1,
   };
 }
 
@@ -140,31 +182,52 @@ function renderPort(
     x: (edge.first.x + edge.second.x) / 2,
     y: (edge.first.y + edge.second.y) / 2,
   };
-  const length = Math.hypot(midpoint.x, midpoint.y) || 1;
+  const edgeDeltaX = edge.second.x - edge.first.x;
+  const edgeDeltaY = edge.second.y - edge.first.y;
+  const edgeLength = Math.hypot(edgeDeltaX, edgeDeltaY) || 1;
+  let normalX = -edgeDeltaY / edgeLength;
+  let normalY = edgeDeltaX / edgeLength;
+  if (normalX * midpoint.x + normalY * midpoint.y < 0) {
+    normalX *= -1;
+    normalY *= -1;
+  }
   const offset = hexSize * 0.55;
 
   return {
     target: { kind: 'PORT', id: port.id },
     edgeId: port.edgeId,
     position: {
-      x: midpoint.x + (midpoint.x / length) * offset,
-      y: midpoint.y + (midpoint.y / length) * offset,
+      x: midpoint.x + normalX * offset,
+      y: midpoint.y + normalY * offset,
     },
+    shoreConnections: [edge.first, edge.second],
     label: portLabel(port),
+    tradeRatio: port.tradeRatio,
+    resourceId: port.resourceId,
   };
 }
 
-export function createBoardRenderModel(board: BoardState, hexSize = 70): BoardRenderModel {
+export function createBoardRenderModel(
+  board: BoardState,
+  hexSize = 70,
+  knights: readonly KnightState[] = [],
+  merchant: KNState['merchant'] = null,
+): BoardRenderModel {
   const positions = vertexPositions(board, hexSize);
   const hexes = Object.values(board.hexes).map((hex) =>
-    renderHex(hex, positions, board.robberHexId, hexSize),
+    renderHex(hex, positions, board.robberHexId, merchant, hexSize),
   );
   const edges = Object.values(board.edges).map((edge) => renderEdge(edge, positions));
   const edgeById = new Map(edges.map((edge) => [edge.target.id, edge] as const));
   const vertices = Object.values(board.vertices).map((vertex): RenderVertex => {
     const position = positions.get(vertex.id);
     if (position === undefined) throw new Error(`Cannot render unknown vertex ${vertex.id}.`);
-    return { target: { kind: 'VERTEX', id: vertex.id }, position, building: vertex.building };
+    return {
+      target: { kind: 'VERTEX', id: vertex.id },
+      position,
+      building: vertex.building,
+      knight: knights.find((knight) => knight.id === vertex.knightId) ?? null,
+    };
   });
   const ports = Object.values(board.ports).map((port) => renderPort(port, edgeById, hexSize));
   const extentPoints = [

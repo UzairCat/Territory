@@ -19,7 +19,7 @@ Run the complete local verification suite with:
 npm run check
 ```
 
-The implementation roadmap is split into independently verified phases.
+The v0.1 roadmap is implemented as independently verified phases.
 
 - Phase 1 established the project tooling, locked classic content, core state/action/event types,
   deterministic random provider, and authoritative dispatch boundary.
@@ -29,20 +29,46 @@ The implementation roadmap is split into independently verified phases.
   a responsive PixiJS board with stable interaction targets, and the first complete match-table HUD.
 - Phase 4 added the complete initial-placement sequence: legal house and attached-road targets, placed
   piece rendering, forward/reverse snake order, starting resources, and normal-turn handoff.
-- Phase 5 adds deterministic 2d6 rolls, finite-bank production, robber blocking, resource-shortage
+- Phase 5 added deterministic 2d6 rolls, finite-bank production, robber blocking, resource-shortage
   handling, public gain feedback, rolled-tile highlights, and repeatable end-turn advancement.
-- Phase 6 adds engine-authoritative normal construction for Roads, Houses, and Mansions, including
+- Phase 6 added engine-authoritative normal construction for Roads, Houses, and Cities, including
   costs, bank returns, piece limits, network/distance validation, legal-target queries, and build mode.
+- Phase 7 added the complete seven-roll robber sequence: deterministic discard queues, mandatory
+  discard selection, robber movement, eligible-victim selection, and seeded random stealing.
+- Phase 8 added bank and port trading plus atomic player-to-player offers, including immediate local
+  accept/reject decisions, stale-offer validation, cancellation, and detailed trade feedback.
+- Phase 9 added the complete progress deck: direct tray purchases, purchase-turn and play limits,
+  Knight, Road Building, Year of Plenty, Monopoly, five unique passive victory-point cards, and
+  mandatory card-resolution UI.
+- Phase 10 added graph-correct Longest Road, Largest Force, centralized hidden/public scoring,
+  authoritative victory detection, final score breakdowns, and same-lobby rematches.
+- Phase 11 added detailed event history, event-driven starter audio, reduced-motion/animation
+  settings, keyboard board targeting, and costly-navigation confirmation.
+- Phase 12 hardened the release with production-guarded developer tools, complete engine/UI coverage,
+  release documentation, and a single manual acceptance matrix.
+- Phase 15 adds the complete K+N advanced mode: three-die event-first turns, commodities, barbarian
+  attacks, Walls, physical Knights, three Improvement tracks and powers, Metropolises, the Merchant,
+  three 18-card Progress decks with all 25 unique effects, 13-point scoring, and private hot-seat
+  decisions.
 
-The initialized game route now renders the generated board, ports, tokens, robber, player order,
-public piece counts, resource hand, optional developer IDs, and engine-authoritative setup controls.
-After setup, players can now roll, resolve non-seven production, construct during action phase, and
-pass play to the next player. A roll of seven enters the reserved robber flow, which is the next
-gameplay phase.
+The initialized game route now uses a board-first match table. A fixed right rail contains the full
+interaction log, finite bank inventory, and compact player stats. The bottom tray places the active
+resource hand on the left, progress cards after a divider, clickable dice above the turn/timer strip,
+and six fixed actions in the order Trade, Progress, Road, House, City, End Turn. This local build
+keeps hands and mandatory decisions immediately visible for testing; there are no pass-device reveal
+confirmations in Classic. K+N adds pass-device protection where its off-turn draws and private
+decisions require it.
 
-Temporary testing note: Classic mode rerolls sevens deterministically until the complete robber flow
-lands, preventing construction test matches from becoming stuck. The robber branch remains covered
-behind its mode flag and will be re-enabled in that phase.
+Setup buildings, setup Roads, normal turns, and robber placement now have visible countdowns. The
+normal-turn duration is configurable in the lobby and defaults to one minute; validated actions
+restore at least 20 seconds near expiry, and all timer expirations dispatch ordinary authoritative
+automatic actions.
 
-See [Architecture](docs/ARCHITECTURE.md) and [Classic Rules](docs/CLASSIC_RULES.md) for the decisions
-that later phases build upon.
+After setup, Classic players can roll, produce, resolve sevens, construct, trade, buy/play progress
+cards, claim awards, and complete a match through victory and rematch. K+N runs through the same
+engine boundary with its advanced replacements. Optional developer IDs remain available without
+changing the authoritative engine flow.
+
+See [Architecture](docs/ARCHITECTURE.md), [Classic Rules](docs/CLASSIC_RULES.md), and
+[K+N Rules](docs/KN_RULES.md) for the decisions behind the implementation. Use the
+[acceptance test](docs/ACCEPTANCE_TESTS.md) for a single manual confidence pass.

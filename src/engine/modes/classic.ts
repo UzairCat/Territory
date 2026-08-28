@@ -9,11 +9,14 @@ export const CLASSIC_MODE_ID = modeId('classic');
 export const CLASSIC_MODE = {
   id: CLASSIC_MODE_ID,
   displayName: 'Classic',
+  description:
+    'The complete base Territory ruleset with tradable resources and purchasable progress cards.',
+  kind: 'CLASSIC',
   rules: {
     playerCount: { minimum: 2, maximum: 4 },
     victoryTarget: 10,
     dice: { count: 2, sides: 6, robberTotal: 7 },
-    robberFlowEnabled: false,
+    robberFlowEnabled: true,
     discardThreshold: 7,
     bankCardsPerResource: 19,
     bankTradeRatio: 4,
