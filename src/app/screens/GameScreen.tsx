@@ -29,6 +29,7 @@ import type {
   ResourceId,
   VertexId,
 } from '../../engine/core/ids';
+import { hasAdminDisplayName } from '../../multiplayer/admin-access';
 import {
   getConstructionAvailability,
   getPotentialHouseVertexIds,
@@ -1076,9 +1077,11 @@ export function GameScreen() {
   const initializeOnline = useOnlineStore((state) => state.initialize);
   const submitOnlineAction = useOnlineStore((state) => state.submitAction);
   const rematchOnline = useOnlineStore((state) => state.rematch);
+  const returnOnlineLobby = useOnlineStore((state) => state.returnToLobby);
   const pauseOnlineMatch = useOnlineStore((state) => state.pauseMatch);
   const unpauseOnlineMatch = useOnlineStore((state) => state.unpauseMatch);
   const setOnlineDebugMode = useOnlineStore((state) => state.setDebugMode);
+  const grantOnlineProgressCards = useOnlineStore((state) => state.grantAllProgressCards);
   const leaveOnlineRoom = useOnlineStore((state) => state.leaveRoom);
   const isOnlineMatch = onlineRoom?.game !== null && onlineRoom?.game !== undefined;
   const onlineViewerPlayerId = isOnlineMatch ? onlineRoom.viewerPlayerId : null;
@@ -1126,6 +1129,12 @@ export function GameScreen() {
       void initializeOnline();
     }
   }, [gameState, initializeOnline, onlineCredentials, onlineRoom]);
+
+  useEffect(() => {
+    if (onlineCredentials !== null && onlineRoom?.phase === 'LOBBY' && onlineRoom.game === null) {
+      void navigate(`/online/${onlineRoom.code}`, { replace: true });
+    }
+  }, [navigate, onlineCredentials, onlineRoom]);
 
   const longestRoadAward = recentGameEvents.find(
     (event): event is Extract<GameEvent, { readonly type: 'LONGEST_ROAD_CHANGED' }> =>
@@ -1543,6 +1552,8 @@ export function GameScreen() {
   const playerActivities = pendingPlayerActivities(gameState);
   const viewerPlayer =
     onlineViewerPlayerId === null ? activePlayer : gameState.players[onlineViewerPlayerId];
+  const developerControlsVisible =
+    import.meta.env.DEV || adminMode || hasAdminDisplayName(viewerPlayer?.name ?? '');
   let progressTooltipResetIndex = -1;
   for (let index = gameState.actionHistory.length - 1; index >= 0; index -= 1) {
     if (
@@ -1808,8 +1819,22 @@ export function GameScreen() {
 
   const leaveGame = (destination: '/' | '/lobby') => {
     if (isOnlineMatch) {
+      if (destination === '/lobby') {
+        const roomCode = onlineRoom.code;
+        void returnOnlineLobby().then((returned) => {
+          if (!returned) {
+            setActionError(
+              useOnlineStore.getState().error?.message ??
+                'Could not return this match to the lobby.',
+            );
+            return;
+          }
+          void navigate(`/online/${roomCode}`, { replace: true });
+        });
+        return;
+      }
       void leaveOnlineRoom().then(() => {
-        void navigate(destination === '/lobby' ? '/online' : destination, { replace: true });
+        void navigate(destination, { replace: true });
       });
       return;
     }
@@ -2731,8 +2756,8 @@ export function GameScreen() {
         if (!updated) return;
         setActionError(
           enabling
-            ? 'Developer mode enabled: you have 99 of every good, one of every Progress Card, and robber rolls are ignored.'
-            : 'Developer mode disabled. Robber rolls are restored.',
+            ? 'Developer mode enabled: you have 99 of every good, one of every Progress Card, and robber rolls are ignored. Sevens also never force you to discard.'
+            : 'Developer mode disabled. Robber rolls and forced discards are restored.',
         );
       });
       return;
@@ -2740,11 +2765,24 @@ export function GameScreen() {
     toggleAdminMode();
     if (!adminMode) {
       setActionError(
-        `Developer mode enabled: ${activePlayer?.name ?? 'Active player'} has 99 of every good, one of every Progress Card, and robber rolls are ignored.`,
+        `Developer mode enabled: ${activePlayer?.name ?? 'Active player'} has 99 of every good, one of every Progress Card, and robber rolls are ignored. Sevens also never force you to discard.`,
       );
       return;
     }
-    setActionError('Developer mode disabled. Robber rolls are restored.');
+    setActionError('Developer mode disabled. Robber rolls and forced discards are restored.');
+  };
+
+  const grantDeveloperProgressCards = () => {
+    if (isOnlineMatch) {
+      void grantOnlineProgressCards().then((granted) => {
+        if (granted) {
+          setActionError('Developer grant: added one fresh copy of every Progress Card.');
+        }
+      });
+      return;
+    }
+    grantAllProgressCards();
+    setActionError('Developer grant: added one fresh copy of every Progress Card.');
   };
 
   const roadAvailability = constructionAvailability.find((option) => option.type === 'ROAD');
@@ -2995,12 +3033,20 @@ export function GameScreen() {
           className="game-utility-button icon-button"
           variant="ghost"
           aria-label="Lobby"
-          title="Return to lobby"
+          title={
+            isOnlineMatch && !onlineViewerIsHost && gameState.turn.phase !== 'GAME_OVER'
+              ? `${partyLeaderName} can return the active match to the lobby`
+              : 'Return to lobby'
+          }
+          disabled={
+            onlineCommandPending ||
+            (isOnlineMatch && !onlineViewerIsHost && gameState.turn.phase !== 'GAME_OVER')
+          }
           onClick={() => setLeaveDestination('/lobby')}
         >
           <span aria-hidden="true">⌂</span>
         </Button>
-        {import.meta.env.DEV ? (
+        {developerControlsVisible ? (
           <>
             <Button
               className="game-utility-button game-utility-button--admin"
@@ -3024,21 +3070,23 @@ export function GameScreen() {
                 <strong>{adminMode ? 'ON' : '99'}</strong>
               </span>
             </Button>
-            {isOnlineMatch ? null : (
-              <Button
-                className="game-utility-button game-utility-button--progress-dev"
-                variant="ghost"
-                aria-label="Give the active player one of every Progress Card"
-                title="Developer grant: add one fresh copy of every Progress Card"
-                disabled={activePlayer === undefined}
-                onClick={grantAllProgressCards}
-              >
-                <span className="game-utility-admin-mark" aria-hidden="true">
-                  <small>Cards</small>
-                  <strong>+All</strong>
-                </span>
-              </Button>
-            )}
+            <Button
+              className="game-utility-button game-utility-button--progress-dev"
+              variant="ghost"
+              aria-label={
+                isOnlineMatch
+                  ? 'Give yourself one of every Progress Card'
+                  : 'Give the active player one of every Progress Card'
+              }
+              title="Developer grant: add one fresh copy of every Progress Card"
+              disabled={onlineCommandPending || viewerPlayer === undefined}
+              onClick={grantDeveloperProgressCards}
+            >
+              <span className="game-utility-admin-mark" aria-hidden="true">
+                <small>Cards</small>
+                <strong>+All</strong>
+              </span>
+            </Button>
             <label className="game-utility-toggle" title="Debug IDs">
               <input
                 className="visually-hidden"
@@ -3290,6 +3338,7 @@ export function GameScreen() {
                           vertex.building.hasWall === true,
                       ).length
                     }
+                    discardThreshold={gameState.config.rules.discardThreshold}
                   />
                 );
               })}
@@ -3833,31 +3882,37 @@ export function GameScreen() {
       )}
       <Modal
         open={leaveDestination !== null}
-        title="Leave this match?"
+        title={leaveDestination === '/lobby' ? 'Return to lobby?' : 'Leave this match?'}
         description={
-          isOnlineMatch
-            ? 'You will leave your online seat and return to the menu.'
-            : 'The current match is not saved and cannot be resumed.'
+          isOnlineMatch && leaveDestination === '/lobby'
+            ? 'The room and every player seat will stay together in the online lobby.'
+            : isOnlineMatch
+              ? 'You will leave your online seat and return to the menu.'
+              : 'The current match is not saved and cannot be resumed.'
         }
         onClose={() => setLeaveDestination(null)}
       >
         <p>
-          {isOnlineMatch
-            ? 'A disconnected seat remains on the board, but this browser will forget its private reconnect token.'
-            : 'Your lobby players and settings remain available if you return to the lobby.'}
+          {isOnlineMatch && leaveDestination === '/lobby'
+            ? gameState.turn.phase === 'GAME_OVER'
+              ? 'Return everyone to the room to adjust settings or start another match.'
+              : 'The current match will end for everyone and the party leader will keep control of the room.'
+            : isOnlineMatch
+              ? 'A disconnected seat remains on the board, but this browser will forget its private reconnect token.'
+              : 'Your lobby players and settings remain available if you return to the lobby.'}
         </p>
         <footer className="modal__actions">
           <Button data-modal-autofocus variant="ghost" onClick={() => setLeaveDestination(null)}>
             Continue match
           </Button>
           <Button
-            variant="danger"
+            variant={leaveDestination === '/lobby' ? 'primary' : 'danger'}
             onClick={() => {
               if (leaveDestination !== null) leaveGame(leaveDestination);
               setLeaveDestination(null);
             }}
           >
-            Leave match
+            {leaveDestination === '/lobby' ? 'Return to lobby' : 'Leave match'}
           </Button>
         </footer>
       </Modal>

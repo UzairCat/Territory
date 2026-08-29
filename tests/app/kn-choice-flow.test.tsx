@@ -18,6 +18,7 @@ import { createGame } from '../../src/engine/core/create-game';
 import type { GameEvent } from '../../src/engine/core/events';
 import type { GameState } from '../../src/engine/core/game-state';
 import { edgeId, knightId } from '../../src/engine/core/ids';
+import { createOnlineGameView } from '../../src/multiplayer/projection';
 import { BarbarianTracker } from '../../src/ui/game/BarbarianTracker';
 import { PlayerPanel } from '../../src/ui/game/PlayerPanel';
 import { createTestKNConfig, TEST_PLAYER_IDS } from '../helpers/game-state';
@@ -182,7 +183,9 @@ describe('K+N compact choice flows', () => {
     const tray = screen.getByRole('dialog', { name: 'Choose an Aqueduct card' });
     expect(screen.getByLabelText('Sam, player 2')).toHaveTextContent('Choosing an Aqueduct card');
     expect(
-      screen.getByLabelText('Sam, player 2').querySelector('.game-player__busy-dots'),
+      screen
+        .getByLabelText('Sam, player 2')
+        .querySelector('.game-player__portrait > .game-player__busy-dots'),
     ).not.toBeNull();
     const confirm = within(tray).getByRole('button', { name: 'Confirm' });
     expect(confirm).toBeDisabled();
@@ -1389,6 +1392,117 @@ describe('K+N compact choice flows', () => {
     );
   });
 
+  it('shows the Spy card transfer animation to both the losing and gaining players', () => {
+    const original = knActionState();
+    if (original.kn === null) throw new Error('Spy animation fixture has no K+N state.');
+    const spyDefinition = KN_PROGRESS_CARDS.find((definition) => definition.effect === 'SPY');
+    const stolenCard = Object.values(original.kn.progressCards).find(
+      (card) =>
+        KN_PROGRESS_CARDS.find((definition) => definition.id === card.definitionId)?.effect ===
+        'CRANE',
+    );
+    if (spyDefinition === undefined || stolenCard === undefined) {
+      throw new Error('Spy animation fixture cards are missing.');
+    }
+    const actorId = TEST_PLAYER_IDS[0];
+    const victimId = TEST_PLAYER_IDS[1];
+    const postTransferState: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [actorId]: {
+          ...original.players[actorId]!,
+          knProgressCardIds: [
+            ...original.players[actorId]!.knProgressCardIds.filter(
+              (cardId) => cardId !== stolenCard.instanceId,
+            ),
+            stolenCard.instanceId,
+          ],
+        },
+        [victimId]: {
+          ...original.players[victimId]!,
+          knProgressCardIds: original.players[victimId]!.knProgressCardIds.filter(
+            (cardId) => cardId !== stolenCard.instanceId,
+          ),
+        },
+      },
+      kn: {
+        ...original.kn,
+        progressCards: {
+          ...original.kn.progressCards,
+          [stolenCard.instanceId]: { ...stolenCard, ownerId: actorId },
+        },
+      },
+    };
+    const event: GameEvent = {
+      type: 'KN_PROGRESS_CARD_RESOLVED',
+      playerId: actorId,
+      cardInstanceId: original.players[actorId]!.knProgressCardIds[0]!,
+      cardDefinitionId: spyDefinition.id,
+      targetIds: [victimId, stolenCard.instanceId],
+    };
+
+    const renderOnlineViewer = (viewerId: (typeof TEST_PLAYER_IDS)[number]) => {
+      const game = createOnlineGameView(
+        postTransferState,
+        viewerId,
+        2,
+        [event],
+        [event],
+        false,
+        false,
+        null,
+        null,
+      );
+      useOnlineStore.setState({
+        connection: 'CONNECTED',
+        credentials: { roomCode: 'SPY234', playerId: viewerId, resumeToken: 's'.repeat(32) },
+        room: {
+          protocolVersion: 1,
+          code: 'SPY234',
+          phase: 'PLAYING',
+          viewerPlayerId: viewerId,
+          hostPlayerId: actorId,
+          players: postTransferState.config.players.map((player) => ({
+            id: player.id,
+            name: player.name,
+            colorId: player.colorId,
+            connected: true,
+            host: player.id === actorId,
+          })),
+          settings: {
+            mapId: postTransferState.config.mapId,
+            modeId: postTransferState.config.modeId,
+            size: 2,
+            seed: postTransferState.config.seed,
+            turnTimeSeconds: postTransferState.config.turnTimeSeconds ?? 60,
+            victoryTarget: postTransferState.config.victoryTarget,
+            discardThreshold: postTransferState.config.rules.discardThreshold,
+            hideBankCards: postTransferState.config.hideBankCards ?? false,
+            friendlyRobber: postTransferState.config.friendlyRobber ?? false,
+            balancedDice: postTransferState.config.balancedDice ?? false,
+            inventorsMadness: postTransferState.config.inventorsMadness ?? false,
+          },
+          game,
+        },
+      });
+      return renderGame(game.state, game.recentEvents);
+    };
+
+    renderOnlineViewer(actorId);
+    expect(screen.getByTestId('progress-card-flyovers')).toHaveTextContent(
+      `${victimId}:${stolenCard.definitionId}|`,
+    );
+
+    cleanup();
+    resetOnlineStoreForTests();
+    resetAppStoreForTests();
+    renderOnlineViewer(victimId);
+    expect(screen.getByTestId('progress-card-flyovers')).toHaveTextContent(
+      `${victimId}:${stolenCard.definitionId}|`,
+    );
+  });
+
   it('plays Medicine directly as a board mode and cancels by clicking the card again', async () => {
     const user = userEvent.setup();
     const original = knActionState();
@@ -1697,6 +1811,78 @@ describe('K+N compact choice flows', () => {
     expect(tick).not.toHaveBeenCalled();
   });
 
+  it('returns an online match to its existing lobby without leaving the room', async () => {
+    const user = userEvent.setup();
+    const state = knActionState();
+    const settings = {
+      mapId: state.config.mapId,
+      modeId: state.config.modeId,
+      size: 2 as const,
+      seed: state.config.seed,
+      turnTimeSeconds: state.config.turnTimeSeconds ?? 60,
+      victoryTarget: state.config.victoryTarget,
+      discardThreshold: state.config.rules.discardThreshold,
+      hideBankCards: state.config.hideBankCards ?? false,
+      friendlyRobber: state.config.friendlyRobber ?? false,
+      balancedDice: state.config.balancedDice ?? false,
+      inventorsMadness: state.config.inventorsMadness ?? false,
+    };
+    const players = state.config.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      colorId: player.colorId,
+      connected: true,
+      host: player.id === TEST_PLAYER_IDS[0],
+    }));
+    const originalLeaveRoom = useOnlineStore.getState().leaveRoom;
+    const originalReturnToLobby = useOnlineStore.getState().returnToLobby;
+    const playingRoom = {
+      protocolVersion: 1 as const,
+      code: 'BACK24',
+      phase: 'PLAYING' as const,
+      viewerPlayerId: TEST_PLAYER_IDS[0],
+      hostPlayerId: TEST_PLAYER_IDS[0],
+      players,
+      settings,
+      game: createOnlineGameView(state, TEST_PLAYER_IDS[0], 3, [], [], false, false, null, null),
+    };
+    const leaveRoom = vi.fn(() => Promise.resolve());
+    const returnToLobby = vi.fn(() => {
+      useOnlineStore.setState({
+        room: { ...playingRoom, phase: 'LOBBY', game: null },
+        commandPending: false,
+      });
+      useAppStore.setState({ gameState: null, recentGameEvents: [], gameEventHistory: [] });
+      return Promise.resolve(true);
+    });
+    useOnlineStore.setState({
+      connection: 'CONNECTED',
+      credentials: {
+        roomCode: playingRoom.code,
+        playerId: TEST_PLAYER_IDS[0],
+        resumeToken: 'b'.repeat(32),
+      },
+      room: playingRoom,
+      leaveRoom,
+      returnToLobby,
+    });
+    renderGame(state);
+
+    await user.click(screen.getByRole('button', { name: 'Lobby' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Return to lobby?' });
+    expect(confirmation).toHaveTextContent('every player seat will stay together');
+    await user.click(within(confirmation).getByRole('button', { name: 'Return to lobby' }));
+
+    expect(returnToLobby).toHaveBeenCalledOnce();
+    expect(leaveRoom).not.toHaveBeenCalled();
+    expect(await screen.findByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
+    expect(useOnlineStore.getState().credentials?.roomCode).toBe(playingRoom.code);
+    useOnlineStore.setState({
+      leaveRoom: originalLeaveRoom,
+      returnToLobby: originalReturnToLobby,
+    });
+  });
+
   it('shows only owned Progress Card families when the player-card icon is hovered', async () => {
     const user = userEvent.setup();
     const original = knActionState();
@@ -1817,11 +2003,12 @@ describe('K+N compact choice flows', () => {
         kNMode
         cityCount={1}
         wallCount={2}
+        discardThreshold={10}
       />,
     );
     expect(view.container).not.toHaveTextContent('Defender points');
     expect(screen.getByTitle('2 City Walls')).toHaveTextContent('2 walls');
-    expect(screen.getByTitle('Safe hand limit')).toHaveTextContent('Safe 11');
+    expect(screen.getByTitle('Safe hand limit')).toHaveTextContent('Safe 14');
     expect(view.container.querySelector('.game-player-kn__improvement-grid')).not.toBeNull();
     expect(
       view.container.querySelector('.game-player-kn__plain-stat .game-player__bridge-art')

@@ -356,6 +356,11 @@ function resolveProgressGate(
           stage: 'NUMBER',
           skipSevenDiscards: nextState.kn?.pendingRoll?.skipSevenDiscards === true,
           ignoreRobber: nextState.kn?.pendingRoll?.ignoreRobber === true,
+          ...(nextState.kn?.pendingRoll?.discardExemptPlayerIds === undefined
+            ? {}
+            : {
+                discardExemptPlayerIds: nextState.kn.pendingRoll.discardExemptPlayerIds,
+              }),
         },
       },
     };
@@ -393,7 +398,7 @@ export function resolveKNNumber(state: GameState): KNResolution {
     }
     const { queue, requiredCounts } = pendingRoll.skipSevenDiscards
       ? { queue: [], requiredCounts: {} }
-      : createDiscardQueue(state);
+      : createDiscardQueue(state, pendingRoll.discardExemptPlayerIds);
     const robberUnlocked = kn.firstBarbarianAttackResolved;
     events.push({
       type: 'ROBBER_SEQUENCE_STARTED',
@@ -551,6 +556,9 @@ export function rollKNDice(
         stage: 'EVENT',
         skipSevenDiscards: options.skipSevenDiscards === true,
         ignoreRobber: options.ignoreRobber === true,
+        ...(options.discardExemptPlayerIds === undefined
+          ? {}
+          : { discardExemptPlayerIds: options.discardExemptPlayerIds }),
       },
       attackSummary: null,
     },

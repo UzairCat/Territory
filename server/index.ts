@@ -238,6 +238,11 @@ io.on('connection', (socket) => {
     acknowledge(credentials === null ? invalidPayload() : manager.rematch(credentials));
   });
 
+  socket.on('room:return-to-lobby', (payload, acknowledge) => {
+    const credentials = parsedCredentials(payload?.credentials);
+    acknowledge(credentials === null ? invalidPayload() : manager.returnToLobby(credentials));
+  });
+
   socket.on('room:pause', (payload, acknowledge) => {
     const credentials = parsedCredentials(payload?.credentials);
     acknowledge(credentials === null ? invalidPayload() : manager.pause(credentials, true));
@@ -260,6 +265,11 @@ io.on('connection', (socket) => {
         ? invalidPayload()
         : manager.setDebugMode(credentials, payload.enabled),
     );
+  });
+
+  socket.on('game:grant-progress-cards', (payload, acknowledge) => {
+    const credentials = parsedCredentials(payload?.credentials);
+    acknowledge(credentials === null ? invalidPayload() : manager.grantProgressCards(credentials));
   });
 
   socket.on('game:action', (payload, acknowledge) => {

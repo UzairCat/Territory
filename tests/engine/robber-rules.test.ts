@@ -153,6 +153,9 @@ describe('robber rules', () => {
       },
     };
     expect(createDiscardQueue(aboveLimit).requiredCounts[TEST_PLAYER_IDS[0]]).toBe(5);
+    expect(createDiscardQueue(aboveLimit, [TEST_PLAYER_IDS[0]]).queue).not.toContain(
+      TEST_PLAYER_IDS[0],
+    );
   });
 
   it('validates exact private discards and advances a deterministic queue', () => {

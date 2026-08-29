@@ -31,9 +31,14 @@ export function getDiscardSafeLimit(state: GameState, playerId: PlayerId): numbe
   return state.config.rules.discardThreshold + wallCount * 2;
 }
 
-export function createDiscardQueue(state: GameState): DiscardQueue {
+export function createDiscardQueue(
+  state: GameState,
+  exemptPlayerIds: readonly PlayerId[] = [],
+): DiscardQueue {
+  const exemptPlayers = new Set(exemptPlayerIds);
   const requiredCounts: Record<string, number> = {};
   const queue = orderedPlayerIds(state).filter((playerId) => {
+    if (exemptPlayers.has(playerId)) return false;
     const player = state.players[playerId];
     if (player === undefined) return false;
     const count = resourceCardCount(player);

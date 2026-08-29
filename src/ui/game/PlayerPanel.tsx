@@ -19,6 +19,7 @@ interface PlayerPanelProps {
   readonly activityLabel?: string | null;
   readonly kNMode?: boolean;
   readonly wallCount?: number;
+  readonly discardThreshold?: number;
   readonly cityCount?: number;
   readonly knProgressCards?: NonNullable<GameState['kn']>['progressCards'] | undefined;
   readonly publicCardInfo?: {
@@ -57,6 +58,7 @@ export function PlayerPanel({
   activityLabel = null,
   kNMode = false,
   wallCount = 0,
+  discardThreshold = 7,
   cityCount = 0,
   knProgressCards,
   publicCardInfo,
@@ -77,6 +79,7 @@ export function PlayerPanel({
   );
   const knightPowerGlows =
     holdsLargestForce || (cityCount > 0 && activeKnightStrength >= cityCount);
+  const safeHandLimit = discardThreshold + wallCount * 2;
   const progressCount =
     publicCardInfo?.progressCards ??
     (kNMode ? player.knProgressCardIds.length : player.progressCardIds.length);
@@ -119,18 +122,19 @@ export function PlayerPanel({
           <small title={activityLabel ?? undefined}>
             {activityLabel === null ? (
               <span className="game-player__status-dot" aria-hidden="true" />
-            ) : (
-              <span className="game-player__busy-dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-            )}
+            ) : null}
             {activityLabel ?? (active ? 'Taking their turn' : color?.displayName)}
           </small>
         </header>
         <div className="game-player-kn__body">
           <span className="game-player__portrait game-player-kn__portrait" aria-hidden="true">
+            {activityLabel === null ? null : (
+              <span className="game-player__busy-dots">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
             <span className="game-player__avatar-head" />
             <span className="game-player__avatar-body" />
             <span className="game-player__score-ribbon" title="Victory points">
@@ -192,7 +196,7 @@ export function PlayerPanel({
               </dd>
             </div>
             <div
-              title={`Active Knight strength ${activeKnightStrength}; ${wallCount} Walls; safe hand limit ${7 + wallCount * 2}`}
+              title={`Active Knight strength ${activeKnightStrength}; ${wallCount} Walls; safe hand limit ${safeHandLimit}`}
             >
               <dt className="visually-hidden">Active Knight strength</dt>
               <dd
@@ -211,7 +215,7 @@ export function PlayerPanel({
           </span>
           <span className="game-player-kn__safe-status" title="Safe hand limit">
             <i aria-hidden="true">▣</i>
-            Safe <strong>{7 + wallCount * 2}</strong>
+            Safe <strong>{safeHandLimit}</strong>
           </span>
           {holdsLongestRoad ? <b>Longest Bridge</b> : null}
         </footer>
@@ -262,13 +266,7 @@ export function PlayerPanel({
           <small title={activityLabel ?? undefined}>
             {activityLabel === null ? (
               <span className="game-player__status-dot" aria-hidden="true" />
-            ) : (
-              <span className="game-player__busy-dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-            )}
+            ) : null}
             {activityLabel ?? (active ? 'Taking their turn' : color?.displayName)}
           </small>
         </div>
@@ -277,6 +275,13 @@ export function PlayerPanel({
 
       <div className="game-player__body">
         <span className="game-player__portrait" aria-hidden="true">
+          {activityLabel === null ? null : (
+            <span className="game-player__busy-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+          )}
           <span className="game-player__avatar-head" />
           <span className="game-player__avatar-body" />
           <span className="game-player__score-ribbon" title="Victory points">

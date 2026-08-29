@@ -183,6 +183,50 @@ describe('normal turn rules', () => {
     });
   });
 
+  it('keeps debug-exempt players out of another player’s seven discard queue', () => {
+    const random = randomForTotal(7);
+    const original = createTestGameState('WAITING_FOR_ROLL');
+    const state = withRobberFlowEnabled({
+      ...original,
+      random: random.state,
+      turn: { ...original.turn, activePlayerId: TEST_PLAYER_IDS[1] },
+      players: {
+        ...original.players,
+        [TEST_PLAYER_IDS[0]]: {
+          ...original.players[TEST_PLAYER_IDS[0]]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 9]]),
+        },
+        [TEST_PLAYER_IDS[1]]: {
+          ...original.players[TEST_PLAYER_IDS[1]]!,
+          resources: resourceBundle([[RESOURCE_IDS.brick, 9]]),
+        },
+      },
+    });
+
+    const result = dispatch(
+      state,
+      {
+        id: actionId('roll-seven-with-one-debug-exemption'),
+        type: 'ROLL_DICE',
+        actorId: TEST_PLAYER_IDS[1],
+      },
+      { discardExemptPlayerIds: [TEST_PLAYER_IDS[0]] },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.pendingInteraction).toMatchObject({
+      type: 'DISCARD_RESOURCES',
+      queue: [TEST_PLAYER_IDS[1]],
+      requiredCounts: { [TEST_PLAYER_IDS[1]]: 4 },
+    });
+    expect(result.events).toContainEqual({
+      type: 'ROBBER_SEQUENCE_STARTED',
+      playerId: TEST_PLAYER_IDS[1],
+      discardPlayerIds: [TEST_PLAYER_IDS[1]],
+    });
+  });
+
   it('lets developer mode ignore the entire robber sequence', () => {
     const random = randomForTotal(7);
     const original = createTestGameState('WAITING_FOR_ROLL');

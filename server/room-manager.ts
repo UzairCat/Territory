@@ -8,7 +8,11 @@ import type { GameEvent } from '../src/engine/core/events';
 import type { GameState } from '../src/engine/core/game-state';
 import { actionId, gameId, playerId, tradeId } from '../src/engine/core/ids';
 import type { ColorId, PlayerId } from '../src/engine/core/ids';
-import { grantDeveloperLoadout } from '../src/engine/debug/developer-tools';
+import {
+  grantDeveloperLoadout,
+  grantDeveloperProgressCards,
+} from '../src/engine/debug/developer-tools';
+import { hasAdminDisplayName } from '../src/multiplayer/admin-access';
 import {
   buildGameConfig,
   createDefaultLobby,
@@ -107,6 +111,10 @@ function roomCode(): string {
 
 function randomSeed(): string {
   return `online-${randomUUID()}`;
+}
+
+function canUseDeveloperControls(member: RoomMember): boolean {
+  return process.env.NODE_ENV !== 'production' || hasAdminDisplayName(member.name);
 }
 
 function toSettings(lobby: LobbyConfig): OnlineLobbySettings {
@@ -499,6 +507,40 @@ export class RoomManager {
     return { ok: true };
   }
 
+  returnToLobby(credentials: OnlineSessionCredentials): OnlineAck {
+    const authenticated = this.authenticate(credentials);
+    if (authenticated === null) {
+      return { ok: false, error: error('UNAUTHORIZED', 'Session expired.') };
+    }
+    const { room, member } = authenticated;
+    if (room.phase === 'PLAYING' && member.id !== room.hostPlayerId) {
+      return {
+        ok: false,
+        error: error('HOST_ONLY', 'Only the host can return an active match to the lobby.'),
+      };
+    }
+    if (room.phase === 'LOBBY') return { ok: true };
+
+    this.clearTimer(room);
+    this.clearTradeTimer(room);
+    room.phase = 'LOBBY';
+    room.state = null;
+    room.revision += 1;
+    room.recentEvents = [];
+    room.eventHistory = [];
+    room.processedActions.clear();
+    room.debugPlayerIds.clear();
+    room.paused = false;
+    room.timerKey = null;
+    room.deadlineAt = null;
+    room.pausedRemainingMs = null;
+    room.tradeTimerKey = null;
+    room.tradeDeadlineAt = null;
+    room.tradePausedRemainingMs = null;
+    this.hooks.onRoomChanged(room.code);
+    return { ok: true };
+  }
+
   submit(
     credentials: OnlineSessionCredentials,
     expectedRevision: number,
@@ -549,6 +591,7 @@ export class RoomManager {
     const result = dispatch(room.state, action, {
       skipSevenDiscards: developerMode,
       ignoreRobber: developerMode,
+      discardExemptPlayerIds: [...room.debugPlayerIds],
     });
     if (!result.ok) {
       return { ok: false, error: error(result.error.code, result.error.message) };
@@ -603,14 +646,14 @@ export class RoomManager {
   }
 
   setDebugMode(credentials: OnlineSessionCredentials, enabled: boolean): OnlineAck {
-    if (process.env.NODE_ENV === 'production') {
-      return { ok: false, error: error('DEBUG_DISABLED', 'Developer controls are disabled.') };
-    }
     const authenticated = this.authenticate(credentials);
     if (authenticated === null) {
       return { ok: false, error: error('UNAUTHORIZED', 'Session expired.') };
     }
     const { room, member } = authenticated;
+    if (!canUseDeveloperControls(member)) {
+      return { ok: false, error: error('DEBUG_DISABLED', 'Developer controls are disabled.') };
+    }
     if (room.state === null || room.phase !== 'PLAYING') {
       return { ok: false, error: error('MATCH_NOT_ACTIVE', 'The match is not active.') };
     }
@@ -625,6 +668,26 @@ export class RoomManager {
     } else {
       room.debugPlayerIds.delete(member.id);
     }
+    this.hooks.onRoomChanged(room.code);
+    return { ok: true };
+  }
+
+  grantProgressCards(credentials: OnlineSessionCredentials): OnlineAck {
+    const authenticated = this.authenticate(credentials);
+    if (authenticated === null) {
+      return { ok: false, error: error('UNAUTHORIZED', 'Session expired.') };
+    }
+    const { room, member } = authenticated;
+    if (!canUseDeveloperControls(member)) {
+      return { ok: false, error: error('DEBUG_DISABLED', 'Developer controls are disabled.') };
+    }
+    if (room.state === null || room.phase !== 'PLAYING') {
+      return { ok: false, error: error('MATCH_NOT_ACTIVE', 'The match is not active.') };
+    }
+    room.state = grantDeveloperProgressCards(room.state, member.id, randomUUID());
+    room.revision += 1;
+    room.recentEvents = [];
+    this.refreshTimers(room, [], false);
     this.hooks.onRoomChanged(room.code);
     return { ok: true };
   }
@@ -828,6 +891,7 @@ export class RoomManager {
         const result = dispatch(room.state, automaticAction, {
           skipSevenDiscards: developerMode,
           ignoreRobber: developerMode,
+          discardExemptPlayerIds: [...room.debugPlayerIds],
         });
         if (result.ok) this.commit(room, result.state, result.events, automaticAction.id);
         else {

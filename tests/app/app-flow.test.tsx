@@ -194,8 +194,8 @@ describe('application flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Lobby' }));
     await user.click(
-      within(screen.getByRole('dialog', { name: 'Leave this match?' })).getByRole('button', {
-        name: 'Leave match',
+      within(screen.getByRole('dialog', { name: 'Return to lobby?' })).getByRole('button', {
+        name: 'Return to lobby',
       }),
     );
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();

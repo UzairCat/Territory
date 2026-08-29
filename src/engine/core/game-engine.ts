@@ -36,12 +36,14 @@ import type { GameAction } from './actions';
 import { rejectAction } from './dispatch-result';
 import type { DispatchResult } from './dispatch-result';
 import type { GameState } from './game-state';
+import type { PlayerId } from './ids';
 
 export type { DispatchResult } from './dispatch-result';
 
 export interface DispatchOptions {
   readonly skipSevenDiscards?: boolean;
   readonly ignoreRobber?: boolean;
+  readonly discardExemptPlayerIds?: readonly PlayerId[];
 }
 
 function actionCanChangeScore(action: GameAction): boolean {

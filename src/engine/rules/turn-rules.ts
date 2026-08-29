@@ -10,13 +10,14 @@ import { createDiscardQueue } from './robber-rules';
 import { cancelOpenTradeOffers } from './trade-rules';
 import { calculateScore } from './scoring-rules';
 import type { BoardState } from '../core/game-state';
-import type { HexId } from '../core/ids';
+import type { HexId, PlayerId } from '../core/ids';
 import type { RandomState } from '../core/random';
 import { randomInteger } from '../core/random';
 
 export interface RollDiceOptions {
   readonly skipSevenDiscards?: boolean;
   readonly ignoreRobber?: boolean;
+  readonly discardExemptPlayerIds?: readonly PlayerId[];
 }
 
 export function rollDice(
@@ -65,7 +66,7 @@ export function rollDice(
     }
     const { queue, requiredCounts } = options.skipSevenDiscards
       ? { queue: [], requiredCounts: {} }
-      : createDiscardQueue(state);
+      : createDiscardQueue(state, options.discardExemptPlayerIds);
     events.push({
       type: 'ROBBER_SEQUENCE_STARTED',
       playerId: action.actorId,

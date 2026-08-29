@@ -21,6 +21,7 @@ import {
   type LobbyRuleKey,
   type LocalLobbyPlayer,
 } from '../lobby/lobby-model';
+import { hasAdminDisplayName } from '../../multiplayer/admin-access';
 
 export type AnimationSpeed = 'NORMAL' | 'FAST';
 
@@ -212,8 +213,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (gameState === null || gamePaused) return null;
 
     const result = dispatchEngineAction(gameState, action, {
-      skipSevenDiscards: import.meta.env.DEV && adminMode,
-      ignoreRobber: import.meta.env.DEV && adminMode,
+      skipSevenDiscards: adminMode,
+      ignoreRobber: adminMode,
+      ...(adminMode
+        ? { discardExemptPlayerIds: Object.keys(gameState.players) as PlayerId[] }
+        : {}),
     });
     if (result.ok) {
       set((state) => ({
@@ -230,8 +234,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
   unpauseGame: () => set({ gamePaused: false }),
   toggleAdminMode: () => {
-    if (!import.meta.env.DEV) return;
-
     const state = get();
     if (state.adminMode) {
       set({ adminMode: false });
@@ -250,6 +252,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activePlayer === undefined
     )
       return;
+    if (!import.meta.env.DEV && !hasAdminDisplayName(activePlayer.name)) return;
 
     set({
       adminMode: true,
@@ -262,7 +265,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     });
   },
   grantAllProgressCards: () => {
-    if (!import.meta.env.DEV) return;
     const state = get();
     const gameState = state.gameState;
     const activePlayerId = gameState?.turn.activePlayerId;
@@ -278,6 +280,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     ) {
       return;
     }
+    if (!import.meta.env.DEV && !hasAdminDisplayName(activePlayer.name)) return;
 
     set({
       gameState: grantDeveloperProgressCards(

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RoomManager } from '../../server/room-manager';
 import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
@@ -38,6 +38,7 @@ function createStartedRoom(kNMode = false) {
 
 afterEach(() => {
   for (const manager of managers.splice(0)) manager.shutdown();
+  vi.unstubAllEnvs();
 });
 
 describe('authoritative online rooms', () => {
@@ -298,5 +299,60 @@ describe('authoritative online rooms', () => {
     expect(room.phase).toBe('PLAYING');
     expect(room.state!.config.gameId).not.toBe(firstGameId);
     expect(room.state!.turn.phase).toBe('SETUP_PLACE_HOUSE');
+  });
+
+  it('returns the shared match to its existing lobby without removing any seats', () => {
+    const { manager, room, host, guest } = createStartedRoom();
+    const memberIds = [...room.members.keys()];
+
+    expect(manager.returnToLobby(guest)).toMatchObject({
+      ok: false,
+      error: { code: 'HOST_ONLY' },
+    });
+    expect(manager.returnToLobby(host)).toEqual({ ok: true });
+
+    expect(room.phase).toBe('LOBBY');
+    expect(room.state).toBeNull();
+    expect([...room.members.keys()]).toEqual(memberIds);
+    expect(manager.view(room, host.playerId)).toMatchObject({
+      phase: 'LOBBY',
+      viewerPlayerId: host.playerId,
+      game: null,
+    });
+    expect(manager.resume(host, 'host-returned-socket')).toMatchObject({ ok: true });
+  });
+
+  it('allows the Admin username to use production debug controls while rejecting other names', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const manager = new RoomManager({ onRoomChanged: () => undefined });
+    managers.push(manager);
+    const admin = manager.create('Admin', 'admin-socket');
+    expect(admin.ok).toBe(true);
+    if (!admin.ok) throw new Error(admin.error.message);
+    const guest = manager.join(admin.credentials.roomCode, 'Guest', 'guest-socket');
+    expect(guest.ok).toBe(true);
+    if (!guest.ok) throw new Error(guest.error.message);
+    expect(manager.start(admin.credentials)).toEqual({ ok: true });
+    const room = manager.rooms.get(admin.credentials.roomCode);
+    if (room?.state === null || room?.state === undefined)
+      throw new Error('Admin room did not start.');
+
+    expect(manager.setDebugMode(guest.credentials, true)).toMatchObject({
+      ok: false,
+      error: { code: 'DEBUG_DISABLED' },
+    });
+    expect(manager.setDebugMode(admin.credentials, true)).toEqual({ ok: true });
+    expect(room.state.players[admin.credentials.playerId]?.resources[RESOURCE_IDS.wood]).toBe(99);
+    expect(manager.view(room, admin.credentials.playerId).game?.debugMode).toBe(true);
+
+    const cardsBefore = room.state.players[admin.credentials.playerId]?.progressCardIds.length ?? 0;
+    expect(manager.grantProgressCards(admin.credentials)).toEqual({ ok: true });
+    expect(room.state.players[admin.credentials.playerId]?.progressCardIds.length).toBe(
+      cardsBefore + PROGRESS_CARDS.length,
+    );
+    expect(manager.grantProgressCards(guest.credentials)).toMatchObject({
+      ok: false,
+      error: { code: 'DEBUG_DISABLED' },
+    });
   });
 });

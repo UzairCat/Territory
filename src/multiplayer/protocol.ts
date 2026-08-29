@@ -138,10 +138,18 @@ export interface ClientToServerEvents {
   ) => void;
   'room:start': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'room:rematch': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
+  'room:return-to-lobby': (
+    payload: RoomCommandPayload,
+    acknowledge: (ack: OnlineAck) => void,
+  ) => void;
   'room:pause': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'room:unpause': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'room:leave': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'game:set-debug-mode': (payload: DebugModePayload, acknowledge: (ack: OnlineAck) => void) => void;
+  'game:grant-progress-cards': (
+    payload: RoomCommandPayload,
+    acknowledge: (ack: OnlineAck) => void,
+  ) => void;
   'game:action': (
     payload: SubmitActionPayload,
     acknowledge: (ack: OnlineAck<ActionAck>) => void,

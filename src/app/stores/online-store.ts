@@ -33,9 +33,11 @@ interface OnlineStoreState {
   readonly updateSettings: (settings: OnlineLobbySettings) => Promise<boolean>;
   readonly startMatch: () => Promise<boolean>;
   readonly rematch: () => Promise<boolean>;
+  readonly returnToLobby: () => Promise<boolean>;
   readonly pauseMatch: () => Promise<boolean>;
   readonly unpauseMatch: () => Promise<boolean>;
   readonly setDebugMode: (enabled: boolean) => Promise<boolean>;
+  readonly grantAllProgressCards: () => Promise<boolean>;
   readonly submitAction: (action: GameAction) => DispatchResult | null;
   readonly leaveRoom: () => Promise<void>;
   readonly clearError: () => void;
@@ -399,6 +401,16 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
     return ack.ok;
   },
+  returnToLobby: async () => {
+    const credentials = get().credentials;
+    if (credentials === null) return false;
+    set({ commandPending: true, error: null });
+    const ack = await emitWithAck((acknowledge) =>
+      getOnlineSocket().emit('room:return-to-lobby', { credentials }, acknowledge),
+    );
+    set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
+    return ack.ok;
+  },
   pauseMatch: async () => {
     const credentials = get().credentials;
     if (credentials === null) return false;
@@ -423,6 +435,16 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     set({ commandPending: true, error: null });
     const ack = await emitWithAck((acknowledge) =>
       getOnlineSocket().emit('game:set-debug-mode', { credentials, enabled }, acknowledge),
+    );
+    set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
+    return ack.ok;
+  },
+  grantAllProgressCards: async () => {
+    const credentials = get().credentials;
+    if (credentials === null) return false;
+    set({ commandPending: true, error: null });
+    const ack = await emitWithAck((acknowledge) =>
+      getOnlineSocket().emit('game:grant-progress-cards', { credentials }, acknowledge),
     );
     set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
     return ack.ok;
