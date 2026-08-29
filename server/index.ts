@@ -78,6 +78,7 @@ async function regularFile(path: string): Promise<boolean> {
 
 async function serveStatic(pathname: string): Promise<{
   readonly body: Buffer;
+  readonly cacheControl: string;
   readonly contentType: string;
 } | null> {
   const decoded = decodeURIComponent(pathname);
@@ -89,6 +90,7 @@ async function serveStatic(pathname: string): Promise<{
   if (!(await regularFile(file))) return null;
   return {
     body: await readFile(file),
+    cacheControl: extname(file) === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
     contentType: contentTypes[extname(file)] ?? 'application/octet-stream',
   };
 }
@@ -110,7 +112,7 @@ const httpServer = createServer((request, response) => {
         }
         response.writeHead(200, {
           'content-type': asset.contentType,
-          'cache-control': pathname === '/' ? 'no-cache' : 'public, max-age=3600',
+          'cache-control': asset.cacheControl,
         });
         response.end(request.method === 'HEAD' ? undefined : asset.body);
       })

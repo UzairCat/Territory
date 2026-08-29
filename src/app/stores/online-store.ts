@@ -134,7 +134,12 @@ function nextClockState(
   current: Pick<OnlineStoreState, 'clockOffsetMs' | 'clockOffsetReady'>,
 ): Pick<OnlineStoreState, 'clockOffsetMs' | 'clockOffsetReady'> {
   const candidate = clockOffsetForRoom(room);
-  if (candidate === null) return current;
+  if (candidate === null) {
+    return {
+      clockOffsetMs: current.clockOffsetMs,
+      clockOffsetReady: current.clockOffsetReady,
+    };
+  }
   return {
     // Snapshot transit time can only make this sample too low. Keeping the highest sample
     // prevents a delayed packet from making the visible clock finish several seconds early.
