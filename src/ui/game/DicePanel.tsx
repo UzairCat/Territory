@@ -17,6 +17,7 @@ interface DicePanelProps {
   readonly onRoll: () => void;
   readonly knDice?: TurnState['knDice'];
   readonly kNMode?: boolean;
+  readonly disabled?: boolean;
 }
 
 function DieFace({
@@ -76,8 +77,15 @@ function EventDieFace({
   );
 }
 
-export function DicePanel({ phase, dice, onRoll, knDice = null, kNMode = false }: DicePanelProps) {
-  const canRoll = phase === 'WAITING_FOR_ROLL';
+export function DicePanel({
+  phase,
+  dice,
+  onRoll,
+  knDice = null,
+  kNMode = false,
+  disabled = false,
+}: DicePanelProps) {
+  const canRoll = phase === 'WAITING_FOR_ROLL' && !disabled;
 
   return (
     <button

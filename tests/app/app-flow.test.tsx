@@ -152,7 +152,7 @@ describe('application flow', () => {
     expect(cityButton.querySelectorAll('.purchase-cost-card strong')).toHaveLength(0);
 
     const adminButton = screen.getByRole('button', {
-      name: 'Enable admin mode and give active player 99 of every resource',
+      name: 'Enable developer mode with 99 goods, every Progress Card, and no robber',
     });
     expect(adminButton).toHaveAttribute('aria-pressed', 'false');
     await user.click(adminButton);
@@ -177,16 +177,16 @@ describe('application flow', () => {
       [RESOURCE_IDS.livestock]: 99,
       [RESOURCE_IDS.ore]: 99,
     });
-    expect(screen.getByText(/Admin mode enabled/)).toHaveTextContent(
-      'seven-roll discards are skipped',
+    expect(screen.getByText(/Developer mode enabled/)).toHaveTextContent(
+      'one of every Progress Card, and robber rolls are ignored',
     );
     await user.click(screen.getByRole('button', { name: 'Disable admin mode' }));
     expect(
       screen.getByRole('button', {
-        name: 'Enable admin mode and give active player 99 of every resource',
+        name: 'Enable developer mode with 99 goods, every Progress Card, and no robber',
       }),
     ).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText(/Admin mode disabled/)).toBeInTheDocument();
+    expect(screen.getByText(/Developer mode disabled/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('checkbox', { name: 'Debug IDs' }));
     expect(screen.getByText('19H · 54V · 72E')).toBeInTheDocument();

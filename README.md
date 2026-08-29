@@ -1,8 +1,8 @@
 # Territory
 
-Territory is a local hot-seat strategy game for two to four players. The first release is
-browser-based and is being built around a deterministic, UI-independent TypeScript rules engine so
-the same protocol can support online play later.
+Territory is a browser-based strategy game for two to four players. It supports local hot-seat play
+and private-code online rooms backed by the same deterministic, UI-independent TypeScript rules
+engine.
 
 ## Development
 
@@ -12,6 +12,19 @@ Requires Node.js 24 or newer.
 npm install
 npm run dev
 ```
+
+`npm run dev` starts both the Vite client on `http://localhost:5173` and the authoritative
+multiplayer server on `http://localhost:3001`. The Vite development server proxies Socket.IO to the
+multiplayer process, so the default setup needs no environment file.
+
+To exercise the production-shaped single-server build locally:
+
+```sh
+npm run build
+npm start
+```
+
+Then open `http://localhost:3001`. A Docker build is also provided.
 
 Run the complete local verification suite with:
 
@@ -59,6 +72,11 @@ keeps hands and mandatory decisions immediately visible for testing; there are n
 confirmations in Classic. K+N adds pass-device protection where its off-turn draws and private
 decisions require it.
 
+- The online foundation adds guest identities, private room codes, hashed resume tokens, a
+  90-second lobby reconnect grace period, player-specific hidden-information projections,
+  server-authoritative actions and timers, host pause/rematch controls, request validation,
+  idempotent action IDs, stale-revision rejection, rate limiting, and a production container.
+
 Setup buildings, setup Roads, normal turns, and robber placement now have visible countdowns. The
 normal-turn duration is configurable in the lobby and defaults to one minute; validated actions
 restore at least 20 seconds near expiry, and all timer expirations dispatch ordinary authoritative
@@ -70,5 +88,6 @@ engine boundary with its advanced replacements. Optional developer IDs remain av
 changing the authoritative engine flow.
 
 See [Architecture](docs/ARCHITECTURE.md), [Classic Rules](docs/CLASSIC_RULES.md), and
-[K+N Rules](docs/KN_RULES.md) for the decisions behind the implementation. Use the
+[K+N Rules](docs/KN_RULES.md) for the decisions behind the implementation. The online protocol and
+deployment boundary are documented in [Online Multiplayer](docs/ONLINE_MULTIPLAYER.md). Use the
 [acceptance test](docs/ACCEPTANCE_TESTS.md) for a single manual confidence pass.

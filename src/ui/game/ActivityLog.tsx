@@ -361,9 +361,12 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       return [
         {
           icon: '−',
-          message: `${playerName(event.playerId)} discarded ${bundleLabel(event.resources)}.`,
+          message:
+            event.hiddenCount === undefined
+              ? `${playerName(event.playerId)} discarded ${bundleLabel(event.resources)}.`
+              : `${playerName(event.playerId)} discarded ${event.hiddenCount} hidden card${event.hiddenCount === 1 ? '' : 's'}.`,
           tone: 'danger',
-          resources: event.resources,
+          ...(event.hiddenCount === undefined ? { resources: event.resources } : {}),
         },
       ];
     case 'ROBBER_MOVED':
@@ -392,9 +395,9 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       return [
         {
           icon: '♟',
-          message: `${playerName(event.playerId)} stole 1 ${resourceName(event.resourceId)} from ${playerName(event.targetPlayerId)}.`,
+          message: `${playerName(event.playerId)} stole 1 ${event.hidden ? 'hidden card' : resourceName(event.resourceId)} from ${playerName(event.targetPlayerId)}.`,
           tone: 'danger',
-          resources: { [event.resourceId]: 1 },
+          ...(event.hidden ? {} : { resources: { [event.resourceId]: 1 } }),
         },
       ];
     case 'TRADE_OFFERED': {
@@ -476,9 +479,12 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       return [
         {
           icon: '◇',
-          message: `${playerName(event.targetPlayerId)} gave ${bundleLabel(event.resources)} to ${playerName(event.playerId)} for Wedding.`,
+          message:
+            event.hiddenCount === undefined
+              ? `${playerName(event.targetPlayerId)} gave ${bundleLabel(event.resources)} to ${playerName(event.playerId)} for Wedding.`
+              : `${playerName(event.targetPlayerId)} gave ${event.hiddenCount} hidden card${event.hiddenCount === 1 ? '' : 's'} to ${playerName(event.playerId)} for Wedding.`,
           tone: 'accent',
-          resources: event.resources,
+          ...(event.hiddenCount === undefined ? { resources: event.resources } : {}),
         },
       ];
     case 'PROGRESS_CARD_BOUGHT': {

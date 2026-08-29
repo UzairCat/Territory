@@ -156,13 +156,13 @@ export const KN_PROGRESS_CARDS: readonly KNProgressCardDefinition[] = [
   trade(
     'COMMODITY_MONOPOLY',
     'Commodity Monopoly',
-    3,
+    2,
     'Take one card of one commodity from every opponent.',
   ),
   trade(
     'RECLAMATION',
     'Reclamation',
-    1,
+    2,
     'Permanently change one producing tile without the robber or a 6/8 token into a different resource terrain.',
   ),
   politics(

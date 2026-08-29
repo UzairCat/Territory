@@ -290,6 +290,7 @@ export interface KNPendingRoll {
   readonly numericTotal: number;
   readonly stage: 'EVENT' | 'NUMBER' | 'AQUEDUCT';
   readonly skipSevenDiscards?: boolean;
+  readonly ignoreRobber?: boolean;
 }
 
 export interface KNBarbarianAttackSummary {

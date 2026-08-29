@@ -5,6 +5,7 @@ import { RESOURCES } from '../../engine/content/resources';
 import type { ResourceBundle, ResourceDefinition } from '../../engine/content/types';
 import type { GameState, PlayerState, TradeOffer } from '../../engine/core/game-state';
 import type { PlayerId } from '../../engine/core/ids';
+import { canAfford, playerHand } from '../../engine/rules/resource-rules';
 import { getTradeAcceptance } from '../../engine/rules/trade-rules';
 import { Button } from '../components/Button';
 import { ResourceArtwork } from './ResourceArtwork';
@@ -22,6 +23,9 @@ interface TradeResponsePanelProps {
   readonly onCancel: () => void;
   readonly onExpire: () => void;
   readonly includeCommodities?: boolean;
+  readonly viewerPlayerId?: PlayerId | null;
+  readonly deadlineAt?: number | null;
+  readonly serverAuthoritative?: boolean;
 }
 
 function BundleCards({
@@ -49,6 +53,10 @@ function BundleCards({
   );
 }
 
+function remainingForDeadline(deadlineAt: number | null): number {
+  return deadlineAt === null ? 15 : Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1_000));
+}
+
 export function TradeResponsePanel({
   state,
   trade,
@@ -62,24 +70,29 @@ export function TradeResponsePanel({
   onCancel,
   onExpire,
   includeCommodities = false,
+  viewerPlayerId = null,
+  deadlineAt = null,
+  serverAuthoritative = false,
 }: TradeResponsePanelProps) {
   const goods = includeCommodities ? HAND_GOODS : RESOURCES;
-  const [remainingSeconds, setRemainingSeconds] = useState(15);
+  const [remainingSeconds, setRemainingSeconds] = useState(() => remainingForDeadline(deadlineAt));
   const expiredRef = useRef(false);
 
   useEffect(() => {
     if (paused || remainingSeconds === 0) return undefined;
     const timer = globalThis.setInterval(() => {
-      setRemainingSeconds((current) => Math.max(0, current - 1));
+      setRemainingSeconds((current) =>
+        deadlineAt === null ? Math.max(0, current - 1) : remainingForDeadline(deadlineAt),
+      );
     }, 1_000);
     return () => globalThis.clearInterval(timer);
-  }, [paused, remainingSeconds]);
+  }, [deadlineAt, paused, remainingSeconds]);
 
   useEffect(() => {
-    if (remainingSeconds !== 0 || expiredRef.current) return;
+    if (serverAuthoritative || remainingSeconds !== 0 || expiredRef.current) return;
     expiredRef.current = true;
     onExpire();
-  }, [onExpire, remainingSeconds]);
+  }, [onExpire, remainingSeconds, serverAuthoritative]);
 
   return (
     <aside
@@ -93,15 +106,12 @@ export function TradeResponsePanel({
           <strong>{proposer.name} offers a trade</strong>
           <small>Opponents can respond; the proposer chooses one acceptance.</small>
         </div>
-        <time
-          className={remainingSeconds <= 5 ? 'is-urgent' : ''}
-          aria-label={`${remainingSeconds} seconds remaining`}
-        >
-          {remainingSeconds}s
-        </time>
-        <Button variant="ghost" aria-label="Cancel trade offer" onClick={onCancel}>
-          ×
-        </Button>
+        <time aria-label={`${remainingSeconds} seconds remaining`}>{remainingSeconds}s</time>
+        {viewerPlayerId === null || viewerPlayerId === proposer.id ? (
+          <Button variant="ghost" aria-label="Cancel trade offer" onClick={onCancel}>
+            ×
+          </Button>
+        ) : null}
       </header>
 
       <section className="trade-offer-panel__terms" aria-label="Trade terms">
@@ -119,7 +129,14 @@ export function TradeResponsePanel({
       <div className="trade-offer-panel__responses">
         {recipients.map((recipient) => {
           const response = trade.responses[recipient.id] ?? 'PENDING';
-          const acceptance = getTradeAcceptance(state, trade.id, recipient.id);
+          const canControlRecipient = viewerPlayerId === null || viewerPlayerId === recipient.id;
+          const canControlProposer = viewerPlayerId === null || viewerPlayerId === proposer.id;
+          const acceptance =
+            serverAuthoritative && viewerPlayerId === recipient.id
+              ? canAfford(playerHand(recipient), trade.requested)
+                ? { canAccept: true, reason: null }
+                : { canAccept: false, reason: 'You do not have all of the requested cards.' }
+              : getTradeAcceptance(state, trade.id, recipient.id);
           const color = playerColors[recipient.id] ?? '#6c8f91';
           return (
             <section
@@ -136,13 +153,15 @@ export function TradeResponsePanel({
                 <strong>{recipient.name}</strong>
                 <small>
                   {response === 'PENDING'
-                    ? (acceptance.reason ?? 'Waiting for response')
+                    ? canControlRecipient
+                      ? (acceptance.reason ?? 'Waiting for response')
+                      : 'Waiting for response'
                     : response === 'ACCEPTED'
                       ? 'Accepted · proposer may confirm'
                       : 'Declined this offer'}
                 </small>
               </div>
-              {response === 'PENDING' ? (
+              {response === 'PENDING' && canControlRecipient ? (
                 <div className="trade-offer-response__actions">
                   <Button
                     variant="danger"
@@ -161,7 +180,7 @@ export function TradeResponsePanel({
                     ✓
                   </Button>
                 </div>
-              ) : response === 'ACCEPTED' ? (
+              ) : response === 'ACCEPTED' && canControlProposer ? (
                 <Button
                   className="trade-offer-response__confirm"
                   variant="primary"
@@ -170,12 +189,16 @@ export function TradeResponsePanel({
                 >
                   ✓
                 </Button>
-              ) : (
+              ) : response === 'REJECTED' ? (
                 <span
                   className="trade-offer-response__declined"
                   aria-label={`${recipient.name} declined`}
                 >
                   ×
+                </span>
+              ) : (
+                <span className="trade-offer-response__waiting" aria-label="Waiting for response">
+                  …
                 </span>
               )}
             </section>

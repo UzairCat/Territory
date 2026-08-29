@@ -104,6 +104,7 @@ export type GameEvent =
       readonly type: 'RESOURCES_DISCARDED';
       readonly playerId: PlayerId;
       readonly resources: ResourceBundle;
+      readonly hiddenCount?: number;
     }
   | {
       readonly type: 'ROBBER_MOVED';
@@ -122,6 +123,7 @@ export type GameEvent =
       readonly playerId: PlayerId;
       readonly targetPlayerId: PlayerId;
       readonly resourceId: ResourceId;
+      readonly hidden?: boolean;
     }
   | {
       readonly type: 'TRADE_OFFERED';
@@ -163,6 +165,7 @@ export type GameEvent =
       readonly playerId: PlayerId;
       readonly targetPlayerId: PlayerId;
       readonly resources: ResourceBundle;
+      readonly hiddenCount?: number;
     }
   | {
       readonly type: 'PROGRESS_CARD_BOUGHT';

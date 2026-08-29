@@ -79,8 +79,8 @@ describe('K+N mode foundations', () => {
     expect(Object.keys(state.kn?.progressCards ?? {})).toHaveLength(54);
     expect(KN_PROGRESS_CARDS.reduce((total, card) => total + card.count, 0)).toBe(54);
     expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'MERCHANT')?.count).toBe(4);
-    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'COMMODITY_MONOPOLY')?.count).toBe(3);
-    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'RECLAMATION')?.count).toBe(1);
+    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'COMMODITY_MONOPOLY')?.count).toBe(2);
+    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'RECLAMATION')?.count).toBe(2);
     expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'WAR_DRUMS')?.count).toBe(2);
     expect(KN_PROGRESS_CARDS.some((card) => card.displayName === 'Intrigue')).toBe(false);
     for (const commodity of COMMODITIES) {

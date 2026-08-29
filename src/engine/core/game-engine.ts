@@ -41,6 +41,7 @@ export type { DispatchResult } from './dispatch-result';
 
 export interface DispatchOptions {
   readonly skipSevenDiscards?: boolean;
+  readonly ignoreRobber?: boolean;
 }
 
 function actionCanChangeScore(action: GameAction): boolean {

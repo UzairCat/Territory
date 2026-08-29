@@ -6,11 +6,18 @@ function formatRemaining(seconds: number): string {
   return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
+function remainingFor(deadlineAt: number | null, durationSeconds: number): number {
+  return deadlineAt === null
+    ? durationSeconds
+    : Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1_000));
+}
+
 interface TurnTimerProps {
   readonly durationSeconds: number;
   readonly prompt: string;
   readonly boostSignal: string;
   readonly paused?: boolean;
+  readonly deadlineAt?: number | null;
   readonly onExpire: () => void;
   readonly onUrgentTick: () => void;
 }
@@ -20,10 +27,13 @@ export function TurnTimer({
   prompt,
   boostSignal,
   paused = false,
+  deadlineAt = null,
   onExpire,
   onUrgentTick,
 }: TurnTimerProps) {
-  const [remainingSeconds, setRemainingSeconds] = useState(durationSeconds);
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    remainingFor(deadlineAt, durationSeconds),
+  );
   const expiredRef = useRef(false);
   const onExpireRef = useRef(onExpire);
   const onUrgentTickRef = useRef(onUrgentTick);
@@ -40,10 +50,12 @@ export function TurnTimer({
   useEffect(() => {
     if (paused) return undefined;
     const interval = globalThis.setInterval(() => {
-      setRemainingSeconds((current) => Math.max(0, current - 1));
+      setRemainingSeconds((current) =>
+        deadlineAt === null ? Math.max(0, current - 1) : remainingFor(deadlineAt, durationSeconds),
+      );
     }, 1_000);
     return () => globalThis.clearInterval(interval);
-  }, [paused]);
+  }, [deadlineAt, durationSeconds, paused]);
 
   useEffect(() => {
     if (previousBoostRef.current === boostSignal) return;

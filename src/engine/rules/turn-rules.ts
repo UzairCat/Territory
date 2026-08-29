@@ -16,6 +16,7 @@ import { randomInteger } from '../core/random';
 
 export interface RollDiceOptions {
   readonly skipSevenDiscards?: boolean;
+  readonly ignoreRobber?: boolean;
 }
 
 export function rollDice(
@@ -48,6 +49,20 @@ export function rollDice(
   const events: GameEvent[] = [{ type: 'DICE_ROLLED', playerId: action.actorId, dice }];
 
   if (total === state.config.rules.dice.robberTotal) {
+    if (options.ignoreRobber === true) {
+      return acceptAction(
+        state,
+        action,
+        {
+          ...state,
+          random: nextRandom,
+          balancedDice,
+          turn: { ...state.turn, dice, phase: 'ACTION_PHASE' },
+          pendingInteraction: null,
+        },
+        events,
+      );
+    }
     const { queue, requiredCounts } = options.skipSevenDiscards
       ? { queue: [], requiredCounts: {} }
       : createDiscardQueue(state);

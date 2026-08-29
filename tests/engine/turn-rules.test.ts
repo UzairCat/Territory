@@ -183,6 +183,27 @@ describe('normal turn rules', () => {
     });
   });
 
+  it('lets developer mode ignore the entire robber sequence', () => {
+    const random = randomForTotal(7);
+    const original = createTestGameState('WAITING_FOR_ROLL');
+    const state = withRobberFlowEnabled({ ...original, random: random.state });
+    const result = dispatch(
+      state,
+      {
+        id: actionId('roll-seven-ignore-robber'),
+        type: 'ROLL_DICE',
+        actorId: TEST_PLAYER_IDS[0],
+      },
+      { ignoreRobber: true },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.turn.phase).toBe('ACTION_PHASE');
+    expect(result.state.pendingInteraction).toBeNull();
+    expect(result.events.some((event) => event.type === 'ROBBER_SEQUENCE_STARTED')).toBe(false);
+  });
+
   it('deterministically rerolls sevens while the robber flow is disabled', () => {
     const random = randomForTotal(7);
     const original = createTestGameState('WAITING_FOR_ROLL');

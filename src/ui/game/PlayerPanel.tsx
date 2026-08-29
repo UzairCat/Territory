@@ -20,6 +20,12 @@ interface PlayerPanelProps {
   readonly wallCount?: number;
   readonly cityCount?: number;
   readonly knProgressCards?: NonNullable<GameState['kn']>['progressCards'] | undefined;
+  readonly publicCardInfo?: {
+    readonly resourceCards: number;
+    readonly commodityCards: number;
+    readonly progressCards: number;
+    readonly progressFamilies: Readonly<Record<KNProgressFamily, number>>;
+  };
 }
 
 interface ProgressSummaryAnchor {
@@ -51,36 +57,39 @@ export function PlayerPanel({
   wallCount = 0,
   cityCount = 0,
   knProgressCards,
+  publicCardInfo,
 }: PlayerPanelProps) {
   const [progressSummaryAnchor, setProgressSummaryAnchor] = useState<ProgressSummaryAnchor | null>(
     null,
   );
   const color = PLAYER_COLORS.find((definition) => definition.id === player.colorId);
-  const resourceCount = Object.values(player.resources).reduce<number>(
-    (total, amount) => total + (amount ?? 0),
-    0,
-  );
-  const commodityCount = Object.values(player.commodities).reduce<number>(
-    (total, amount) => total + (amount ?? 0),
-    0,
-  );
+  const resourceCount =
+    publicCardInfo?.resourceCards ??
+    Object.values(player.resources).reduce<number>((total, amount) => total + (amount ?? 0), 0);
+  const commodityCount =
+    publicCardInfo?.commodityCards ??
+    Object.values(player.commodities).reduce<number>((total, amount) => total + (amount ?? 0), 0);
   const activeKnightStrength = player.knights.reduce(
     (total, knight) => total + (knight.active ? knight.level : 0),
     0,
   );
   const knightPowerGlows =
     holdsLargestForce || (cityCount > 0 && activeKnightStrength >= cityCount);
-  const progressCount = kNMode ? player.knProgressCardIds.length : player.progressCardIds.length;
-  const progressFamilyCounts = player.knProgressCardIds.reduce<Record<KNProgressFamily, number>>(
-    (counts, cardId) => {
-      const card = knProgressCards?.[cardId];
-      const definition =
-        card === undefined ? undefined : getKNProgressCardDefinition(card.definitionId);
-      if (definition !== undefined) counts[definition.family] += 1;
-      return counts;
-    },
-    { SCIENCE: 0, TRADE: 0, POLITICS: 0 },
-  );
+  const progressCount =
+    publicCardInfo?.progressCards ??
+    (kNMode ? player.knProgressCardIds.length : player.progressCardIds.length);
+  const progressFamilyCounts =
+    publicCardInfo?.progressFamilies ??
+    player.knProgressCardIds.reduce<Record<KNProgressFamily, number>>(
+      (counts, cardId) => {
+        const card = knProgressCards?.[cardId];
+        const definition =
+          card === undefined ? undefined : getKNProgressCardDefinition(card.definitionId);
+        if (definition !== undefined) counts[definition.family] += 1;
+        return counts;
+      },
+      { SCIENCE: 0, TRADE: 0, POLITICS: 0 },
+    );
   const visibleProgressFamilies = (
     Object.keys(PROGRESS_FAMILY_DETAILS) as KNProgressFamily[]
   ).filter((family) => progressFamilyCounts[family] > 0);

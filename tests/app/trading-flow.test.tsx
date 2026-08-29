@@ -375,6 +375,32 @@ describe('trading application flow', () => {
     expect(screen.queryByRole('button', { name: 'Return offered Wood' })).not.toBeInTheDocument();
   });
 
+  it('clears an unfinished trade draft when the active turn changes', async () => {
+    const user = userEvent.setup();
+    renderGame(tradingState());
+
+    await user.click(screen.getByRole('button', { name: 'Trade' }));
+    expect(screen.getByRole('dialog', { name: 'Trade' })).toBeInTheDocument();
+    act(() => {
+      useAppStore.setState((store) => {
+        const state = store.gameState!;
+        return {
+          gameState: {
+            ...state,
+            turn: {
+              ...state.turn,
+              activePlayerId: TEST_PLAYER_IDS[1],
+              turnNumber: state.turn.turnNumber + 1,
+              phase: 'ACTION_PHASE',
+            },
+          },
+        };
+      });
+    });
+
+    expect(screen.queryByRole('dialog', { name: 'Trade' })).not.toBeInTheDocument();
+  });
+
   it('expires an unanswered player offer after fifteen seconds', async () => {
     const state = tradingState();
     const created = dispatch(state, {

@@ -10,6 +10,24 @@ Pixi board renderer ────────┘
 engine ──> no React, Pixi, Zustand, DOM, storage, or browser imports
 ```
 
+Online play adds another adapter around the same engine boundary:
+
+```text
+browser GameAction intent
+        │
+        ▼
+Socket.IO protocol validation ──> room revision/seat authorization
+        │
+        ▼
+dispatch(state, action) ──> authoritative state + events
+        │
+        ▼
+per-player projection ──> Socket.IO room snapshot
+```
+
+The server never accepts a client-supplied state, random result, timeout consequence, or opponent
+actor ID. Local hot-seat mode continues to call `dispatch` directly for fast offline play.
+
 `GameState` is the only authoritative match snapshot. UI and renderer state may describe temporary
 presentation concerns, but they cannot grant resources, place pieces, roll dice, advance turns, or
 otherwise change a match directly.

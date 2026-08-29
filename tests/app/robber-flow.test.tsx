@@ -146,7 +146,7 @@ describe('robber application flow', () => {
     });
   });
 
-  it('skips seven-roll discards while admin mode is enabled', async () => {
+  it('ignores the entire robber sequence while developer mode is enabled', async () => {
     const user = userEvent.setup();
     const original = createdGame();
     const state: GameState = {
@@ -172,7 +172,7 @@ describe('robber application flow', () => {
 
     await user.click(
       screen.getByRole('button', {
-        name: 'Enable admin mode and give active player 99 of every resource',
+        name: 'Enable developer mode with 99 goods, every Progress Card, and no robber',
       }),
     );
     expect(screen.getByRole('button', { name: 'Disable admin mode' })).toHaveAttribute(
@@ -182,13 +182,10 @@ describe('robber application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Roll dice' }));
 
     expect(screen.queryByRole('dialog', { name: /discard resources/ })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Move Robber: 20 seconds remaining')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Move Robber: 20 seconds remaining')).not.toBeInTheDocument();
     const adminState = useAppStore.getState().gameState;
-    expect(adminState?.turn.phase).toBe('MOVE_ROBBER');
-    expect(adminState?.pendingInteraction).toEqual({
-      type: 'MOVE_ROBBER',
-      playerId: TEST_PLAYER_IDS[0],
-    });
+    expect(adminState?.turn.phase).toBe('ACTION_PHASE');
+    expect(adminState?.pendingInteraction).toBeNull();
     expect(adminState?.players[TEST_PLAYER_IDS[0]]?.resources).toEqual({
       [RESOURCE_IDS.wood]: 99,
       [RESOURCE_IDS.brick]: 99,
@@ -197,11 +194,11 @@ describe('robber application flow', () => {
       [RESOURCE_IDS.ore]: 99,
     });
     expect(adminState?.players[TEST_PLAYER_IDS[1]]?.resources).toMatchObject({ wood: 8 });
-    expect(useAppStore.getState().recentGameEvents).toContainEqual({
-      type: 'ROBBER_SEQUENCE_STARTED',
-      playerId: TEST_PLAYER_IDS[0],
-      discardPlayerIds: [],
-    });
+    expect(
+      useAppStore
+        .getState()
+        .recentGameEvents.some((event) => event.type === 'ROBBER_SEQUENCE_STARTED'),
+    ).toBe(false);
   });
 
   it('requires the active player to choose among multiple adjacent victims', async () => {

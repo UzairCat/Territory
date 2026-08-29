@@ -354,6 +354,7 @@ function resolveProgressGate(
           numericTotal: redDie + (nextState.kn?.regularDieResult ?? 1),
           stage: 'NUMBER',
           skipSevenDiscards: nextState.kn?.pendingRoll?.skipSevenDiscards === true,
+          ignoreRobber: nextState.kn?.pendingRoll?.ignoreRobber === true,
         },
       },
     };
@@ -378,6 +379,17 @@ export function resolveKNNumber(state: GameState): KNResolution {
   const events: GameEvent[] = [];
 
   if (total === state.config.rules.dice.robberTotal) {
+    if (pendingRoll.ignoreRobber === true) {
+      return {
+        state: {
+          ...state,
+          turn: { ...state.turn, phase: 'ACTION_PHASE' },
+          pendingInteraction: null,
+          kn: { ...kn, pendingRoll: null },
+        },
+        events,
+      };
+    }
     const { queue, requiredCounts } = pendingRoll.skipSevenDiscards
       ? { queue: [], requiredCounts: {} }
       : createDiscardQueue(state);
@@ -536,6 +548,7 @@ export function rollKNDice(
         numericTotal: total,
         stage: 'EVENT',
         skipSevenDiscards: options.skipSevenDiscards === true,
+        ignoreRobber: options.ignoreRobber === true,
       },
       attackSummary: null,
     },

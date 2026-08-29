@@ -17,7 +17,7 @@ export function MainMenuScreen() {
       </div>
 
       <section className="menu-card" aria-labelledby="territory-title">
-        <p className="eyebrow">Local hot-seat strategy</p>
+        <p className="eyebrow">Tabletop strategy, together</p>
         <h1 id="territory-title">Territory</h1>
         <p className="menu-card__tagline">Build your network. Command the board.</p>
 
@@ -31,6 +31,9 @@ export function MainMenuScreen() {
             }}
           >
             Local game
+          </Button>
+          <Button variant="secondary" fullWidth onClick={() => void navigate('/online')}>
+            Online multiplayer
           </Button>
           <Button variant="secondary" fullWidth onClick={openSettings}>
             Settings

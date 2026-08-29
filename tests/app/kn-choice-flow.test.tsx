@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { App } from '../../src/app/App';
 import { audioManager } from '../../src/app/audio/audio-manager';
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
+import { resetOnlineStoreForTests, useOnlineStore } from '../../src/app/stores/online-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 import { COMMODITY_IDS } from '../../src/engine/content/commodities';
 import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
@@ -16,7 +17,7 @@ import { resourceBundle } from '../../src/engine/content/types';
 import { createGame } from '../../src/engine/core/create-game';
 import type { GameEvent } from '../../src/engine/core/events';
 import type { GameState } from '../../src/engine/core/game-state';
-import { knightId } from '../../src/engine/core/ids';
+import { edgeId, knightId } from '../../src/engine/core/ids';
 import { BarbarianTracker } from '../../src/ui/game/BarbarianTracker';
 import { PlayerPanel } from '../../src/ui/game/PlayerPanel';
 import { createTestKNConfig, TEST_PLAYER_IDS } from '../helpers/game-state';
@@ -131,6 +132,7 @@ function renderGame(state: GameState, recentGameEvents: readonly GameEvent[] = [
 describe('K+N compact choice flows', () => {
   beforeEach(() => {
     resetAppStoreForTests();
+    resetOnlineStoreForTests();
     boardRenderProbe.emphasizedVertexRefs.length = 0;
     boardRenderProbe.robberAttention.length = 0;
     boardRenderProbe.inventorSelectionActive.length = 0;
@@ -141,6 +143,7 @@ describe('K+N compact choice flows', () => {
   });
   afterEach(() => {
     cleanup();
+    resetOnlineStoreForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -1594,6 +1597,78 @@ describe('K+N compact choice flows', () => {
     });
     await act(() => vi.advanceTimersByTime(10_000));
     expect(tick).toHaveBeenCalled();
+  });
+
+  it('returns from a completed action with twenty seconds instead of a fresh full timer', () => {
+    const original = knActionState();
+    renderGame({ ...original, config: { ...original.config, turnTimeSeconds: 60 } }, [
+      {
+        type: 'ROAD_BUILT',
+        playerId: TEST_PLAYER_IDS[0],
+        edgeId: edgeId('completed-action-timer-floor'),
+      },
+    ]);
+
+    expect(screen.getByLabelText('Take Actions: 20 seconds remaining')).toBeInTheDocument();
+  });
+
+  it('plays urgent online timer beeps only for the player responsible for the timer', async () => {
+    vi.useFakeTimers();
+    const tick = vi.spyOn(audioManager, 'playTimerTick');
+    const original = {
+      ...knActionState(),
+      config: { ...knActionState().config, turnTimeSeconds: 20 },
+    };
+    useOnlineStore.setState({
+      connection: 'CONNECTED',
+      credentials: {
+        roomCode: 'ABC234',
+        playerId: TEST_PLAYER_IDS[1],
+        resumeToken: 'x'.repeat(32),
+      },
+      room: {
+        protocolVersion: 1,
+        code: 'ABC234',
+        phase: 'PLAYING',
+        viewerPlayerId: TEST_PLAYER_IDS[1],
+        hostPlayerId: TEST_PLAYER_IDS[0],
+        players: original.config.players.map((player) => ({
+          id: player.id,
+          name: player.name,
+          colorId: player.colorId,
+          connected: true,
+          host: player.id === TEST_PLAYER_IDS[0],
+        })),
+        settings: {
+          mapId: original.config.mapId,
+          modeId: original.config.modeId,
+          size: 2,
+          seed: original.config.seed,
+          turnTimeSeconds: 20,
+          victoryTarget: original.config.victoryTarget,
+          discardThreshold: original.config.rules.discardThreshold,
+          hideBankCards: original.config.hideBankCards ?? false,
+          friendlyRobber: original.config.friendlyRobber ?? false,
+          balancedDice: original.config.balancedDice ?? false,
+          inventorsMadness: original.config.inventorsMadness ?? false,
+        },
+        game: {
+          revision: 1,
+          state: original,
+          recentEvents: [],
+          eventHistory: [],
+          paused: false,
+          debugMode: false,
+          deadlineAt: Date.now() + 20_000,
+          tradeDeadlineAt: null,
+          playerCards: {},
+        },
+      },
+    });
+    renderGame(original);
+
+    await act(() => vi.advanceTimersByTime(10_000));
+    expect(tick).not.toHaveBeenCalled();
   });
 
   it('shows only owned Progress Card families when the player-card icon is hovered', async () => {

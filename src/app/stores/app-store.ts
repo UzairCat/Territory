@@ -1,19 +1,18 @@
 import { create } from 'zustand';
 
-import { RESOURCES } from '../../engine/content/resources';
-import { COMMODITIES } from '../../engine/content/commodities';
-import { PROGRESS_CARDS } from '../../engine/content/progress-cards';
-import { KN_PROGRESS_CARDS } from '../../engine/content/kn-progress-cards';
-import { resourceBundle } from '../../engine/content/types';
 import { createGame } from '../../engine/core/create-game';
 import type { GameAction } from '../../engine/core/actions';
 import { dispatch as dispatchEngineAction } from '../../engine/core/game-engine';
 import type { DispatchResult } from '../../engine/core/game-engine';
 import type { GameState } from '../../engine/core/game-state';
 import type { GameEvent } from '../../engine/core/events';
-import { cardInstanceId, gameId, playerId } from '../../engine/core/ids';
+import { gameId, playerId } from '../../engine/core/ids';
 import type { ColorId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
 import type { PlayerCount } from '../../engine/content/types';
+import {
+  grantDeveloperLoadout,
+  grantDeveloperProgressCards,
+} from '../../engine/debug/developer-tools';
 import {
   AVAILABLE_MODES,
   buildGameConfig,
@@ -214,6 +213,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
     const result = dispatchEngineAction(gameState, action, {
       skipSevenDiscards: import.meta.env.DEV && adminMode,
+      ignoreRobber: import.meta.env.DEV && adminMode,
     });
     if (result.ok) {
       set((state) => ({
@@ -253,17 +253,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
     set({
       adminMode: true,
-      gameState: {
-        ...state.gameState,
-        players: {
-          ...state.gameState.players,
-          [activePlayerId]: {
-            ...activePlayer,
-            resources: resourceBundle(RESOURCES.map((resource) => [resource.id, 99])),
-            commodities: resourceBundle(COMMODITIES.map((commodity) => [commodity.id, 99])),
-          },
-        },
-      },
+      gameState: grantDeveloperLoadout(
+        state.gameState,
+        activePlayerId,
+        globalThis.crypto.randomUUID(),
+      ),
+      recentGameEvents: [],
     });
   },
   grantAllProgressCards: () => {
@@ -284,92 +279,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return;
     }
 
-    const grantToken = globalThis.crypto.randomUUID();
-    if (gameState.kn !== null) {
-      const grantedCards = KN_PROGRESS_CARDS.map((definition) => {
-        const instanceId = cardInstanceId(`dev-${grantToken}-${definition.id}`);
-        return {
-          instanceId,
-          definition,
-          card: {
-            instanceId,
-            definitionId: definition.id,
-            ownerId: activePlayerId,
-            drawnTurn: gameState.turn.turnNumber,
-            playedTurn: null,
-            revealed: definition.revealedVictoryPoints > 0,
-          },
-        };
-      });
-      set({
-        gameState: {
-          ...gameState,
-          players: {
-            ...gameState.players,
-            [activePlayerId]: {
-              ...activePlayer,
-              knProgressCardIds: [
-                ...activePlayer.knProgressCardIds,
-                ...grantedCards
-                  .filter(({ definition }) => definition.revealedVictoryPoints === 0)
-                  .map(({ instanceId }) => instanceId),
-              ],
-              revealedKNProgressCardIds: [
-                ...activePlayer.revealedKNProgressCardIds,
-                ...grantedCards
-                  .filter(({ definition }) => definition.revealedVictoryPoints > 0)
-                  .map(({ instanceId }) => instanceId),
-              ],
-            },
-          },
-          kn: {
-            ...gameState.kn,
-            progressCards: {
-              ...gameState.kn.progressCards,
-              ...Object.fromEntries(
-                grantedCards.map(({ instanceId, card }) => [instanceId, card] as const),
-              ),
-            },
-          },
-        },
-        recentGameEvents: [],
-      });
-      return;
-    }
-
-    const grantedCards = PROGRESS_CARDS.map((definition) => {
-      const instanceId = cardInstanceId(`dev-${grantToken}-${definition.id}`);
-      return {
-        instanceId,
-        card: {
-          instanceId,
-          definitionId: definition.id,
-          ownerId: activePlayerId,
-          purchasedTurn: null,
-          playedTurn: null,
-        },
-      };
-    });
     set({
-      gameState: {
-        ...gameState,
-        players: {
-          ...gameState.players,
-          [activePlayerId]: {
-            ...activePlayer,
-            progressCardIds: [
-              ...activePlayer.progressCardIds,
-              ...grantedCards.map(({ instanceId }) => instanceId),
-            ],
-          },
-        },
-        progressCards: {
-          ...gameState.progressCards,
-          ...Object.fromEntries(
-            grantedCards.map(({ instanceId, card }) => [instanceId, card] as const),
-          ),
-        },
-      },
+      gameState: grantDeveloperProgressCards(
+        gameState,
+        activePlayerId,
+        globalThis.crypto.randomUUID(),
+      ),
       recentGameEvents: [],
     });
   },

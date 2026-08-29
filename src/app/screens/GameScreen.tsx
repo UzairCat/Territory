@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
 import { useAppStore } from '../stores/app-store';
+import { useOnlineStore } from '../stores/online-store';
 import { audioManager } from '../audio/audio-manager';
 import { BoardViewport } from '../../board-renderer/BoardViewport';
 import type {
@@ -44,7 +45,11 @@ import {
   getProgressCardDefinition,
   getProgressCardPurchaseAvailability,
 } from '../../engine/rules/progress-card-rules';
-import { calculateLongestRoadLength, calculateScore } from '../../engine/rules/scoring-rules';
+import {
+  calculateLongestRoadLength,
+  calculatePublicScore,
+  calculateScore,
+} from '../../engine/rules/scoring-rules';
 import {
   getLegalSetupHouseVertexIds,
   getLegalSetupRoadEdgeIds,
@@ -98,6 +103,26 @@ import {
   KNIGHT_COST,
   WALL_COST,
 } from '../../engine/rules/kn-construction-rules';
+
+const TIMER_BOOST_EVENT_TYPES = new Set<GameEvent['type']>([
+  'BUILDING_PLACED',
+  'BUILDING_UPGRADED',
+  'ROAD_BUILT',
+  'TRADE_COMPLETED',
+  'COMMERCIAL_HARBOR_EXCHANGED',
+  'PROGRESS_CARD_BOUGHT',
+  'PROGRESS_CARD_PLAYED',
+  'KNIGHT_BUILT',
+  'KNIGHT_ACTIVATED',
+  'KNIGHT_UPGRADED',
+  'KNIGHT_MOVED',
+  'KNIGHT_DISPLACED',
+  'WALL_BUILT',
+  'IMPROVEMENT_BOUGHT',
+  'KN_PROGRESS_CARD_RESOLVED',
+  'MERCHANT_MOVED',
+  'METROPOLIS_CHANGED',
+]);
 
 function phaseLabel(phase: GameState['turn']['phase']): string {
   const labels: Record<GameState['turn']['phase'], string> = {
@@ -166,8 +191,10 @@ function resourceBundleLabel(resources: ResourceBundle): string {
 function productionFlyovers(
   events: readonly GameEvent[],
   state: GameState | null,
+  visiblePlayerId: PlayerState['id'] | null,
+  restrictToViewer = false,
 ): readonly ResourceFlyover[] {
-  if (state === null || state.turn.activePlayerId === null) return [];
+  if (state === null || visiblePlayerId === null) return [];
   const flyovers: ResourceFlyover[] = [];
   let sequence = 0;
   const production = events.find(
@@ -175,7 +202,7 @@ function productionFlyovers(
       event.type === 'RESOURCES_PRODUCED',
   );
   if (production?.source === 'DICE' && production.rollTotal !== null) {
-    const grants = production.grants[state.turn.activePlayerId];
+    const grants = production.grants[visiblePlayerId];
     const producingHexes = new Map<ResourceId, HexId[]>();
     for (const hex of Object.values(state.board.hexes)) {
       if (
@@ -189,7 +216,7 @@ function productionFlyovers(
       const sources = producingHexes.get(hex.resourceId) ?? [];
       for (const vertexId of hex.vertexIds) {
         const building = state.board.vertices[vertexId]?.building;
-        if (building?.ownerId !== state.turn.activePlayerId) continue;
+        if (building?.ownerId !== visiblePlayerId) continue;
         if (building.type !== 'MANSION' || state.kn === null) {
           const cardsProduced = building.type === 'MANSION' ? 2 : 1;
           for (let index = 0; index < cardsProduced; index += 1) sources.push(hex.id);
@@ -232,7 +259,7 @@ function productionFlyovers(
     }
   }
   if (production?.source === 'SETUP') {
-    const grants = production.grants[state.turn.activePlayerId];
+    const grants = production.grants[visiblePlayerId];
     const setupVertex =
       state.turn.setupPlacementVertexId === null
         ? undefined
@@ -265,7 +292,10 @@ function productionFlyovers(
       { readonly type: 'PROGRESS_CARD_RESOLVED' | 'KN_PROGRESS_CARD_RESOLVED' }
     > => event.type === 'PROGRESS_CARD_RESOLVED' || event.type === 'KN_PROGRESS_CARD_RESOLVED',
   );
-  if (progress?.resources !== undefined) {
+  if (
+    progress?.resources !== undefined &&
+    (!restrictToViewer || progress.playerId === visiblePlayerId)
+  ) {
     for (const resource of HAND_GOODS) {
       const amount = progress.resources[resource.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
@@ -279,7 +309,11 @@ function productionFlyovers(
       }
     }
   }
-  if (progress?.resourceId !== undefined && progress.transfers !== undefined) {
+  if (
+    progress?.resourceId !== undefined &&
+    progress.transfers !== undefined &&
+    (!restrictToViewer || progress.playerId === visiblePlayerId)
+  ) {
     for (const [playerId, amount] of Object.entries(progress.transfers)) {
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
@@ -297,10 +331,11 @@ function productionFlyovers(
     (event): event is Extract<GameEvent, { readonly type: 'RESOURCE_STOLEN' }> =>
       event.type === 'RESOURCE_STOLEN',
   )) {
-    if (stolen.playerId !== state.turn.activePlayerId) continue;
+    if (stolen.playerId !== visiblePlayerId && stolen.targetPlayerId !== visiblePlayerId) continue;
     flyovers.push({
       id: `${state.config.gameId}-${state.actionHistory.length}-steal-${stolen.targetPlayerId}-${stolen.resourceId}-${sequence}`,
       source: { kind: 'PLAYER', playerId: stolen.targetPlayerId },
+      targetPlayerId: stolen.playerId,
       resourceId: stolen.resourceId,
       delayMs: sequence * 140,
     });
@@ -310,6 +345,12 @@ function productionFlyovers(
     (event): event is Extract<GameEvent, { readonly type: 'COMMERCIAL_HARBOR_EXCHANGED' }> =>
       event.type === 'COMMERCIAL_HARBOR_EXCHANGED',
   )) {
+    if (
+      restrictToViewer &&
+      exchange.playerId !== visiblePlayerId &&
+      exchange.targetPlayerId !== visiblePlayerId
+    )
+      continue;
     flyovers.push({
       id: `${state.config.gameId}-${state.actionHistory.length}-harbor-${exchange.targetPlayerId}-${exchange.receivedCommodityId}-${sequence}`,
       source: { kind: 'PLAYER', playerId: exchange.targetPlayerId },
@@ -322,6 +363,7 @@ function productionFlyovers(
     (event): event is Extract<GameEvent, { readonly type: 'AQUEDUCT_RESOURCE_CHOSEN' }> =>
       event.type === 'AQUEDUCT_RESOURCE_CHOSEN',
   )) {
+    if (restrictToViewer && aqueduct.playerId !== visiblePlayerId) continue;
     flyovers.push({
       id: `${state.config.gameId}-${state.actionHistory.length}-aqueduct-${aqueduct.resourceId}`,
       source: { kind: 'BANK' },
@@ -334,6 +376,7 @@ function productionFlyovers(
     (event): event is Extract<GameEvent, { readonly type: 'WEDDING_CARDS_TRANSFERRED' }> =>
       event.type === 'WEDDING_CARDS_TRANSFERRED',
   )) {
+    if (restrictToViewer && wedding.playerId !== visiblePlayerId) continue;
     for (const good of HAND_GOODS) {
       const amount = wedding.resources[good.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
@@ -352,6 +395,12 @@ function productionFlyovers(
     (event): event is Extract<GameEvent, { readonly type: 'TRADE_COMPLETED' }> =>
       event.type === 'TRADE_COMPLETED',
   )) {
+    if (
+      restrictToViewer &&
+      trade.playerId !== visiblePlayerId &&
+      trade.recipientId !== visiblePlayerId
+    )
+      continue;
     for (const good of HAND_GOODS) {
       const offeredAmount = trade.offered[good.id] ?? 0;
       for (let index = 0; index < offeredAmount; index += 1) {
@@ -662,7 +711,7 @@ function recentEventMessage(events: readonly GameEvent[], state: GameState): str
       event.type === 'RESOURCES_DISCARDED',
   );
   if (discarded !== undefined) {
-    const amount = resourceCount(discarded.resources);
+    const amount = discarded.hiddenCount ?? resourceCount(discarded.resources);
     return `${state.players[discarded.playerId]?.name ?? 'A player'} discarded ${amount} resource cards.`;
   }
 
@@ -823,7 +872,7 @@ export function GameScreen() {
   const gamePaused = useAppStore((state) => state.gamePaused);
   const clearGame = useAppStore((state) => state.clearGame);
   const rematch = useAppStore((state) => state.rematch);
-  const dispatchGameAction = useAppStore((state) => state.dispatchGameAction);
+  const dispatchLocalGameAction = useAppStore((state) => state.dispatchGameAction);
   const pauseGame = useAppStore((state) => state.pauseGame);
   const unpauseGame = useAppStore((state) => state.unpauseGame);
   const adminMode = useAppStore((state) => state.adminMode);
@@ -831,13 +880,30 @@ export function GameScreen() {
   const grantAllProgressCards = useAppStore((state) => state.grantAllProgressCards);
   const openSettings = useAppStore((state) => state.openSettings);
   const settings = useAppStore((state) => state.settings);
+  const onlineCredentials = useOnlineStore((state) => state.credentials);
+  const onlineRoom = useOnlineStore((state) => state.room);
+  const onlineError = useOnlineStore((state) => state.error);
+  const onlineActionPending = useOnlineStore((state) => state.actionPending);
+  const onlineCommandPending = useOnlineStore((state) => state.commandPending);
+  const initializeOnline = useOnlineStore((state) => state.initialize);
+  const submitOnlineAction = useOnlineStore((state) => state.submitAction);
+  const rematchOnline = useOnlineStore((state) => state.rematch);
+  const pauseOnlineMatch = useOnlineStore((state) => state.pauseMatch);
+  const unpauseOnlineMatch = useOnlineStore((state) => state.unpauseMatch);
+  const setOnlineDebugMode = useOnlineStore((state) => state.setDebugMode);
+  const leaveOnlineRoom = useOnlineStore((state) => state.leaveRoom);
+  const isOnlineMatch = onlineRoom?.game !== null && onlineRoom?.game !== undefined;
+  const onlineViewerPlayerId = isOnlineMatch ? onlineRoom.viewerPlayerId : null;
+  const onlineViewerIsHost = isOnlineMatch && onlineRoom.viewerPlayerId === onlineRoom.hostPlayerId;
+  const dispatchGameAction = isOnlineMatch ? submitOnlineAction : dispatchLocalGameAction;
   const [showDebug, setShowDebug] = useState(false);
   const [inspectedTarget, setInspectedTarget] = useState<BoardTarget | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [localActionError, setActionError] = useState<string | null>(null);
+  const actionError = onlineError?.message ?? localActionError;
   const [constructionType, setConstructionType] = useState<ConstructionType | null>(null);
   const [boardBuildMenu, setBoardBuildMenu] = useState<BoardBuildMenuState | null>(null);
   const [knightBoardMenu, setKnightBoardMenu] = useState<KnightBoardMenuState | null>(null);
-  const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [tradeModalTurnKey, setTradeModalTurnKey] = useState<string | null>(null);
   const [tradeOffered, setTradeOffered] = useState<ResourceBundle>(resourceBundle([]));
   const [tradeRequested, setTradeRequested] = useState<ResourceBundle>(resourceBundle([]));
   const [progressCardIntentId, setProgressCardIntentId] = useState<CardInstanceId | null>(null);
@@ -861,6 +927,18 @@ export function GameScreen() {
   const [dismissedLongestRoadNoticeKey, setDismissedLongestRoadNoticeKey] = useState<string | null>(
     null,
   );
+  const currentTradeTurnKey =
+    gameState === null
+      ? null
+      : `${gameState.config.gameId}:${gameState.turn.turnNumber}:${gameState.turn.activePlayerId ?? 'none'}`;
+  const tradeModalOpen = currentTradeTurnKey !== null && tradeModalTurnKey === currentTradeTurnKey;
+
+  useEffect(() => {
+    if (gameState === null && onlineCredentials !== null && onlineRoom === null) {
+      void initializeOnline();
+    }
+  }, [gameState, initializeOnline, onlineCredentials, onlineRoom]);
+
   const longestRoadAward = recentGameEvents.find(
     (event): event is Extract<GameEvent, { readonly type: 'LONGEST_ROAD_CHANGED' }> =>
       event.type === 'LONGEST_ROAD_CHANGED' && event.playerId !== null,
@@ -929,12 +1007,17 @@ export function GameScreen() {
     [gameState],
   );
   const partyLeader = orderedPlayerConfigs[0];
+  const partyLeaderName =
+    (isOnlineMatch
+      ? onlineRoom.players.find((player) => player.id === onlineRoom.hostPlayerId)?.name
+      : partyLeader?.name) ?? 'Party leader';
   const potentialConstructionTargets = useMemo<PotentialConstructionTargets>(() => {
     const actorId = gameState?.turn.activePlayerId;
     if (
       gameState === null ||
       actorId === null ||
       actorId === undefined ||
+      (isOnlineMatch && actorId !== onlineViewerPlayerId) ||
       gameState.turn.phase !== 'ACTION_PHASE'
     ) {
       return { roadIds: [], houseIds: [], cityIds: [], knightIds: [], wallIds: [] };
@@ -946,7 +1029,7 @@ export function GameScreen() {
       knightIds: gameState.kn === null ? [] : getLegalKnightPlacementVertexIds(gameState, actorId),
       wallIds: gameState.kn === null ? [] : getLegalWallVertexIds(gameState, actorId),
     };
-  }, [gameState]);
+  }, [gameState, isOnlineMatch, onlineViewerPlayerId]);
   const eligibleKnightIds = useMemo<Readonly<Record<KnightCommand, readonly KnightId[]>>>(() => {
     const actorId = gameState?.turn.activePlayerId;
     const player =
@@ -954,6 +1037,7 @@ export function GameScreen() {
     if (
       gameState === null ||
       player === undefined ||
+      (isOnlineMatch && actorId !== onlineViewerPlayerId) ||
       gameState.kn === null ||
       gameState.turn.phase !== 'ACTION_PHASE' ||
       gameState.pendingInteraction !== null
@@ -971,7 +1055,7 @@ export function GameScreen() {
         .filter((knight) => knightMovementReason(gameState, player, knight) === null)
         .map((knight) => knight.id),
     };
-  }, [gameState]);
+  }, [gameState, isOnlineMatch, onlineViewerPlayerId]);
   const emphasizedVertexIds = useMemo<readonly VertexId[]>(
     () =>
       knBoardAction?.type === 'MOVE_KNIGHT' && knBoardAction.chaseVertexId !== null
@@ -981,6 +1065,16 @@ export function GameScreen() {
   );
   const selectableTargets = useMemo<readonly BoardTarget[]>(() => {
     if (gameState === null) return [];
+    if (
+      isOnlineMatch &&
+      gameState.turn.activePlayerId !== onlineViewerPlayerId &&
+      !(
+        gameState.pendingInteraction?.type === 'KN_SELECTION' &&
+        gameState.pendingInteraction.playerId === onlineViewerPlayerId
+      )
+    ) {
+      return [];
+    }
     if (knBoardAction !== null) {
       return knBoardAction.eligibleVertexIds.map((id) => ({ kind: 'VERTEX' as const, id }));
     }
@@ -996,6 +1090,7 @@ export function GameScreen() {
     const knChoice =
       gameState.pendingInteraction?.type === 'KN_SELECTION' ? gameState.pendingInteraction : null;
     if (knChoice !== null) {
+      if (isOnlineMatch && knChoice.playerId !== onlineViewerPlayerId) return [];
       if (knChoice.purpose === 'SMITH_KNIGHT' || knChoice.purpose === 'DESERTER_KNIGHT') {
         const eligibleKnightIds = new Set(knChoice.eligibleIds);
         return Object.values(gameState.players)
@@ -1035,23 +1130,35 @@ export function GameScreen() {
       }
     }
     if (gameState.turn.phase === 'SETUP_PLACE_HOUSE') {
+      if (isOnlineMatch && gameState.turn.activePlayerId !== onlineViewerPlayerId) return [];
       return getLegalSetupHouseVertexIds(gameState).map((id) => ({ kind: 'VERTEX', id }));
     }
     if (gameState.turn.phase === 'SETUP_PLACE_ROAD') {
+      if (isOnlineMatch && gameState.turn.activePlayerId !== onlineViewerPlayerId) return [];
       return getLegalSetupRoadEdgeIds(gameState).map((id) => ({ kind: 'EDGE', id }));
     }
     const actorId = gameState.turn.activePlayerId;
     if (
       gameState.turn.phase === 'CARD_RESOLUTION' &&
       gameState.pendingInteraction?.type === 'PLACE_FREE_ROADS' &&
-      actorId !== null
+      actorId !== null &&
+      (!isOnlineMatch || actorId === onlineViewerPlayerId)
     ) {
       return getLegalFreeRoadEdgeIds(gameState, actorId).map((id) => ({ kind: 'EDGE', id }));
     }
-    if (gameState.turn.phase === 'MOVE_ROBBER' && actorId !== null) {
+    if (
+      gameState.turn.phase === 'MOVE_ROBBER' &&
+      actorId !== null &&
+      (!isOnlineMatch || actorId === onlineViewerPlayerId)
+    ) {
       return getValidRobberHexIds(gameState, actorId).map((id) => ({ kind: 'HEX', id }));
     }
-    if (gameState.turn.phase !== 'ACTION_PHASE' || actorId === null) return [];
+    if (
+      gameState.turn.phase !== 'ACTION_PHASE' ||
+      actorId === null ||
+      (isOnlineMatch && actorId !== onlineViewerPlayerId)
+    )
+      return [];
     if (constructionType === 'ROAD') {
       return getValidRoadEdgeIds(gameState, actorId).map((id) => ({ kind: 'EDGE', id }));
     }
@@ -1075,8 +1182,10 @@ export function GameScreen() {
     constructionType,
     eligibleKnightIds,
     gameState,
+    isOnlineMatch,
     knBoardAction,
     knightCommand,
+    onlineViewerPlayerId,
     potentialConstructionTargets,
   ]);
   const constructionAvailability = useMemo(() => {
@@ -1085,13 +1194,14 @@ export function GameScreen() {
       gameState === null ||
       actorId === null ||
       actorId === undefined ||
+      (isOnlineMatch && actorId !== onlineViewerPlayerId) ||
       gameState.turn.phase !== 'ACTION_PHASE'
     )
       return [];
     return (['ROAD', 'HOUSE', 'MANSION'] as const).map((type) =>
       getConstructionAvailability(gameState, actorId, type),
     );
-  }, [gameState]);
+  }, [gameState, isOnlineMatch, onlineViewerPlayerId]);
   const playerColors = useMemo<Readonly<Record<string, string>>>(() => {
     if (gameState === null) return {};
     return Object.fromEntries(
@@ -1174,17 +1284,23 @@ export function GameScreen() {
       event.type === 'WEDDING_CARDS_TRANSFERRED',
   );
   const resourceFlyovers = useMemo(
-    () => productionFlyovers(recentGameEvents, gameState),
-    [gameState, recentGameEvents],
+    () =>
+      productionFlyovers(
+        recentGameEvents,
+        gameState,
+        onlineViewerPlayerId ?? gameState?.turn.activePlayerId ?? null,
+        isOnlineMatch,
+      ),
+    [gameState, isOnlineMatch, onlineViewerPlayerId, recentGameEvents],
   );
   const progressCardFlyovers = useMemo(
     () =>
       progressCardMovementFlyovers(
         recentGameEvents,
         gameState,
-        gameState?.turn.activePlayerId ?? null,
+        onlineViewerPlayerId ?? gameState?.turn.activePlayerId ?? null,
       ),
-    [gameState, recentGameEvents],
+    [gameState, onlineViewerPlayerId, recentGameEvents],
   );
   const latestNumberTokenSwapKey = latestNumberTokenSwapEventKey(gameEventHistory);
 
@@ -1217,6 +1333,17 @@ export function GameScreen() {
       : { hexId: reclaimed.hexId, fromResourceId: reclaimed.fromResourceId };
   }, [recentGameEvents]);
   if (gameState === null) {
+    if (onlineCredentials !== null) {
+      return (
+        <main className="online-lobby-screen online-lobby-screen--loading">
+          <section>
+            <span className="online-loader" aria-hidden="true" />
+            <h1>Restoring online match</h1>
+            <p>{onlineError?.message ?? 'Reconnecting to your private seat…'}</p>
+          </section>
+        </main>
+      );
+    }
     return <Navigate to="/lobby" replace />;
   }
 
@@ -1224,6 +1351,8 @@ export function GameScreen() {
     gameState.turn.activePlayerId === null
       ? undefined
       : gameState.players[gameState.turn.activePlayerId];
+  const viewerPlayer =
+    onlineViewerPlayerId === null ? activePlayer : gameState.players[onlineViewerPlayerId];
   let progressTooltipResetIndex = -1;
   for (let index = gameState.actionHistory.length - 1; index >= 0; index -= 1) {
     if (
@@ -1247,6 +1376,8 @@ export function GameScreen() {
   const discardPlayerId = discardInteraction?.queue[0];
   const discardPlayer =
     discardPlayerId === undefined ? undefined : gameState.players[discardPlayerId];
+  const controlledDiscardPlayer =
+    isOnlineMatch && discardPlayerId !== onlineViewerPlayerId ? undefined : discardPlayer;
   const requiredDiscardCount =
     discardPlayerId === undefined ? undefined : discardInteraction?.requiredCounts[discardPlayerId];
   const selectedDiscardResources =
@@ -1320,7 +1451,9 @@ export function GameScreen() {
     'METROPOLIS_CITY',
   ]);
   const knBoardChoice =
-    knChoiceInteraction !== null && knBoardChoicePurposes.has(knChoiceInteraction.purpose)
+    knChoiceInteraction !== null &&
+    (!isOnlineMatch || knChoiceInteraction.playerId === onlineViewerPlayerId) &&
+    knBoardChoicePurposes.has(knChoiceInteraction.purpose)
       ? knChoiceInteraction
       : null;
   const inventorSelectionActive =
@@ -1346,6 +1479,7 @@ export function GameScreen() {
       : null;
   const knTrayChoice =
     knChoiceInteraction !== null &&
+    (!isOnlineMatch || knChoiceInteraction.playerId === onlineViewerPlayerId) &&
     [
       'AQUEDUCT_RESOURCE',
       'DEFENDER_TIE_DECK',
@@ -1373,7 +1507,10 @@ export function GameScreen() {
       ? knTrayChoice.context.selectedHexId
       : '';
   const knTrackChoice =
-    knChoiceInteraction?.purpose === 'WAR_DRUMS_POSITION' ? knChoiceInteraction : null;
+    knChoiceInteraction?.purpose === 'WAR_DRUMS_POSITION' &&
+    (!isOnlineMatch || knChoiceInteraction.playerId === onlineViewerPlayerId)
+      ? knChoiceInteraction
+      : null;
   const knDirectHandChoice =
     knTrayChoice !== null &&
     [
@@ -1420,7 +1557,7 @@ export function GameScreen() {
     gameState.pendingInteraction?.type === 'PLACE_FREE_ROADS' ? gameState.pendingInteraction : null;
   const tradeOpponents = orderedPlayerConfigs.flatMap((config) => {
     const player = gameState.players[config.id];
-    return player === undefined || player.id === activePlayer?.id ? [] : [player];
+    return player === undefined || player.id === viewerPlayer?.id ? [] : [player];
   });
   const bankTradeRatios =
     activePlayer === undefined
@@ -1480,6 +1617,12 @@ export function GameScreen() {
                           : constructionInstruction;
 
   const leaveGame = (destination: '/' | '/lobby') => {
+    if (isOnlineMatch) {
+      void leaveOnlineRoom().then(() => {
+        void navigate(destination === '/lobby' ? '/online' : destination, { replace: true });
+      });
+      return;
+    }
     void navigate(destination, { flushSync: true });
     clearGame();
   };
@@ -1502,7 +1645,7 @@ export function GameScreen() {
       setKnightCommand(null);
       setKNBoardAction(null);
       if (!keepConstructionMode) setConstructionType(null);
-      if (!keepTradeModal) setTradeModalOpen(false);
+      if (!keepTradeModal) setTradeModalTurnKey(null);
     }
   };
 
@@ -1772,13 +1915,13 @@ export function GameScreen() {
     setActionError(null);
     setTradeOffered(offered);
     setTradeRequested(resourceBundle([]));
-    setTradeModalOpen(true);
+    setTradeModalTurnKey(currentTradeTurnKey);
     setKNBoardAction(null);
   };
 
   const toggleTradeModal = () => {
     if (tradeModalOpen) {
-      setTradeModalOpen(false);
+      setTradeModalTurnKey(null);
       setTradeOffered(resourceBundle([]));
       setTradeRequested(resourceBundle([]));
       setActionError(null);
@@ -1840,7 +1983,7 @@ export function GameScreen() {
     setBoardBuildMenu(null);
     setKnightBoardMenu(null);
     setKnightCommand(null);
-    setTradeModalOpen(false);
+    setTradeModalTurnKey(null);
     setActionError(null);
   };
 
@@ -1979,7 +2122,7 @@ export function GameScreen() {
       requested,
     });
     if (result?.ok) {
-      setTradeModalOpen(false);
+      setTradeModalTurnKey(null);
       setTradeOffered(resourceBundle([]));
       setTradeRequested(resourceBundle([]));
     }
@@ -2111,7 +2254,7 @@ export function GameScreen() {
     setActionError(null);
     setConstructionType(null);
     setBoardBuildMenu(null);
-    setTradeModalOpen(false);
+    setTradeModalTurnKey(null);
   };
 
   const playKNProgressCard = (cardInstanceId: CardInstanceId) => {
@@ -2195,7 +2338,7 @@ export function GameScreen() {
     setActionError(null);
     setConstructionType(null);
     setBoardBuildMenu(null);
-    setTradeModalOpen(false);
+    setTradeModalTurnKey(null);
   };
 
   const confirmKNProgressCardPlay = (cardInstanceId: CardInstanceId) => {
@@ -2350,6 +2493,20 @@ export function GameScreen() {
   };
 
   const startRematch = () => {
+    if (isOnlineMatch) {
+      if (!onlineViewerIsHost) {
+        setRematchError('Waiting for the host to start the rematch.');
+        return;
+      }
+      void rematchOnline().then((started) => {
+        if (!started) {
+          setRematchError(useOnlineStore.getState().error?.message ?? 'Could not start rematch.');
+        } else {
+          setRematchError(null);
+        }
+      });
+      return;
+    }
     const result = rematch();
     if (!result.ok) {
       setRematchError(result.issues.map((issue) => issue.message).join(' '));
@@ -2359,7 +2516,7 @@ export function GameScreen() {
     setActionError(null);
     setConstructionType(null);
     setBoardBuildMenu(null);
-    setTradeModalOpen(false);
+    setTradeModalTurnKey(null);
     setProgressCardIntentId(null);
     setKNProgressCardIntentId(null);
     setKNBoardAction(null);
@@ -2378,14 +2535,26 @@ export function GameScreen() {
   };
 
   const toggleAdminResources = () => {
+    if (isOnlineMatch) {
+      const enabling = !adminMode;
+      void setOnlineDebugMode(enabling).then((updated) => {
+        if (!updated) return;
+        setActionError(
+          enabling
+            ? 'Developer mode enabled: you have 99 of every good, one of every Progress Card, and robber rolls are ignored.'
+            : 'Developer mode disabled. Robber rolls are restored.',
+        );
+      });
+      return;
+    }
     toggleAdminMode();
     if (!adminMode) {
       setActionError(
-        `Admin mode enabled: ${activePlayer?.name ?? 'Active player'} has 99 of every resource, and seven-roll discards are skipped.`,
+        `Developer mode enabled: ${activePlayer?.name ?? 'Active player'} has 99 of every good, one of every Progress Card, and robber rolls are ignored.`,
       );
       return;
     }
-    setActionError('Admin mode disabled. Standard seven-roll discards are restored.');
+    setActionError('Developer mode disabled. Robber rolls are restored.');
   };
 
   const roadAvailability = constructionAvailability.find((option) => option.type === 'ROAD');
@@ -2395,6 +2564,8 @@ export function GameScreen() {
     activePlayer === undefined ? 0 : getLegalWallVertexIds(gameState, activePlayer.id).length;
   const canUseTurnActions =
     activePlayer !== undefined &&
+    (!isOnlineMatch || activePlayer.id === onlineViewerPlayerId) &&
+    !onlineActionPending &&
     gameState.turn.phase === 'ACTION_PHASE' &&
     gameState.pendingInteraction === null;
   const boardBuildChoices: readonly BoardBuildChoice[] =
@@ -2454,6 +2625,9 @@ export function GameScreen() {
     knChoiceInteraction?.sourceCardId !== undefined &&
     knChoiceInteraction.canCancel &&
     knChoiceInteraction.context.committed !== true;
+  const recentActionBoostsTimer = recentGameEvents.some((event) =>
+    TIMER_BOOST_EVENT_TYPES.has(event.type),
+  );
   const timedPhase =
     gameState.turn.phase === 'SETUP_PLACE_HOUSE'
       ? {
@@ -2492,7 +2666,9 @@ export function GameScreen() {
                 }
               : gameState.turn.phase === 'ACTION_PHASE'
                 ? {
-                    duration: gameState.config.turnTimeSeconds ?? 60,
+                    duration: recentActionBoostsTimer
+                      ? 20
+                      : (gameState.config.turnTimeSeconds ?? 60),
                     key: `actions-${gameState.turn.turnNumber}`,
                     prompt: 'Take Actions',
                     actorId: gameState.turn.activePlayerId,
@@ -2533,29 +2709,14 @@ export function GameScreen() {
           : knBoardChoice?.purpose === 'SMITH_KNIGHT'
             ? 'Upgrade Knight'
             : null;
-  const timerBoostEventTypes = new Set([
-    'BUILDING_PLACED',
-    'BUILDING_UPGRADED',
-    'ROAD_BUILT',
-    'TRADE_COMPLETED',
-    'COMMERCIAL_HARBOR_EXCHANGED',
-    'PROGRESS_CARD_BOUGHT',
-    'PROGRESS_CARD_PLAYED',
-    'KNIGHT_BUILT',
-    'KNIGHT_ACTIVATED',
-    'KNIGHT_UPGRADED',
-    'KNIGHT_MOVED',
-    'KNIGHT_DISPLACED',
-    'WALL_BUILT',
-    'IMPROVEMENT_BOUGHT',
-    'KN_PROGRESS_CARD_RESOLVED',
-    'MERCHANT_MOVED',
-    'METROPOLIS_CHANGED',
-  ]);
   let lastTimerBoostIndex = -1;
   for (let index = gameState.actionHistory.length - 1; index >= 0; index -= 1) {
     const entry = gameState.actionHistory[index];
-    if (entry?.eventTypes.some((eventType) => timerBoostEventTypes.has(eventType))) {
+    if (
+      entry?.eventTypes.some((eventType) =>
+        TIMER_BOOST_EVENT_TYPES.has(eventType as GameEvent['type']),
+      )
+    ) {
       lastTimerBoostIndex = index;
       break;
     }
@@ -2608,8 +2769,12 @@ export function GameScreen() {
           className="game-utility-button icon-button game-utility-button--pause"
           variant="ghost"
           aria-label="Pause match"
-          title={`${partyLeader?.name ?? 'Party leader'} can pause the match`}
-          onClick={pauseGame}
+          title={`${partyLeaderName} can pause the match`}
+          disabled={isOnlineMatch && !onlineViewerIsHost}
+          onClick={() => {
+            if (isOnlineMatch) void pauseOnlineMatch();
+            else pauseGame();
+          }}
         >
           <span aria-hidden="true">Ⅱ</span>
         </Button>
@@ -2630,15 +2795,15 @@ export function GameScreen() {
               aria-label={
                 adminMode
                   ? 'Disable admin mode'
-                  : 'Enable admin mode and give active player 99 of every resource'
+                  : 'Enable developer mode with 99 goods, every Progress Card, and no robber'
               }
               aria-pressed={adminMode}
               title={
                 adminMode
-                  ? 'Disable admin mode and restore seven-roll discards'
-                  : 'Enable admin mode: grant 99 of every resource and skip seven-roll discards'
+                  ? 'Disable developer mode and restore robber rolls'
+                  : 'Grant 99 of every good, one of every Progress Card, and ignore robber rolls'
               }
-              disabled={!adminMode && activePlayer === undefined}
+              disabled={onlineCommandPending || (!adminMode && activePlayer === undefined)}
               onClick={toggleAdminResources}
             >
               <span className="game-utility-admin-mark" aria-hidden="true">
@@ -2646,19 +2811,21 @@ export function GameScreen() {
                 <strong>{adminMode ? 'ON' : '99'}</strong>
               </span>
             </Button>
-            <Button
-              className="game-utility-button game-utility-button--progress-dev"
-              variant="ghost"
-              aria-label="Give the active player one of every Progress Card"
-              title="Developer grant: add one fresh copy of every Progress Card"
-              disabled={activePlayer === undefined}
-              onClick={grantAllProgressCards}
-            >
-              <span className="game-utility-admin-mark" aria-hidden="true">
-                <small>Cards</small>
-                <strong>+All</strong>
-              </span>
-            </Button>
+            {isOnlineMatch ? null : (
+              <Button
+                className="game-utility-button game-utility-button--progress-dev"
+                variant="ghost"
+                aria-label="Give the active player one of every Progress Card"
+                title="Developer grant: add one fresh copy of every Progress Card"
+                disabled={activePlayer === undefined}
+                onClick={grantAllProgressCards}
+              >
+                <span className="game-utility-admin-mark" aria-hidden="true">
+                  <small>Cards</small>
+                  <strong>+All</strong>
+                </span>
+              </Button>
+            )}
             <label className="game-utility-toggle" title="Debug IDs">
               <input
                 className="visually-hidden"
@@ -2764,11 +2931,16 @@ export function GameScreen() {
               recipients={responseRecipients}
               playerColors={playerColors}
               paused={gamePaused}
+              viewerPlayerId={onlineViewerPlayerId}
+              deadlineAt={isOnlineMatch ? onlineRoom?.game?.tradeDeadlineAt : null}
+              serverAuthoritative={isOnlineMatch}
               errorMessage={actionError}
               onRespond={respondToPlayerTrade}
               onConfirm={confirmPlayerTrade}
               onCancel={() => closePlayerTradeOffer(false)}
-              onExpire={() => closePlayerTradeOffer(true)}
+              onExpire={() => {
+                if (!isOnlineMatch) closePlayerTradeOffer(true);
+              }}
               includeCommodities={gameState.kn !== null}
             />
           )}
@@ -2874,7 +3046,11 @@ export function GameScreen() {
                     player={player}
                     position={index + 1}
                     active={gameState.turn.activePlayerId === player.id}
-                    score={calculateScore(gameState, player.id)}
+                    score={
+                      isOnlineMatch
+                        ? calculatePublicScore(gameState, player.id)
+                        : calculateScore(gameState, player.id)
+                    }
                     longestRoadLength={calculateLongestRoadLength(gameState, player.id)}
                     robberCount={player.playedForceCards}
                     holdsLongestRoad={gameState.bonuses.longestRoadHolderId === player.id}
@@ -2882,6 +3058,9 @@ export function GameScreen() {
                     winner={gameState.winnerId === player.id}
                     kNMode={gameState.kn !== null}
                     knProgressCards={gameState.kn?.progressCards}
+                    {...(onlineRoom?.game?.playerCards[player.id] === undefined
+                      ? {}
+                      : { publicCardInfo: onlineRoom.game.playerCards[player.id] })}
                     cityCount={
                       Object.values(gameState.board.vertices).filter(
                         (vertex) =>
@@ -2904,10 +3083,7 @@ export function GameScreen() {
         </aside>
 
         <footer className="game-dock" aria-label="Active player resource hand">
-          {!tradeModalOpen ||
-          gameState.turn.phase !== 'ACTION_PHASE' ||
-          gameState.pendingInteraction !== null ||
-          activePlayer === undefined ? null : (
+          {!tradeModalOpen || !canUseTurnActions || activePlayer === undefined ? null : (
             <TradeModal
               player={activePlayer}
               opponents={tradeOpponents}
@@ -2919,7 +3095,7 @@ export function GameScreen() {
               requested={tradeRequested}
               errorMessage={actionError}
               onClose={() => {
-                setTradeModalOpen(false);
+                setTradeModalTurnKey(null);
                 setTradeOffered(resourceBundle([]));
                 setTradeRequested(resourceBundle([]));
                 setActionError(null);
@@ -2932,9 +3108,9 @@ export function GameScreen() {
               includeCommodities={gameState.kn !== null}
             />
           )}
-          {discardPlayer === undefined || requiredDiscardCount === undefined ? null : (
+          {controlledDiscardPlayer === undefined || requiredDiscardCount === undefined ? null : (
             <DiscardModal
-              player={discardPlayer}
+              player={controlledDiscardPlayer}
               requiredCount={requiredDiscardCount}
               selectedResources={selectedDiscardResources}
               errorMessage={actionError}
@@ -2961,17 +3137,19 @@ export function GameScreen() {
           <HandTray
             state={gameState}
             player={
-              discardPlayer ??
-              (knDirectHandChoice !== null
-                ? gameState.players[knDirectHandChoice.playerId]
-                : knChoiceInteraction?.purpose === 'AQUEDUCT_RESOURCE'
-                  ? gameState.players[knChoiceInteraction.playerId]
-                  : activePlayer)
+              isOnlineMatch
+                ? viewerPlayer
+                : (discardPlayer ??
+                  (knDirectHandChoice !== null
+                    ? gameState.players[knDirectHandChoice.playerId]
+                    : knChoiceInteraction?.purpose === 'AQUEDUCT_RESOURCE'
+                      ? gameState.players[knChoiceInteraction.playerId]
+                      : activePlayer))
             }
             animateResources={animateResourceHand}
             tooltipResetSignal={progressTooltipResetSignal}
             discardSelection={selectedDiscardResources}
-            {...(discardPlayer === undefined
+            {...(controlledDiscardPlayer === undefined
               ? {}
               : { onSelectResourceForDiscard: selectResourceForDiscard })}
             {...(canUseTurnActions &&
@@ -3050,6 +3228,10 @@ export function GameScreen() {
               dice={gameState.turn.dice}
               knDice={gameState.turn.knDice}
               kNMode={gameState.kn !== null}
+              disabled={
+                onlineActionPending ||
+                (isOnlineMatch && gameState.turn.activePlayerId !== onlineViewerPlayerId)
+              }
               onRoll={rollDice}
             />
 
@@ -3078,16 +3260,20 @@ export function GameScreen() {
                   prompt={timedPhase.prompt}
                   boostSignal={timerBoostSignal}
                   paused={gamePaused}
+                  deadlineAt={isOnlineMatch ? onlineRoom.game?.deadlineAt : null}
                   onUrgentTick={() => {
                     const silentPhase =
                       gameState.turn.phase === 'WAITING_FOR_ROLL' ||
                       gameState.turn.phase === 'MOVE_ROBBER' ||
                       gameState.turn.phase === 'CHOOSE_STEAL_TARGET';
-                    if (settings.timerSounds && !silentPhase) {
+                    const viewerOwnsTimer =
+                      !isOnlineMatch || timedPhase.actorId === onlineViewerPlayerId;
+                    if (settings.timerSounds && !silentPhase && viewerOwnsTimer) {
                       audioManager.playTimerTick(settings.masterVolume, settings.sfxVolume);
                     }
                   }}
                   onExpire={() => {
+                    if (isOnlineMatch) return;
                     const actorId = timedPhase.actorId;
                     if (actorId === null) return;
                     const result = dispatchGameAction({
@@ -3301,7 +3487,9 @@ export function GameScreen() {
         />
       )}
 
-      {stealInteraction === null || activePlayer === undefined ? null : (
+      {stealInteraction === null ||
+      activePlayer === undefined ||
+      (isOnlineMatch && stealInteraction.playerId !== onlineViewerPlayerId) ? null : (
         <StealTargetModal
           playerName={activePlayer.name}
           targets={stealTargets}
@@ -3309,7 +3497,9 @@ export function GameScreen() {
           onChoose={chooseStealTarget}
         />
       )}
-      {progressCardModalId === null || activePlayer === undefined ? null : (
+      {progressCardModalId === null ||
+      activePlayer === undefined ||
+      (isOnlineMatch && activePlayer.id !== onlineViewerPlayerId) ? null : (
         <ProgressCardChoiceModal
           key={progressCardModalId}
           state={gameState}
@@ -3327,6 +3517,7 @@ export function GameScreen() {
         />
       )}
       {knChoiceInteraction === null ||
+      (isOnlineMatch && knChoiceInteraction.playerId !== onlineViewerPlayerId) ||
       knBoardChoice !== null ||
       knTrayChoice !== null ||
       knTrackChoice !== null ? null : (
@@ -3398,10 +3589,20 @@ export function GameScreen() {
             <small>Match paused</small>
             <h2 id="game-paused-title">The table is on hold</h2>
             <p>The board and all timers are frozen. Only the party leader may continue.</p>
-            <Button variant="primary" onClick={unpauseGame}>
-              Unpause match
-            </Button>
-            <strong>{partyLeader?.name ?? 'Party leader'}</strong>
+            {!isOnlineMatch || onlineViewerIsHost ? (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (isOnlineMatch) void unpauseOnlineMatch();
+                  else unpauseGame();
+                }}
+              >
+                Unpause match
+              </Button>
+            ) : (
+              <span className="online-waiting-host">Waiting for the host to continue…</span>
+            )}
+            <strong>{partyLeaderName}</strong>
           </div>
         </section>
       )}
@@ -3417,10 +3618,18 @@ export function GameScreen() {
       <Modal
         open={leaveDestination !== null}
         title="Leave this match?"
-        description="The current match is not saved and cannot be resumed."
+        description={
+          isOnlineMatch
+            ? 'You will leave your online seat and return to the menu.'
+            : 'The current match is not saved and cannot be resumed.'
+        }
         onClose={() => setLeaveDestination(null)}
       >
-        <p>Your lobby players and settings remain available if you return to the lobby.</p>
+        <p>
+          {isOnlineMatch
+            ? 'A disconnected seat remains on the board, but this browser will forget its private reconnect token.'
+            : 'Your lobby players and settings remain available if you return to the lobby.'}
+        </p>
         <footer className="modal__actions">
           <Button data-modal-autofocus variant="ghost" onClick={() => setLeaveDestination(null)}>
             Continue match
