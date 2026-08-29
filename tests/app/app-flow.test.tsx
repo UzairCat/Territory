@@ -109,6 +109,7 @@ describe('application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     const timerSounds = screen.getByRole('checkbox', { name: /Timer warning sounds/i });
+    expect(screen.getByRole('slider', { name: /Medieval music/i })).toHaveValue('34');
     expect(timerSounds).toBeChecked();
     await user.click(timerSounds);
     expect(useAppStore.getState().settings.timerSounds).toBe(false);
@@ -214,8 +215,10 @@ describe('application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Open profile gallery for Alex' }));
     const gallery = screen.getByRole('dialog', { name: 'Alex’s profile' });
     expect(
-      within(gallery).getByRole('button', { name: 'Choose Cartographer profile picture' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      within(gallery)
+        .getAllByRole('button', { name: /profile picture$/ })
+        .filter((button) => button.getAttribute('aria-pressed') === 'true'),
+    ).toHaveLength(1);
     expect(within(gallery).getAllByRole('button', { name: /profile picture$/ })).toHaveLength(8);
     expect(within(gallery).getAllByRole('button', { name: /^Choose / })).toHaveLength(22);
 

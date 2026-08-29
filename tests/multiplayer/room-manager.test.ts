@@ -44,6 +44,22 @@ afterEach(() => {
 });
 
 describe('authoritative online rooms', () => {
+  it('randomly assigns different preset portraits to joining online guests', () => {
+    const manager = new RoomManager({ onRoomChanged: () => undefined });
+    managers.push(manager);
+    const host = manager.create('Host', 'host-random-avatar-socket');
+    expect(host.ok).toBe(true);
+    if (!host.ok) throw new Error(host.error.message);
+    const guest = manager.join(host.credentials.roomCode, 'Guest', 'guest-random-avatar-socket');
+    expect(guest.ok).toBe(true);
+    if (!guest.ok) throw new Error(guest.error.message);
+
+    const avatars = manager
+      .view(manager.rooms.get(host.credentials.roomCode)!, host.credentials.playerId)
+      .players.map((player) => player.avatarId);
+    expect(new Set(avatars)).toHaveProperty('size', 2);
+  });
+
   it('lets each guest choose a validated preset avatar and an unused lobby color', () => {
     const manager = new RoomManager({ onRoomChanged: () => undefined });
     managers.push(manager);

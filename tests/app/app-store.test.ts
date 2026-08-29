@@ -28,6 +28,19 @@ describe('application session store', () => {
     ]);
   });
 
+  it('randomly assigns unused preset portraits to new local players', () => {
+    const actions = useAppStore.getState();
+    actions.confirmLobbyResize(4);
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+    actions.addLobbyPlayer('Jo', PLAYER_COLORS[2]!.id);
+    actions.addLobbyPlayer('Rae', PLAYER_COLORS[3]!.id);
+
+    const avatarIds = useAppStore.getState().lobby.players.map((player) => player.avatarId);
+    expect(avatarIds.every((avatarId) => avatarId !== undefined)).toBe(true);
+    expect(new Set(avatarIds)).toHaveProperty('size', 4);
+  });
+
   it('creates a game only after the lobby becomes valid', () => {
     const actions = useAppStore.getState();
     expect(actions.beginGame().ok).toBe(false);

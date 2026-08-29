@@ -45,6 +45,20 @@ export function SettingsModal() {
           />
         </label>
 
+        <label className="field" htmlFor="music-volume">
+          <span>
+            Medieval music <output>{settings.musicVolume}%</output>
+          </span>
+          <input
+            id="music-volume"
+            type="range"
+            min="0"
+            max="100"
+            value={settings.musicVolume}
+            onChange={(event) => update({ musicVolume: Number(event.target.value) })}
+          />
+        </label>
+
         <label className="field" htmlFor="animation-speed">
           <span>Animation speed</span>
           <select

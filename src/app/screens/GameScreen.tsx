@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
 import { useAppStore } from '../stores/app-store';
@@ -1082,6 +1082,14 @@ export function GameScreen() {
   const onlineViewerPlayerId = isOnlineMatch ? onlineRoom.viewerPlayerId : null;
   const onlineViewerIsHost = isOnlineMatch && onlineRoom.viewerPlayerId === onlineRoom.hostPlayerId;
   const dispatchGameAction = isOnlineMatch ? submitOnlineAction : dispatchLocalGameAction;
+  const audioSessionId = gameState?.config.gameId ?? null;
+  const audioEventKey =
+    gameState === null || recentGameEvents.length === 0
+      ? null
+      : `${gameState.config.gameId}:${isOnlineMatch ? (onlineRoom.game?.revision ?? 0) : gameState.actionHistory.length}:${recentGameEvents
+          .map((event) => event.type)
+          .join(',')}`;
+  const lastPlayedAudioEventKey = useRef<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [inspectedTarget, setInspectedTarget] = useState<BoardTarget | null>(null);
   const [localActionError, setActionError] = useState<string | null>(null);
@@ -1156,8 +1164,32 @@ export function GameScreen() {
         };
 
   useEffect(() => {
-    audioManager.playEvents(recentGameEvents, settings.masterVolume, settings.sfxVolume);
-  }, [recentGameEvents, settings.masterVolume, settings.sfxVolume]);
+    if (audioSessionId === null) return undefined;
+    audioManager.startMusic();
+    return () => audioManager.stopMusic();
+  }, [audioSessionId]);
+
+  useEffect(() => {
+    audioManager.setMusicVolume(settings.masterVolume, settings.musicVolume);
+  }, [settings.masterVolume, settings.musicVolume]);
+
+  useEffect(() => {
+    if (audioEventKey === null || audioEventKey === lastPlayedAudioEventKey.current) return;
+    lastPlayedAudioEventKey.current = audioEventKey;
+    audioManager.playEvents(
+      recentGameEvents,
+      settings.masterVolume,
+      settings.sfxVolume,
+      isOnlineMatch ? onlineViewerPlayerId : null,
+    );
+  }, [
+    audioEventKey,
+    isOnlineMatch,
+    onlineViewerPlayerId,
+    recentGameEvents,
+    settings.masterVolume,
+    settings.sfxVolume,
+  ]);
 
   useEffect(() => {
     if (longestRoadNoticeKey === null) return undefined;

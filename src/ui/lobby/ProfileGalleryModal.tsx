@@ -104,7 +104,6 @@ function ProfileGalleryForm({
               />
               <span>
                 <strong>{avatar.displayName}</strong>
-                {avatar.id === DEFAULT_PLAYER_AVATAR_ID ? <small>Default</small> : null}
               </span>
               <i aria-hidden="true">✓</i>
             </button>

@@ -9,7 +9,7 @@ import type { GameEvent } from '../../engine/core/events';
 import { gameId, playerId } from '../../engine/core/ids';
 import type { ColorId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
 import type { PlayerCount } from '../../engine/content/types';
-import { DEFAULT_PLAYER_AVATAR_ID, type PlayerAvatarId } from '../../engine/content/avatars';
+import { randomAvailablePlayerAvatarId, type PlayerAvatarId } from '../../engine/content/avatars';
 import {
   grantDeveloperLoadout,
   grantDeveloperProgressCards,
@@ -29,6 +29,7 @@ export type AnimationSpeed = 'NORMAL' | 'FAST';
 export interface AppSettings {
   readonly masterVolume: number;
   readonly sfxVolume: number;
+  readonly musicVolume: number;
   readonly timerSounds: boolean;
   readonly reducedMotion: boolean;
   readonly animationSpeed: AnimationSpeed;
@@ -89,9 +90,16 @@ function createLobbySeed(): string {
   return createRandomToken('territory');
 }
 
+function randomUnitInterval(): number {
+  const randomValue = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(randomValue);
+  return (randomValue[0] ?? 0) / 4_294_967_296;
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   masterVolume: 80,
   sfxVolume: 80,
+  musicVolume: 34,
   timerSounds: true,
   reducedMotion: false,
   animationSpeed: 'NORMAL',
@@ -160,7 +168,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         id: playerId(createRandomToken('player')),
         name: name.trim(),
         colorId,
-        avatarId: DEFAULT_PLAYER_AVATAR_ID,
+        avatarId: randomAvailablePlayerAvatarId(
+          state.lobby.players.map((candidate) => candidate.avatarId),
+          randomUnitInterval(),
+        ),
       };
       return { lobby: { ...state.lobby, players: [...state.lobby.players, player] } };
     }),

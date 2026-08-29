@@ -12,6 +12,7 @@
     "dev:server": "tsx watch server/index.ts",
     "server": "tsx server/index.ts",
     "start": "NODE_ENV=production tsx server/index.ts",
+    "generate:audio": "node scripts/generate-audio-assets.mjs",
     "build": "tsc --noEmit && vite build",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit --pretty false",

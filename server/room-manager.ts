@@ -2,8 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { PLAYER_COLORS } from '../src/engine/content/colors';
 import {
-  DEFAULT_PLAYER_AVATAR_ID,
   isPlayerAvatarId,
+  randomAvailablePlayerAvatarId,
   type PlayerAvatarId,
 } from '../src/engine/content/avatars';
 import { createGame } from '../src/engine/core/create-game';
@@ -117,6 +117,13 @@ function roomCode(): string {
 
 function randomSeed(): string {
   return `online-${randomUUID()}`;
+}
+
+function randomAvatarId(room: RoomRecord | null): PlayerAvatarId {
+  return randomAvailablePlayerAvatarId(
+    room === null ? [] : [...room.members.values()].map((member) => member.avatarId),
+    randomBytes(4).readUInt32BE(0) / 4_294_967_296,
+  );
 }
 
 function canUseDeveloperControls(member: RoomMember): boolean {
@@ -273,7 +280,7 @@ export class RoomManager {
       id,
       name: displayName.trim(),
       colorId: PLAYER_COLORS[0]!.id,
-      avatarId: DEFAULT_PLAYER_AVATAR_ID,
+      avatarId: randomAvatarId(null),
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
@@ -344,7 +351,7 @@ export class RoomManager {
       id,
       name: displayName.trim(),
       colorId: color.id,
-      avatarId: DEFAULT_PLAYER_AVATAR_ID,
+      avatarId: randomAvatarId(room),
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
