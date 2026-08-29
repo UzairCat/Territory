@@ -3,9 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../../src/engine/core/create-game';
 import { isJsonSerializable } from '../../src/engine/core/json';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
+import { MAPS } from '../../src/engine/maps/maps';
 import { createTestConfig, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 describe('match creation', () => {
+  it.each(MAPS)('creates a match on $displayName', (map) => {
+    const result = createGame({
+      ...createTestConfig(),
+      mapId: map.id,
+      seed: `create-${map.id}`,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.keys(result.state.board.hexes)).toHaveLength(map.coordinates.length);
+    expect(Object.keys(result.state.board.ports)).toHaveLength(map.portPool.length);
+  });
+
   it('creates a deterministic serializable match shell from valid configuration', () => {
     const config = createTestConfig();
     const first = createGame(config);

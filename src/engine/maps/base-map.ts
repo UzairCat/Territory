@@ -51,7 +51,8 @@ const PORT_POOL: readonly PortPoolEntry[] = [
 
 export const BASE_MAP = {
   id: BASE_MAP_ID,
-  displayName: 'Base Map',
+  displayName: 'Base - Small',
+  landMassCount: 1,
   supportedPlayerCounts: [2, 3, 4],
   supportedModeIds: [CLASSIC_MODE_ID, KN_MODE_ID],
   coordinates: BASE_MAP_COORDINATES,

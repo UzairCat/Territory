@@ -41,10 +41,18 @@ interface HandTrayProps {
   readonly selectedHandResources?: ResourceBundle;
   readonly handResourceSelectionName?: string;
   readonly onSelectHandResource?: (resourceId: ResourceId) => void;
+  readonly resourceSelectionStartsPlayerTrade?: boolean;
   readonly warningResourceId?: ResourceId | null;
   readonly warningSignal?: number;
   readonly selectedKNProgressCardIds?: readonly CardInstanceId[];
   readonly onSelectKNProgressCard?: (cardInstanceId: CardInstanceId) => void;
+  readonly progressCardPlayIntentId?: CardInstanceId | null;
+  readonly knProgressCardPlayIntentId?: CardInstanceId | null;
+  readonly progressCardPlayErrorMessage?: string | null;
+  readonly onCancelProgressCardPlay?: () => void;
+  readonly onConfirmProgressCardPlay?: (cardInstanceId: CardInstanceId) => void;
+  readonly onCancelKNProgressCardPlay?: () => void;
+  readonly onConfirmKNProgressCardPlay?: (cardInstanceId: CardInstanceId) => void;
   readonly onPlayProgressCard: (cardInstanceId: CardInstanceId) => void;
   readonly onPlayKNProgressCard?: (cardInstanceId: CardInstanceId) => void;
 }
@@ -73,10 +81,18 @@ export function HandTray({
   selectedHandResources = {},
   handResourceSelectionName = 'for this choice',
   onSelectHandResource,
+  resourceSelectionStartsPlayerTrade = false,
   warningResourceId = null,
   warningSignal = 0,
   selectedKNProgressCardIds = [],
   onSelectKNProgressCard,
+  progressCardPlayIntentId = null,
+  knProgressCardPlayIntentId = null,
+  progressCardPlayErrorMessage = null,
+  onCancelProgressCardPlay,
+  onConfirmProgressCardPlay,
+  onCancelKNProgressCardPlay,
+  onConfirmKNProgressCardPlay,
   onPlayProgressCard,
   onPlayKNProgressCard = () => undefined,
 }: HandTrayProps) {
@@ -89,6 +105,16 @@ export function HandTray({
   const tooltipNeedsPointerExitRef = useRef(false);
   const tooltipNeedsFocusExitRef = useRef(false);
   const previousTooltipResetSignalRef = useRef(tooltipResetSignal);
+  const pinnedProgressCardIdRef = useRef<CardInstanceId | null>(progressCardPlayIntentId);
+  const pinnedKNProgressCardIdRef = useRef<CardInstanceId | null>(knProgressCardPlayIntentId);
+
+  useLayoutEffect(() => {
+    pinnedProgressCardIdRef.current = progressCardPlayIntentId;
+  }, [progressCardPlayIntentId]);
+
+  useLayoutEffect(() => {
+    pinnedKNProgressCardIdRef.current = knProgressCardPlayIntentId;
+  }, [knProgressCardPlayIntentId]);
 
   useLayoutEffect(() => {
     if (previousTooltipResetSignalRef.current === tooltipResetSignal) return;
@@ -132,9 +158,11 @@ export function HandTray({
     [
       'MEDICINE_CITY',
       'SMITH_KNIGHT',
-      'INTRIGUE_KNIGHT',
       'INVENTOR_FIRST_TOKEN',
       'INVENTOR_SECOND_TOKEN',
+      'RECLAMATION_HEX',
+      'RECLAMATION_RESOURCE',
+      'WAR_DRUMS_POSITION',
     ].includes(state.pendingInteraction.purpose) &&
     state.pendingInteraction.sourceCardId !== undefined &&
     state.kn?.progressCards[state.pendingInteraction.sourceCardId]?.ownerId === player?.id
@@ -207,8 +235,8 @@ export function HandTray({
           : `${player?.name ?? 'Player'} resource hand ${onSelectHandResource === undefined ? 'for discarding' : handResourceSelectionName}`
       }
       onScroll={() => {
-        setOpenTooltip(null);
-        setOpenKNTooltip(null);
+        if (progressCardPlayIntentId === null) setOpenTooltip(null);
+        if (knProgressCardPlayIntentId === null) setOpenKNTooltip(null);
       }}
     >
       <div className="resource-hand" aria-label="Resource cards">
@@ -236,9 +264,14 @@ export function HandTray({
               role={resourceSelector === undefined ? undefined : 'button'}
               tabIndex={resourceSelector === undefined ? undefined : 0}
               aria-label={
-                resourceSelector === undefined
+                resourceSelector === undefined || resourceSelectionStartsPlayerTrade
                   ? `${resource.displayName}: ${count} card${count === 1 ? '' : 's'}`
                   : `Select ${resource.displayName} ${onSelectHandResource === undefined ? 'for discard' : handResourceSelectionName}. ${count} card${count === 1 ? '' : 's'} available`
+              }
+              title={
+                resourceSelectionStartsPlayerTrade
+                  ? `Select ${resource.displayName} to start a trade`
+                  : undefined
               }
               onClick={() => resourceSelector?.(resource.id)}
               onKeyDown={(event) => {
@@ -328,6 +361,9 @@ export function HandTray({
                       : (availability.reason ?? 'This card is not currently playable.');
                 const tooltipId = `progress-card-tooltip-${instance.instanceId}`;
                 const tooltipOpen = openTooltip?.instanceId === instance.instanceId;
+                const confirming = progressCardPlayIntentId === instance.instanceId;
+                const usesInlineConfirmation =
+                  definition.effect === 'MOVE_ROBBER' || definition.effect === 'PLACE_TWO_ROADS';
                 const tooltipCard = {
                   instanceId: instance.instanceId,
                   definition,
@@ -371,17 +407,28 @@ export function HandTray({
                     onMouseEnter={showFromMouse}
                     onMouseLeave={() => {
                       tooltipNeedsPointerExitRef.current = false;
-                      closeCardTooltip(instance.instanceId);
+                      if (pinnedProgressCardIdRef.current !== instance.instanceId) {
+                        closeCardTooltip(instance.instanceId);
+                      }
                     }}
                     onFocus={showFromFocus}
                     onBlur={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget)) {
+                      if (
+                        pinnedProgressCardIdRef.current !== instance.instanceId &&
+                        !event.currentTarget.contains(event.relatedTarget)
+                      ) {
                         tooltipNeedsFocusExitRef.current = false;
                         closeCardTooltip(instance.instanceId);
                       }
                     }}
                     onKeyDown={(event) => {
-                      if (event.key === 'Escape') closeCardTooltip(instance.instanceId);
+                      if (event.key !== 'Escape') return;
+                      if (confirming) {
+                        event.preventDefault();
+                        pinnedProgressCardIdRef.current = null;
+                        onCancelProgressCardPlay?.();
+                      }
+                      closeCardTooltip(instance.instanceId);
                     }}
                   >
                     {Array.from({ length: visibleStackLayers }, (_, index) => (
@@ -407,8 +454,20 @@ export function HandTray({
                       }
                       aria-describedby={!disabled && tooltipOpen ? tooltipId : undefined}
                       disabled={disabled}
-                      onClick={() => {
-                        setOpenTooltip(null);
+                      onClick={(event) => {
+                        if (confirming) {
+                          pinnedProgressCardIdRef.current = null;
+                          onCancelProgressCardPlay?.();
+                          return;
+                        }
+                        pinnedProgressCardIdRef.current = usesInlineConfirmation
+                          ? instance.instanceId
+                          : null;
+                        if (usesInlineConfirmation) {
+                          openCardTooltip(event.currentTarget, tooltipCard, true);
+                        } else {
+                          setOpenTooltip(null);
+                        }
                         onPlayProgressCard(instance.instanceId);
                       }}
                     >
@@ -463,6 +522,14 @@ export function HandTray({
                 const visibleStackLayers = Math.min(instances.length - 1, 5);
                 const tooltipId = `kn-progress-card-tooltip-${instance.instanceId}`;
                 const tooltipOpen = openKNTooltip?.instanceId === instance.instanceId;
+                const confirming = knProgressCardPlayIntentId === instance.instanceId;
+                const playsDirectlyOnTheBoard = [
+                  'MEDICINE',
+                  'SMITH',
+                  'INVENTOR',
+                  'RECLAMATION',
+                  'WAR_DRUMS',
+                ].includes(definition.effect);
                 const showTooltip = (element: HTMLElement, ignorePointerLatch = false) => {
                   if (!ignorePointerLatch && tooltipNeedsPointerExitRef.current) return;
                   const bounds = element.getBoundingClientRect();
@@ -484,7 +551,9 @@ export function HandTray({
                     onMouseEnter={(event) => showTooltip(event.currentTarget)}
                     onMouseLeave={() => {
                       tooltipNeedsPointerExitRef.current = false;
-                      setOpenKNTooltip(null);
+                      if (pinnedKNProgressCardIdRef.current !== instance.instanceId) {
+                        setOpenKNTooltip(null);
+                      }
                     }}
                     onFocus={(event) => {
                       if (tooltipNeedsFocusExitRef.current) return;
@@ -493,7 +562,16 @@ export function HandTray({
                     }}
                     onBlur={() => {
                       tooltipNeedsFocusExitRef.current = false;
+                      if (pinnedKNProgressCardIdRef.current !== instance.instanceId) {
+                        setOpenKNTooltip(null);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Escape' || !confirming) return;
+                      event.preventDefault();
+                      pinnedKNProgressCardIdRef.current = null;
                       setOpenKNTooltip(null);
+                      onCancelKNProgressCardPlay?.();
                     }}
                   >
                     {Array.from({ length: visibleStackLayers }, (_, index) => (
@@ -523,10 +601,24 @@ export function HandTray({
                               ? `Resolving ${definition.displayName}`
                               : `Play ${definition.displayName}`
                       }
-                      onClick={() => {
-                        setOpenKNTooltip(null);
-                        if (selectingForReturn) onSelectKNProgressCard?.(instance.instanceId);
-                        else onPlayKNProgressCard(instance.instanceId);
+                      onClick={(event) => {
+                        if (selectingForReturn) {
+                          setOpenKNTooltip(null);
+                          onSelectKNProgressCard?.(instance.instanceId);
+                        } else if (confirming) {
+                          pinnedKNProgressCardIdRef.current = null;
+                          onCancelKNProgressCardPlay?.();
+                        } else {
+                          pinnedKNProgressCardIdRef.current = playsDirectlyOnTheBoard
+                            ? null
+                            : instance.instanceId;
+                          if (playsDirectlyOnTheBoard) {
+                            setOpenKNTooltip(null);
+                          } else {
+                            showTooltip(event.currentTarget, true);
+                          }
+                          onPlayKNProgressCard(instance.instanceId);
+                        }
                       }}
                     >
                       <KNProgressCardArtwork definition={definition} />
@@ -551,33 +643,79 @@ export function HandTray({
         <ProgressCardTooltip
           id={`progress-card-tooltip-${visibleOpenTooltip.instanceId}`}
           definition={visibleOpenTooltip.definition}
-          status={visibleOpenTooltip.status}
-          statusDetail={visibleOpenTooltip.statusDetail}
+          status={
+            progressCardPlayIntentId === visibleOpenTooltip.instanceId
+              ? 'Confirm play'
+              : visibleOpenTooltip.status
+          }
+          statusDetail={
+            progressCardPlayIntentId === visibleOpenTooltip.instanceId
+              ? 'Review the card, then confirm or cancel from the controls on the right.'
+              : visibleOpenTooltip.statusDetail
+          }
           tone={visibleOpenTooltip.tone}
           anchor={visibleOpenTooltip.anchor}
+          {...(progressCardPlayIntentId !== visibleOpenTooltip.instanceId ||
+          onConfirmProgressCardPlay === undefined ||
+          onCancelProgressCardPlay === undefined
+            ? {}
+            : {
+                confirmation: {
+                  confirmLabel: `Use ${visibleOpenTooltip.definition.displayName}`,
+                  errorMessage: progressCardPlayErrorMessage,
+                  onConfirm: () => onConfirmProgressCardPlay(visibleOpenTooltip.instanceId),
+                  onCancel: () => {
+                    pinnedProgressCardIdRef.current = null;
+                    setOpenTooltip(null);
+                    onCancelProgressCardPlay();
+                  },
+                },
+              })}
         />
       )}
       {visibleOpenKNTooltip === null ? null : (
         <KNProgressCardTooltip
           id={`kn-progress-card-tooltip-${visibleOpenKNTooltip.instanceId}`}
           definition={visibleOpenKNTooltip.definition}
-          status="K+N Progress Card"
+          status={
+            knProgressCardPlayIntentId === visibleOpenKNTooltip.instanceId
+              ? 'Confirm play'
+              : 'K+N Progress Card'
+          }
           statusDetail={
-            onSelectKNProgressCard !== undefined
-              ? 'Select this card to move it into the return shelf.'
-              : visibleOpenKNTooltip.definition.effect === 'CRANE' &&
-                  player !== undefined &&
-                  !canUseCraneProgressCard(state, player.id)
-                ? 'Crane needs a City and a legally affordable discounted Improvement right now.'
-                : pendingBoardCardId === visibleOpenKNTooltip.instanceId
-                  ? pendingBoardCard?.canCancel === true
-                    ? `Choose a glowing board target, or click ${visibleOpenKNTooltip.definition.displayName} again to cancel.`
-                    : 'Choose another glowing board target to finish resolving this card.'
-                  : visibleOpenKNTooltip.definition.effect === 'ALCHEMIST'
-                    ? 'Play before rolling; choose both numeric dice.'
-                    : 'Play during your action phase. K+N allows multiple Progress Cards per turn.'
+            knProgressCardPlayIntentId === visibleOpenKNTooltip.instanceId
+              ? 'Review the card, then confirm or cancel from the controls on the right.'
+              : onSelectKNProgressCard !== undefined
+                ? 'Select this card to move it into the return shelf.'
+                : visibleOpenKNTooltip.definition.effect === 'CRANE' &&
+                    player !== undefined &&
+                    !canUseCraneProgressCard(state, player.id)
+                  ? 'Crane needs a City and a legally affordable discounted Improvement right now.'
+                  : pendingBoardCardId === visibleOpenKNTooltip.instanceId
+                    ? pendingBoardCard?.canCancel === true
+                      ? `Choose a glowing board target, or click ${visibleOpenKNTooltip.definition.displayName} again to cancel.`
+                      : 'Choose another glowing board target to finish resolving this card.'
+                    : visibleOpenKNTooltip.definition.effect === 'ALCHEMIST'
+                      ? 'Play before rolling; choose both numeric dice.'
+                      : 'Play during your action phase. K+N allows multiple Progress Cards per turn.'
           }
           anchor={visibleOpenKNTooltip.anchor}
+          {...(knProgressCardPlayIntentId !== visibleOpenKNTooltip.instanceId ||
+          onConfirmKNProgressCardPlay === undefined ||
+          onCancelKNProgressCardPlay === undefined
+            ? {}
+            : {
+                confirmation: {
+                  confirmLabel: `Play ${visibleOpenKNTooltip.definition.displayName}`,
+                  errorMessage: progressCardPlayErrorMessage,
+                  onConfirm: () => onConfirmKNProgressCardPlay(visibleOpenKNTooltip.instanceId),
+                  onCancel: () => {
+                    pinnedKNProgressCardIdRef.current = null;
+                    setOpenKNTooltip(null);
+                    onCancelKNProgressCardPlay();
+                  },
+                },
+              })}
         />
       )}
     </section>

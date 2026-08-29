@@ -51,7 +51,7 @@ import {
   getSetupBuildingType,
   getSetupProgress,
 } from '../../engine/rules/setup-rules';
-import { getBankTradeRatio, getTradeAcceptance } from '../../engine/rules/trade-rules';
+import { getBankTradeRatio } from '../../engine/rules/trade-rules';
 import { combinedBank } from '../../engine/rules/resource-rules';
 import { Button } from '../../ui/components/Button';
 import { Modal } from '../../ui/components/Modal';
@@ -80,10 +80,9 @@ import { PlayerPanel } from '../../ui/game/PlayerPanel';
 import { ProgressCardChoiceModal } from '../../ui/game/ProgressCardChoiceModal';
 import { StealTargetModal } from '../../ui/game/StealTargetModal';
 import { TradeModal } from '../../ui/game/TradeModal';
-import { TradeResponseModal } from '../../ui/game/TradeResponseModal';
+import { TradeResponsePanel } from '../../ui/game/TradeResponseModal';
 import { TurnTimer } from '../../ui/game/TurnTimer';
 import { VictoryModal } from '../../ui/game/VictoryModal';
-import { KNProgressCardPlayModal } from '../../ui/game/KNProgressCardPlayModal';
 import { KNInteractionModal } from '../../ui/game/KNInteractionModal';
 import { KNChoiceTray } from '../../ui/game/KNChoiceTray';
 import { KNActionPanel, type KnightCommand } from '../../ui/game/KNActionPanel';
@@ -349,17 +348,80 @@ function productionFlyovers(
       }
     }
   }
+  for (const trade of events.filter(
+    (event): event is Extract<GameEvent, { readonly type: 'TRADE_COMPLETED' }> =>
+      event.type === 'TRADE_COMPLETED',
+  )) {
+    for (const good of HAND_GOODS) {
+      const offeredAmount = trade.offered[good.id] ?? 0;
+      for (let index = 0; index < offeredAmount; index += 1) {
+        flyovers.push({
+          id: `${state.config.gameId}-${state.actionHistory.length}-trade-offered-${trade.tradeId ?? 'bank'}-${good.id}-${index}`,
+          source: { kind: 'PLAYER', playerId: trade.playerId },
+          target:
+            trade.recipientId === null
+              ? { kind: 'BANK' }
+              : { kind: 'PLAYER', playerId: trade.recipientId },
+          resourceId: good.id,
+          delayMs: sequence * 140,
+        });
+        sequence += 1;
+      }
+      const requestedAmount = trade.requested[good.id] ?? 0;
+      for (let index = 0; index < requestedAmount; index += 1) {
+        flyovers.push({
+          id: `${state.config.gameId}-${state.actionHistory.length}-trade-requested-${trade.tradeId ?? 'bank'}-${good.id}-${index}`,
+          source:
+            trade.recipientId === null
+              ? { kind: 'BANK' }
+              : { kind: 'PLAYER', playerId: trade.recipientId },
+          target: { kind: 'PLAYER', playerId: trade.playerId },
+          resourceId: good.id,
+          delayMs: sequence * 140,
+        });
+        sequence += 1;
+      }
+    }
+  }
 
   return flyovers;
 }
 
-function stolenProgressCardFlyovers(
+function progressCardMovementFlyovers(
   events: readonly GameEvent[],
   state: GameState | null,
+  visiblePlayerId: PlayerState['id'] | null,
 ): readonly ProgressCardFlyover[] {
-  if (state?.kn === null || state === null) return [];
-  return events.flatMap((event, index) => {
+  if (state === null || visiblePlayerId === null) return [];
+  return events.flatMap<ProgressCardFlyover>((event, index) => {
+    if (event.type === 'PROGRESS_CARD_BOUGHT') {
+      if (event.playerId !== visiblePlayerId) return [];
+      return [
+        {
+          id: `${state.config.gameId}-${state.actionHistory.length}-progress-draw-${event.cardInstanceId}-${index}`,
+          source: { kind: 'DECK' } as const,
+          targetPlayerId: event.playerId,
+          cardDefinitionId: event.cardDefinitionId,
+          delayMs: 0,
+        },
+      ];
+    }
+    if (event.type === 'KN_PROGRESS_CARD_DRAWN') {
+      if (event.playerId !== visiblePlayerId) return [];
+      const drawnCard = state.kn?.progressCards[event.cardInstanceId];
+      if (drawnCard === undefined) return [];
+      return [
+        {
+          id: `${state.config.gameId}-${state.actionHistory.length}-kn-progress-draw-${event.cardInstanceId}-${index}`,
+          source: { kind: 'DECK', family: event.family } as const,
+          targetPlayerId: event.playerId,
+          cardDefinitionId: drawnCard.definitionId,
+          delayMs: 0,
+        },
+      ];
+    }
     if (event.type !== 'KN_PROGRESS_CARD_RESOLVED' || event.targetIds?.length !== 2) return [];
+    if (event.playerId !== visiblePlayerId) return [];
     const sourceDefinition = getKNProgressCardDefinition(event.cardDefinitionId);
     if (sourceDefinition?.effect !== 'SPY') return [];
     const [sourcePlayerId, stolenCardId] = event.targetIds;
@@ -369,12 +431,36 @@ function stolenProgressCardFlyovers(
     return [
       {
         id: `${state.config.gameId}-${state.actionHistory.length}-spy-${stolenCardId}-${index}`,
-        sourcePlayerId: sourcePlayerId as PlayerState['id'],
+        source: { kind: 'PLAYER', playerId: sourcePlayerId as PlayerState['id'] } as const,
+        targetPlayerId: event.playerId,
         cardDefinitionId: stolenCard.definitionId,
         delayMs: 0,
       },
     ];
   });
+}
+
+function latestNumberTokenSwapEventKey(events: readonly GameEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'INVENTORS_MADNESS_SWAPPED') {
+      return JSON.stringify([index, event.hexIds[0], event.hexIds[1]]);
+    }
+    if (event?.type !== 'KN_PROGRESS_CARD_RESOLVED' || event.targetIds?.length !== 2) {
+      continue;
+    }
+    const definition = getKNProgressCardDefinition(event.cardDefinitionId);
+    const firstHexId = event.targetIds[0];
+    const secondHexId = event.targetIds[1];
+    if (
+      definition?.effect === 'INVENTOR' &&
+      firstHexId !== undefined &&
+      secondHexId !== undefined
+    ) {
+      return JSON.stringify([index, firstHexId, secondHexId]);
+    }
+  }
+  return null;
 }
 
 type ConstructionBoardTarget = Extract<BoardTarget, { readonly kind: 'EDGE' | 'VERTEX' }>;
@@ -623,14 +709,26 @@ function recentEventMessage(events: readonly GameEvent[], state: GameState): str
     return `${recipientName} rejected the trade offer.`;
   }
 
+  const tradeAccepted = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'TRADE_ACCEPTED' }> =>
+      event.type === 'TRADE_ACCEPTED',
+  );
+  if (tradeAccepted !== undefined) {
+    const recipientName = state.players[tradeAccepted.recipientId]?.name ?? 'An opponent';
+    return `${recipientName} accepted the trade offer. The proposer can confirm it.`;
+  }
+
+  if (events.some((event) => event.type === 'TRADE_EXPIRED')) {
+    return 'The trade offer expired.';
+  }
+
   const tradeOffered = events.find(
     (event): event is Extract<GameEvent, { readonly type: 'TRADE_OFFERED' }> =>
       event.type === 'TRADE_OFFERED',
   );
   if (tradeOffered !== undefined) {
     const playerName = state.players[tradeOffered.playerId]?.name ?? 'A player';
-    const recipientName = state.players[tradeOffered.recipientId]?.name ?? 'an opponent';
-    return `${playerName} offered a trade to ${recipientName}.`;
+    return `${playerName} offered a trade to ${tradeOffered.recipientIds.length} opponent${tradeOffered.recipientIds.length === 1 ? '' : 's'}.`;
   }
 
   const cardResolved = events.find(
@@ -740,6 +838,8 @@ export function GameScreen() {
   const [boardBuildMenu, setBoardBuildMenu] = useState<BoardBuildMenuState | null>(null);
   const [knightBoardMenu, setKnightBoardMenu] = useState<KnightBoardMenuState | null>(null);
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [tradeOffered, setTradeOffered] = useState<ResourceBundle>(resourceBundle([]));
+  const [tradeRequested, setTradeRequested] = useState<ResourceBundle>(resourceBundle([]));
   const [progressCardIntentId, setProgressCardIntentId] = useState<CardInstanceId | null>(null);
   const [knProgressCardIntentId, setKNProgressCardIntentId] = useState<CardInstanceId | null>(null);
   const [knBoardAction, setKNBoardAction] = useState<KNBoardAction | null>(null);
@@ -747,6 +847,11 @@ export function GameScreen() {
   const [discardSelection, setDiscardSelection] = useState<DiscardSelectionState | null>(null);
   const [knHandSelection, setKNHandSelection] = useState<KNHandSelectionState | null>(null);
   const [inventorDraft, setInventorDraft] = useState<InventorDraftState | null>(null);
+  const [warDrumsPosition, setWarDrumsPosition] = useState<number | null>(null);
+  const [numberTokenSwapAnimation, setNumberTokenSwapAnimation] = useState<{
+    readonly key: string;
+    readonly hexIds: readonly [HexId, HexId];
+  } | null>(null);
   const [handSelectionWarning, setHandSelectionWarning] = useState<{
     readonly resourceId: ResourceId;
     readonly signal: number;
@@ -891,11 +996,7 @@ export function GameScreen() {
     const knChoice =
       gameState.pendingInteraction?.type === 'KN_SELECTION' ? gameState.pendingInteraction : null;
     if (knChoice !== null) {
-      if (
-        knChoice.purpose === 'SMITH_KNIGHT' ||
-        knChoice.purpose === 'DESERTER_KNIGHT' ||
-        (knChoice.purpose === 'INTRIGUE_KNIGHT' && knChoice.context.step !== 'RELOCATE')
-      ) {
+      if (knChoice.purpose === 'SMITH_KNIGHT' || knChoice.purpose === 'DESERTER_KNIGHT') {
         const eligibleKnightIds = new Set(knChoice.eligibleIds);
         return Object.values(gameState.players)
           .flatMap((player) => player.knights)
@@ -905,6 +1006,8 @@ export function GameScreen() {
       const hexPurposes = new Set([
         'INVENTOR_FIRST_TOKEN',
         'INVENTOR_SECOND_TOKEN',
+        'RECLAMATION_HEX',
+        'RECLAMATION_RESOURCE',
         'MERCHANT_HEX',
         'BISHOP_HEX',
       ]);
@@ -912,14 +1015,17 @@ export function GameScreen() {
       const vertexPurposes = new Set([
         'ENGINEER_WALL',
         'MEDICINE_CITY',
-        'INTRIGUE_KNIGHT',
         'DESERTER_PLACE_KNIGHT',
         'RELOCATE_DISPLACED_KNIGHT',
         'BARBARIAN_CITY_LOSS',
         'METROPOLIS_CITY',
       ]);
       if (hexPurposes.has(knChoice.purpose)) {
-        return knChoice.eligibleIds.map((id) => ({ kind: 'HEX' as const, id: id as HexId }));
+        const ids =
+          knChoice.purpose === 'RECLAMATION_RESOURCE'
+            ? ((knChoice.context.eligibleHexIds as readonly string[] | undefined) ?? [])
+            : knChoice.eligibleIds;
+        return ids.map((id) => ({ kind: 'HEX' as const, id: id as HexId }));
       }
       if (edgePurposes.has(knChoice.purpose)) {
         return knChoice.eligibleIds.map((id) => ({ kind: 'EDGE' as const, id: id as EdgeId }));
@@ -1072,23 +1178,43 @@ export function GameScreen() {
     [gameState, recentGameEvents],
   );
   const progressCardFlyovers = useMemo(
-    () => stolenProgressCardFlyovers(recentGameEvents, gameState),
+    () =>
+      progressCardMovementFlyovers(
+        recentGameEvents,
+        gameState,
+        gameState?.turn.activePlayerId ?? null,
+      ),
     [gameState, recentGameEvents],
   );
-  const numberTokenSwap = useMemo<readonly [HexId, HexId] | null>(() => {
-    const resolved = recentGameEvents.find(
-      (event): event is Extract<GameEvent, { readonly type: 'KN_PROGRESS_CARD_RESOLVED' }> =>
-        event.type === 'KN_PROGRESS_CARD_RESOLVED' && event.targetIds?.length === 2,
+  const latestNumberTokenSwapKey = latestNumberTokenSwapEventKey(gameEventHistory);
+
+  useEffect(() => {
+    if (latestNumberTokenSwapKey === null) return undefined;
+    const parsed = JSON.parse(latestNumberTokenSwapKey) as [number, HexId, HexId];
+    const hexIds = [parsed[1], parsed[2]] as const;
+    const showAnimation = globalThis.setTimeout(
+      () => setNumberTokenSwapAnimation({ key: latestNumberTokenSwapKey, hexIds }),
+      0,
     );
-    if (resolved === undefined) return null;
-    const definition = getKNProgressCardDefinition(resolved.cardDefinitionId);
-    const firstHexId = resolved.targetIds?.[0];
-    const secondHexId = resolved.targetIds?.[1];
-    return definition?.effect !== 'INVENTOR' ||
-      firstHexId === undefined ||
-      secondHexId === undefined
+    const clearAnimation = globalThis.setTimeout(() => {
+      setNumberTokenSwapAnimation((current) =>
+        current?.key === latestNumberTokenSwapKey ? null : current,
+      );
+    }, 2_350);
+    return () => {
+      globalThis.clearTimeout(showAnimation);
+      globalThis.clearTimeout(clearAnimation);
+    };
+  }, [latestNumberTokenSwapKey]);
+  const numberTokenSwap = numberTokenSwapAnimation?.hexIds ?? null;
+  const terrainChange = useMemo(() => {
+    const reclaimed = recentGameEvents.find(
+      (event): event is Extract<GameEvent, { readonly type: 'TERRAIN_RECLAIMED' }> =>
+        event.type === 'TERRAIN_RECLAIMED',
+    );
+    return reclaimed === undefined
       ? null
-      : [firstHexId as HexId, secondHexId as HexId];
+      : { hexId: reclaimed.hexId, fromResourceId: reclaimed.fromResourceId };
   }, [recentGameEvents]);
   if (gameState === null) {
     return <Navigate to="/lobby" replace />;
@@ -1157,17 +1283,16 @@ export function GameScreen() {
       return player === undefined ? [] : [player];
     }) ?? [];
   const tradeInteraction =
-    gameState.pendingInteraction?.type === 'TRADE_RESPONSE' ? gameState.pendingInteraction : null;
+    gameState.pendingInteraction?.type === 'TRADE_RESPONSES' ? gameState.pendingInteraction : null;
   const responseTrade =
     tradeInteraction === null ? undefined : gameState.tradeOffers[tradeInteraction.tradeId];
   const responseProposer =
     responseTrade === undefined ? undefined : gameState.players[responseTrade.fromPlayerId];
-  const responseRecipient =
-    tradeInteraction === null ? undefined : gameState.players[tradeInteraction.playerId];
-  const tradeAcceptance =
-    responseTrade === undefined || responseRecipient === undefined
-      ? null
-      : getTradeAcceptance(gameState, responseTrade.id, responseRecipient.id);
+  const responseRecipients =
+    responseTrade?.recipientIds.flatMap((playerId) => {
+      const player = gameState.players[playerId];
+      return player === undefined ? [] : [player];
+    }) ?? [];
   const progressChoiceInteraction =
     gameState.pendingInteraction?.type === 'SELECT_RESOURCES' ||
     gameState.pendingInteraction?.type === 'SELECT_RESOURCE_TYPE'
@@ -1178,6 +1303,8 @@ export function GameScreen() {
   const knBoardChoicePurposes = new Set([
     'INVENTOR_FIRST_TOKEN',
     'INVENTOR_SECOND_TOKEN',
+    'RECLAMATION_HEX',
+    'RECLAMATION_RESOURCE',
     'MERCHANT_HEX',
     'BISHOP_HEX',
     'ROAD_BUILDING',
@@ -1187,7 +1314,6 @@ export function GameScreen() {
     'MEDICINE_CITY',
     'SMITH_KNIGHT',
     'DESERTER_KNIGHT',
-    'INTRIGUE_KNIGHT',
     'DESERTER_PLACE_KNIGHT',
     'RELOCATE_DISPLACED_KNIGHT',
     'BARBARIAN_CITY_LOSS',
@@ -1199,7 +1325,9 @@ export function GameScreen() {
       : null;
   const inventorSelectionActive =
     knBoardChoice?.purpose === 'INVENTOR_FIRST_TOKEN' ||
-    knBoardChoice?.purpose === 'INVENTOR_SECOND_TOKEN';
+    knBoardChoice?.purpose === 'INVENTOR_SECOND_TOKEN' ||
+    knBoardChoice?.purpose === 'RECLAMATION_HEX' ||
+    knBoardChoice?.purpose === 'RECLAMATION_RESOURCE';
   const inventorInteractionFirstHexId =
     knBoardChoice?.purpose === 'INVENTOR_SECOND_TOKEN'
       ? ((knBoardChoice.context.firstHexId as HexId | undefined) ?? null)
@@ -1212,14 +1340,20 @@ export function GameScreen() {
   const inventorSelectedHexId =
     activeInventorDraft === null ? inventorInteractionFirstHexId : activeInventorDraft.firstHexId;
   const inventorPendingHexId = activeInventorDraft?.secondHexId ?? null;
+  const reclamationSelectedHexId =
+    knBoardChoice?.purpose === 'RECLAMATION_RESOURCE'
+      ? ((knBoardChoice.context.selectedHexId as HexId | undefined) ?? null)
+      : null;
   const knTrayChoice =
     knChoiceInteraction !== null &&
     [
       'AQUEDUCT_RESOURCE',
+      'DEFENDER_TIE_DECK',
       'ALCHEMIST_DICE',
       'RESOURCE_MONOPOLY',
       'COMMODITY_MONOPOLY',
       'MERCHANT_FLEET_GOOD',
+      'RECLAMATION_RESOURCE',
       'COMMERCIAL_HARBOR_PLAYER',
       'COMMERCIAL_HARBOR_RESOURCE',
       'COMMERCIAL_HARBOR_COMMODITY',
@@ -1234,6 +1368,12 @@ export function GameScreen() {
     ].includes(knChoiceInteraction.purpose)
       ? knChoiceInteraction
       : null;
+  const knTraySelectedHexId =
+    typeof knTrayChoice?.context.selectedHexId === 'string'
+      ? knTrayChoice.context.selectedHexId
+      : '';
+  const knTrackChoice =
+    knChoiceInteraction?.purpose === 'WAR_DRUMS_POSITION' ? knChoiceInteraction : null;
   const knDirectHandChoice =
     knTrayChoice !== null &&
     [
@@ -1263,8 +1403,18 @@ export function GameScreen() {
     knDirectHandChoice?.purpose === 'PROGRESS_DISCARD'
       ? selectedKNHandIds.map((id) => id as CardInstanceId)
       : [];
+  const progressCardIntentDefinition =
+    progressCardIntentId === null
+      ? undefined
+      : getProgressCardDefinition(gameState.progressCards[progressCardIntentId]);
+  const inlineProgressCardIntentId =
+    progressCardIntentDefinition?.effect === 'MOVE_ROBBER' ||
+    progressCardIntentDefinition?.effect === 'PLACE_TWO_ROADS'
+      ? progressCardIntentId
+      : null;
   const progressCardModalId =
-    progressCardIntentId ?? progressChoiceInteraction?.sourceCardId ?? null;
+    progressChoiceInteraction?.sourceCardId ??
+    (inlineProgressCardIntentId === null ? progressCardIntentId : null);
   const canCancelProgressCard = progressCardIntentId !== null && progressChoiceInteraction === null;
   const freeRoadInteraction =
     gameState.pendingInteraction?.type === 'PLACE_FREE_ROADS' ? gameState.pendingInteraction : null;
@@ -1316,10 +1466,9 @@ export function GameScreen() {
               ? 'Choose a second bouncing number token to swap them.'
               : knBoardChoice?.purpose === 'DESERTER_KNIGHT'
                 ? 'Choose one of the opponent’s glowing Knights to remove.'
-                : knBoardChoice?.purpose === 'INTRIGUE_KNIGHT'
-                  ? knBoardChoice.context.step === 'RELOCATE'
-                    ? 'Choose a glowing corner to relocate the displaced Knight.'
-                    : 'Choose a glowing opponent Knight touching one of your Roads.'
+                : knBoardChoice?.purpose === 'RECLAMATION_HEX' ||
+                    knBoardChoice?.purpose === 'RECLAMATION_RESOURCE'
+                  ? 'Choose a glowing producing tile, then select its new resource.'
                   : knBoardChoice?.purpose === 'BISHOP_HEX'
                     ? 'Choose the robber’s glowing destination.'
                     : setupInstruction !== null
@@ -1429,10 +1578,7 @@ export function GameScreen() {
     if (knBoardChoice !== null) {
       const knightSelection =
         target.kind === 'VERTEX' &&
-        (knBoardChoice.purpose === 'SMITH_KNIGHT' ||
-          knBoardChoice.purpose === 'DESERTER_KNIGHT' ||
-          (knBoardChoice.purpose === 'INTRIGUE_KNIGHT' &&
-            knBoardChoice.context.step !== 'RELOCATE'))
+        (knBoardChoice.purpose === 'SMITH_KNIGHT' || knBoardChoice.purpose === 'DESERTER_KNIGHT')
           ? Object.values(gameState.players)
               .flatMap((player) => player.knights)
               .find(
@@ -1617,15 +1763,28 @@ export function GameScreen() {
     setActionError(null);
   };
 
-  const openTradeModal = () => {
+  const prepareTradeModal = (offered: ResourceBundle = resourceBundle([])) => {
     setConstructionType(null);
     setBoardBuildMenu(null);
     setKnightBoardMenu(null);
     setKnightCommand(null);
     setInspectedTarget(null);
     setActionError(null);
+    setTradeOffered(offered);
+    setTradeRequested(resourceBundle([]));
     setTradeModalOpen(true);
     setKNBoardAction(null);
+  };
+
+  const toggleTradeModal = () => {
+    if (tradeModalOpen) {
+      setTradeModalOpen(false);
+      setTradeOffered(resourceBundle([]));
+      setTradeRequested(resourceBundle([]));
+      setActionError(null);
+      return;
+    }
+    prepareTradeModal();
   };
 
   const dispatchKNAction = (
@@ -1701,27 +1860,113 @@ export function GameScreen() {
     setActionError(null);
   };
 
-  const completeBankTrade = (giveResourceId: ResourceId, receiveResourceId: ResourceId) => {
+  const completeBankTrade = (offered: ResourceBundle, requested: ResourceBundle) => {
     const actorId = gameState.turn.activePlayerId;
     if (actorId === null) return;
-    handleActionResult(
-      dispatchGameAction({
-        id: actionId(`local-${globalThis.crypto.randomUUID()}`),
-        type: 'BANK_TRADE',
-        actorId,
-        giveResourceId,
-        receiveResourceId,
-      }),
-      false,
-      true,
+    const goods = gameState.kn === null ? RESOURCES : HAND_GOODS;
+    const offeredGoods = goods.filter((resource) => (offered[resource.id] ?? 0) > 0);
+    const requestedGoods = goods.filter((resource) => (requested[resource.id] ?? 0) > 0);
+    const warn = (message: string) => {
+      setActionError(message);
+      audioManager.playInvalid(settings.masterVolume, settings.sfxVolume);
+    };
+    const requestedCount = resourceCount(requested);
+    if (requestedCount === 0) {
+      warn('Choose at least one card to receive from the bank.');
+      return;
+    }
+    if (offeredGoods.length === 0) {
+      warn('Choose cards from your hand to offer the bank.');
+      return;
+    }
+    if (offeredGoods.some((good) => (requested[good.id] ?? 0) > 0)) {
+      warn('A card type cannot be offered and requested in the same bank trade.');
+      return;
+    }
+
+    let earnedBankCards = 0;
+    for (const offeredGood of offeredGoods) {
+      const offeredAmount = offered[offeredGood.id] ?? 0;
+      const ratio = bankTradeRatios[offeredGood.id] ?? 4;
+      if (offeredAmount % ratio !== 0) {
+        warn(
+          `${offeredGood.displayName} must be offered in groups of ${ratio} at your current bank or port rate.`,
+        );
+        return;
+      }
+      earnedBankCards += offeredAmount / ratio;
+    }
+    if (earnedBankCards !== requestedCount) {
+      warn(
+        `Your offered cards buy ${earnedBankCards} bank card${earnedBankCards === 1 ? '' : 's'}, but you requested ${requestedCount}.`,
+      );
+      return;
+    }
+
+    const currentBank = combinedBank(gameState.bank, gameState.commodityBank);
+    const unavailableGood = requestedGoods.find(
+      (good) => (currentBank[good.id] ?? 0) < (requested[good.id] ?? 0),
     );
+    if (unavailableGood !== undefined) {
+      warn(`The bank does not have enough ${unavailableGood.displayName} cards.`);
+      return;
+    }
+    const result = dispatchGameAction({
+      id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+      type: 'BANK_TRADE',
+      actorId,
+      offered,
+      requested,
+    });
+    if (result?.ok) {
+      setTradeOffered(resourceBundle([]));
+      setTradeRequested(resourceBundle([]));
+    }
+    handleActionResult(result, false, true);
   };
 
-  const createPlayerTrade = (
-    recipientId: PlayerState['id'],
-    offered: ResourceBundle,
-    requested: ResourceBundle,
+  const selectResourceForTrade = (resourceId: ResourceId) => {
+    if (activePlayer === undefined) return;
+    const owned = isCommodityId(resourceId)
+      ? (activePlayer.commodities[resourceId] ?? 0)
+      : (activePlayer.resources[resourceId] ?? 0);
+    if (owned < 1) return;
+    if (!tradeModalOpen) {
+      prepareTradeModal(resourceBundle([[resourceId, 1]]));
+      return;
+    }
+    if ((tradeRequested[resourceId] ?? 0) > 0) {
+      setActionError('A card type cannot be offered and requested in the same trade.');
+      audioManager.playInvalid(settings.masterVolume, settings.sfxVolume);
+      return;
+    }
+    setTradeOffered((current) => {
+      const selected = current[resourceId] ?? 0;
+      return selected >= owned ? current : { ...current, [resourceId]: selected + 1 };
+    });
+    setActionError(null);
+  };
+
+  const adjustTradeSelection = (
+    side: 'OFFERED' | 'REQUESTED',
+    resourceId: ResourceId,
+    change: -1 | 1,
   ) => {
+    if (side === 'REQUESTED' && change > 0 && (tradeOffered[resourceId] ?? 0) > 0) {
+      setActionError('A card type cannot be offered and requested in the same trade.');
+      return;
+    }
+    const setter = side === 'OFFERED' ? setTradeOffered : setTradeRequested;
+    setter((current) => {
+      const amount = current[resourceId] ?? 0;
+      const maximum = side === 'REQUESTED' ? gameState.config.rules.bankCardsPerResource : amount;
+      if ((change < 0 && amount === 0) || (change > 0 && amount >= maximum)) return current;
+      return { ...current, [resourceId]: amount + change };
+    });
+    setActionError(null);
+  };
+
+  const createPlayerTrade = (offered: ResourceBundle, requested: ResourceBundle) => {
     const actorId = gameState.turn.activePlayerId;
     if (actorId === null) return;
     const result = dispatchGameAction({
@@ -1729,25 +1974,53 @@ export function GameScreen() {
       type: 'CREATE_TRADE',
       actorId,
       tradeId: tradeId(`local-${globalThis.crypto.randomUUID()}`),
-      recipientId,
+      recipientIds: tradeOpponents.map((opponent) => opponent.id),
       offered,
       requested,
     });
-    if (result?.ok) setTradeModalOpen(false);
+    if (result?.ok) {
+      setTradeModalOpen(false);
+      setTradeOffered(resourceBundle([]));
+      setTradeRequested(resourceBundle([]));
+    }
     handleActionResult(result);
   };
 
-  const respondToPlayerTrade = (accepted: boolean) => {
+  const respondToPlayerTrade = (playerId: PlayerState['id'], accepted: boolean) => {
     if (tradeInteraction === null) return;
     handleActionResult(
       dispatchGameAction({
         id: actionId(`local-${globalThis.crypto.randomUUID()}`),
         type: 'RESPOND_TO_TRADE',
-        actorId: tradeInteraction.playerId,
+        actorId: playerId,
         tradeId: tradeInteraction.tradeId,
         accepted,
       }),
     );
+  };
+
+  const confirmPlayerTrade = (recipientId: PlayerState['id']) => {
+    if (responseTrade === undefined) return;
+    handleActionResult(
+      dispatchGameAction({
+        id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+        type: 'CONFIRM_TRADE',
+        actorId: responseTrade.fromPlayerId,
+        tradeId: responseTrade.id,
+        recipientId,
+      }),
+    );
+  };
+
+  const closePlayerTradeOffer = (expired: boolean) => {
+    if (responseTrade === undefined) return;
+    const result = dispatchGameAction({
+      id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+      type: expired ? 'EXPIRE_TRADE' : 'CANCEL_TRADE',
+      actorId: responseTrade.fromPlayerId,
+      tradeId: responseTrade.id,
+    });
+    if (result !== null && !result.ok) setActionError(result.error.message);
   };
 
   const confirmDiscard = (resources: ResourceBundle) => {
@@ -1848,9 +2121,11 @@ export function GameScreen() {
       [
         'MEDICINE_CITY',
         'SMITH_KNIGHT',
-        'INTRIGUE_KNIGHT',
         'INVENTOR_FIRST_TOKEN',
         'INVENTOR_SECOND_TOKEN',
+        'RECLAMATION_HEX',
+        'RECLAMATION_RESOURCE',
+        'WAR_DRUMS_POSITION',
       ].includes(pending.purpose) &&
       pending.sourceCardId === cardInstanceId
     ) {
@@ -1868,6 +2143,7 @@ export function GameScreen() {
         }),
       );
       setInventorDraft(null);
+      setWarDrumsPosition(null);
       return;
     }
 
@@ -1907,8 +2183,9 @@ export function GameScreen() {
 
     if (
       definition?.effect === 'SMITH' ||
-      definition?.effect === 'INTRIGUE' ||
-      definition?.effect === 'INVENTOR'
+      definition?.effect === 'INVENTOR' ||
+      definition?.effect === 'RECLAMATION' ||
+      definition?.effect === 'WAR_DRUMS'
     ) {
       confirmKNProgressCardPlay(cardInstanceId);
       return;
@@ -1947,6 +2224,7 @@ export function GameScreen() {
       setKNHandSelection(null);
       setHandSelectionWarning(null);
       setInventorDraft(null);
+      setWarDrumsPosition(null);
     }
     handleActionResult(result);
   };
@@ -2228,18 +2506,20 @@ export function GameScreen() {
                         actorId: gameState.turn.activePlayerId,
                       }
                     : {
-                        duration: 30,
+                        duration: knChoiceInteraction.purpose === 'DEFENDER_TIE_DECK' ? 15 : 30,
                         key: `kn-choice-${gameState.actionHistory.length}-${knChoiceInteraction.purpose}-${knChoiceInteraction.playerId}`,
                         prompt:
                           knChoiceInteraction.purpose === 'METROPOLIS_CITY'
                             ? 'Place Metropolis'
-                            : knChoiceInteraction.purpose === 'WEDDING_CARDS'
-                              ? 'Give Wedding Cards'
-                              : knChoiceInteraction.purpose === 'ALCHEMIST_DICE'
-                                ? 'Set Alchemist Dice'
-                                : knChoiceInteraction.purpose === 'PROGRESS_DISCARD'
-                                  ? 'Return Progress Card'
-                                  : 'Resolve Progress Card',
+                            : knChoiceInteraction.purpose === 'DEFENDER_TIE_DECK'
+                              ? 'Choose Defender Reward'
+                              : knChoiceInteraction.purpose === 'WEDDING_CARDS'
+                                ? 'Give Wedding Cards'
+                                : knChoiceInteraction.purpose === 'ALCHEMIST_DICE'
+                                  ? 'Set Alchemist Dice'
+                                  : knChoiceInteraction.purpose === 'PROGRESS_DISCARD'
+                                    ? 'Return Progress Card'
+                                    : 'Resolve Progress Card',
                         actorId: knChoiceInteraction.playerId,
                       }
                   : null;
@@ -2252,9 +2532,7 @@ export function GameScreen() {
           ? 'Move Robber'
           : knBoardChoice?.purpose === 'SMITH_KNIGHT'
             ? 'Upgrade Knight'
-            : knBoardChoice?.purpose === 'INTRIGUE_KNIGHT'
-              ? 'Use Intrigue'
-              : null;
+            : null;
   const timerBoostEventTypes = new Set([
     'BUILDING_PLACED',
     'BUILDING_UPGRADED',
@@ -2416,8 +2694,10 @@ export function GameScreen() {
             emphasizedVertexIds={emphasizedVertexIds}
             inventorSelectionActive={inventorSelectionActive}
             inventorSelectedHexId={inventorSelectedHexId}
-            inventorPendingHexId={inventorPendingHexId}
+            inventorPendingHexId={inventorPendingHexId ?? reclamationSelectedHexId}
             numberTokenSwap={numberTokenSwap}
+            madnessHighlightedHexIds={gameState.inventorsMadness?.pendingHexIds ?? []}
+            terrainChange={terrainChange}
             merchantPlacementActive={knBoardChoice?.purpose === 'MERCHANT_HEX'}
             animatedTarget={animatedTarget}
             robberMove={robberMove}
@@ -2445,7 +2725,53 @@ export function GameScreen() {
             onInspect={setInspectedTarget}
             onSelect={selectBoardTarget}
           />
-          <BarbarianTracker state={gameState} />
+          <BarbarianTracker
+            state={gameState}
+            selectablePositions={knTrackChoice?.eligibleIds.map(Number) ?? []}
+            selectedPosition={warDrumsPosition}
+            onSelectPosition={(position) => {
+              setWarDrumsPosition(position);
+              setActionError(null);
+            }}
+          />
+          {knTrackChoice === null || warDrumsPosition === null ? null : (
+            <aside className="war-drums-confirm" role="dialog" aria-label="Confirm War Drums">
+              <strong>Move fleet to {warDrumsPosition}?</strong>
+              <small>
+                {warDrumsPosition >= (gameState.kn?.barbarianTrackLength ?? 7)
+                  ? 'This triggers the barbarian attack immediately.'
+                  : 'The fleet will remain at this position.'}
+              </small>
+              <div>
+                <Button variant="ghost" onClick={() => setWarDrumsPosition(null)}>
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => resolveKNChoice([String(warDrumsPosition)])}
+                >
+                  Confirm
+                </Button>
+              </div>
+            </aside>
+          )}
+          {responseTrade === undefined || responseProposer === undefined ? null : (
+            <TradeResponsePanel
+              key={responseTrade.id}
+              state={gameState}
+              trade={responseTrade}
+              proposer={responseProposer}
+              recipients={responseRecipients}
+              playerColors={playerColors}
+              paused={gamePaused}
+              errorMessage={actionError}
+              onRespond={respondToPlayerTrade}
+              onConfirm={confirmPlayerTrade}
+              onCancel={() => closePlayerTradeOffer(false)}
+              onExpire={() => closePlayerTradeOffer(true)}
+              includeCommodities={gameState.kn !== null}
+            />
+          )}
           <p
             className={`board-inspector ${actionError === null ? '' : 'board-inspector--error'}`}
             aria-live="polite"
@@ -2556,6 +2882,13 @@ export function GameScreen() {
                     winner={gameState.winnerId === player.id}
                     kNMode={gameState.kn !== null}
                     knProgressCards={gameState.kn?.progressCards}
+                    cityCount={
+                      Object.values(gameState.board.vertices).filter(
+                        (vertex) =>
+                          vertex.building?.ownerId === player.id &&
+                          vertex.building.type === 'MANSION',
+                      ).length
+                    }
                     wallCount={
                       Object.values(gameState.board.vertices).filter(
                         (vertex) =>
@@ -2571,6 +2904,34 @@ export function GameScreen() {
         </aside>
 
         <footer className="game-dock" aria-label="Active player resource hand">
+          {!tradeModalOpen ||
+          gameState.turn.phase !== 'ACTION_PHASE' ||
+          gameState.pendingInteraction !== null ||
+          activePlayer === undefined ? null : (
+            <TradeModal
+              player={activePlayer}
+              opponents={tradeOpponents}
+              bank={combinedBank(gameState.bank, gameState.commodityBank)}
+              hideBankCounts={gameState.config.hideBankCards === true}
+              bankRatios={bankTradeRatios}
+              maximumRequestAmount={gameState.config.rules.bankCardsPerResource}
+              offered={tradeOffered}
+              requested={tradeRequested}
+              errorMessage={actionError}
+              onClose={() => {
+                setTradeModalOpen(false);
+                setTradeOffered(resourceBundle([]));
+                setTradeRequested(resourceBundle([]));
+                setActionError(null);
+              }}
+              onBankTrade={completeBankTrade}
+              onAddRequested={(resourceId) => adjustTradeSelection('REQUESTED', resourceId, 1)}
+              onRemoveRequested={(resourceId) => adjustTradeSelection('REQUESTED', resourceId, -1)}
+              onRemoveOffered={(resourceId) => adjustTradeSelection('OFFERED', resourceId, -1)}
+              onCreateTrade={createPlayerTrade}
+              includeCommodities={gameState.kn !== null}
+            />
+          )}
           {discardPlayer === undefined || requiredDiscardCount === undefined ? null : (
             <DiscardModal
               player={discardPlayer}
@@ -2584,7 +2945,7 @@ export function GameScreen() {
           )}
           {knTrayChoice === null ? null : (
             <KNChoiceTray
-              key={`${knTrayChoice.purpose}-${knTrayChoice.playerId}-${knTrayChoice.sourceCardId ?? 'roll'}`}
+              key={`${knTrayChoice.purpose}-${knTrayChoice.playerId}-${knTrayChoice.sourceCardId ?? 'roll'}-${knTraySelectedHexId}`}
               state={gameState}
               interaction={knTrayChoice}
               errorMessage={actionError}
@@ -2613,6 +2974,19 @@ export function GameScreen() {
             {...(discardPlayer === undefined
               ? {}
               : { onSelectResourceForDiscard: selectResourceForDiscard })}
+            {...(canUseTurnActions &&
+            tradeOpponents.length > 0 &&
+            discardPlayer === undefined &&
+            knDirectHandChoice === null
+              ? {
+                  selectedHandResources: tradeModalOpen ? tradeOffered : resourceBundle([]),
+                  handResourceSelectionName: !tradeModalOpen
+                    ? 'to start a trade'
+                    : 'for your trade offer',
+                  onSelectHandResource: selectResourceForTrade,
+                  resourceSelectionStartsPlayerTrade: !tradeModalOpen,
+                }
+              : {})}
             {...(knDirectHandChoice === null || knDirectHandChoice.purpose === 'PROGRESS_DISCARD'
               ? {}
               : {
@@ -2633,6 +3007,19 @@ export function GameScreen() {
                   onSelectKNProgressCard: selectKNProgressCardForReturn,
                 }
               : {})}
+            progressCardPlayIntentId={inlineProgressCardIntentId}
+            knProgressCardPlayIntentId={knProgressCardIntentId}
+            progressCardPlayErrorMessage={actionError}
+            onCancelProgressCardPlay={() => {
+              setProgressCardIntentId(null);
+              setActionError(null);
+            }}
+            onConfirmProgressCardPlay={confirmProgressCardPlay}
+            onCancelKNProgressCardPlay={() => {
+              setKNProgressCardIntentId(null);
+              setActionError(null);
+            }}
+            onConfirmKNProgressCardPlay={confirmKNProgressCardPlay}
             onPlayProgressCard={playProgressCard}
             onPlayKNProgressCard={playKNProgressCard}
           />
@@ -2725,7 +3112,8 @@ export function GameScreen() {
                     ? 'Trade with the bank or another player'
                     : 'Trade during your action phase'
                 }
-                onClick={openTradeModal}
+                aria-pressed={tradeModalOpen}
+                onClick={toggleTradeModal}
               >
                 <TradeActionIcon />
                 <strong>Trade</strong>
@@ -2921,43 +3309,6 @@ export function GameScreen() {
           onChoose={chooseStealTarget}
         />
       )}
-      {!tradeModalOpen ||
-      gameState.turn.phase !== 'ACTION_PHASE' ||
-      gameState.pendingInteraction !== null ||
-      activePlayer === undefined ? null : (
-        <TradeModal
-          open
-          player={activePlayer}
-          opponents={tradeOpponents}
-          bank={combinedBank(gameState.bank, gameState.commodityBank)}
-          bankRatios={bankTradeRatios}
-          maximumRequestAmount={gameState.config.rules.bankCardsPerResource}
-          errorMessage={actionError}
-          onClearError={() => setActionError(null)}
-          onClose={() => {
-            setTradeModalOpen(false);
-            setActionError(null);
-          }}
-          onBankTrade={completeBankTrade}
-          onCreateTrade={createPlayerTrade}
-          includeCommodities={gameState.kn !== null}
-        />
-      )}
-      {responseTrade === undefined ||
-      responseProposer === undefined ||
-      responseRecipient === undefined ||
-      tradeAcceptance === null ? null : (
-        <TradeResponseModal
-          key={responseTrade.id}
-          trade={responseTrade}
-          proposer={responseProposer}
-          recipient={responseRecipient}
-          acceptance={tradeAcceptance}
-          errorMessage={actionError}
-          onRespond={respondToPlayerTrade}
-          includeCommodities={gameState.kn !== null}
-        />
-      )}
       {progressCardModalId === null || activePlayer === undefined ? null : (
         <ProgressCardChoiceModal
           key={progressCardModalId}
@@ -2975,20 +3326,10 @@ export function GameScreen() {
           onChooseResourceType={chooseCardResourceType}
         />
       )}
-      {knProgressCardIntentId === null ? null : (
-        <KNProgressCardPlayModal
-          key={knProgressCardIntentId}
-          state={gameState}
-          cardInstanceId={knProgressCardIntentId}
-          errorMessage={actionError}
-          onCancel={() => {
-            setKNProgressCardIntentId(null);
-            setActionError(null);
-          }}
-          onPlay={confirmKNProgressCardPlay}
-        />
-      )}
-      {knChoiceInteraction === null || knBoardChoice !== null || knTrayChoice !== null ? null : (
+      {knChoiceInteraction === null ||
+      knBoardChoice !== null ||
+      knTrayChoice !== null ||
+      knTrackChoice !== null ? null : (
         <KNInteractionModal
           key={`${knChoiceInteraction.purpose}-${knChoiceInteraction.playerId}`}
           state={gameState}
@@ -3001,9 +3342,10 @@ export function GameScreen() {
       [
         'MEDICINE_CITY',
         'SMITH_KNIGHT',
-        'INTRIGUE_KNIGHT',
         'INVENTOR_FIRST_TOKEN',
         'INVENTOR_SECOND_TOKEN',
+        'RECLAMATION_HEX',
+        'RECLAMATION_RESOURCE',
         'DESERTER_KNIGHT',
       ].includes(knBoardChoice.purpose) ? null : (
         <aside className="kn-board-choice-banner" aria-live="polite">

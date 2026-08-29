@@ -67,7 +67,11 @@ export function BankPanel({
           );
         })}
         {knState === null ? (
-          <article className="bank-card bank-card--progress" title="Progress card deck">
+          <article
+            className="bank-card bank-card--progress"
+            data-progress-deck="BASE"
+            title="Progress card deck"
+          >
             <i className="bank-card__layer bank-card__layer--back" aria-hidden="true" />
             <i className="bank-card__layer bank-card__layer--middle" aria-hidden="true" />
             <span className="bank-card__progress-art" aria-hidden="true">
@@ -80,6 +84,7 @@ export function BankPanel({
           (['SCIENCE', 'TRADE', 'POLITICS'] as const).map((family) => (
             <article
               key={family}
+              data-progress-deck={family}
               className={`bank-card bank-card--progress bank-card--kn-${family.toLocaleLowerCase()}`}
               title={`${family} Progress deck: ${knState.progressDecks[family].length} cards`}
             >

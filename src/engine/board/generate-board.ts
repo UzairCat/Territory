@@ -1,21 +1,13 @@
 import { BASE_MAP } from '../maps/base-map';
 import { TERRAIN_IDS, TERRAINS } from '../content/resources';
-import type { AxialCoordinate, PortPoolEntry } from '../content/types';
+import type { AxialCoordinate, MapDefinition, PortPoolEntry } from '../content/types';
 import type { BoardState, EdgeState, HexState, PortState, VertexState } from '../core/game-state';
 import { edgeId, hexId, portId, vertexId } from '../core/ids';
 import type { EdgeId, HexId, PortId, TerrainId, VertexId } from '../core/ids';
 import { shuffle } from '../core/random';
 import type { RandomState } from '../core/random';
-import {
-  areAxialNeighbors,
-  hexCornerToTopology,
-  topologyPointKey,
-  topologyToWorld,
-  type TopologyPoint,
-} from './geometry';
-
-const MAX_TOKEN_SHUFFLE_ATTEMPTS = 1_000;
-const PORT_BOUNDARY_EDGE_INDICES = [0, 3, 7, 10, 13, 17, 20, 23, 27] as const;
+import { hexCornerToTopology, topologyPointKey, type TopologyPoint } from './geometry';
+import { getMapPortPlacements } from '../maps/map-utils';
 
 interface VertexBuilder {
   readonly id: VertexId;
@@ -51,10 +43,10 @@ function sortIds<Id extends string>(ids: Iterable<Id>): readonly Id[] {
   return [...ids].sort((first, second) => first.localeCompare(second));
 }
 
-function findTerrainResourceId(terrainId: TerrainId) {
+function findTerrainResourceId(map: MapDefinition, terrainId: TerrainId) {
   const terrain = TERRAINS.find((definition) => definition.id === terrainId);
   if (terrain === undefined) {
-    throw new Error(`Base Map references unknown terrain ${terrainId}.`);
+    throw new Error(`${map.displayName} references unknown terrain ${terrainId}.`);
   }
 
   return terrain.resourceId;
@@ -86,91 +78,80 @@ function createEdgeBuilder(firstVertex: VertexBuilder, secondVertex: VertexBuild
   };
 }
 
-function highProbabilityTokensAreSeparated(
-  producingHexes: readonly HexBuilder[],
-  tokens: readonly number[],
-): boolean {
-  const highProbabilityHexes = producingHexes.filter((_, index) => {
-    const token = tokens[index];
-    return token === 6 || token === 8;
-  });
-
-  return highProbabilityHexes.every((hex, index) =>
-    highProbabilityHexes
-      .slice(index + 1)
-      .every((candidate) => !areAxialNeighbors(hex.coordinate, candidate.coordinate)),
-  );
-}
-
 function assignNumberTokens(
+  map: MapDefinition,
   random: RandomState,
   producingHexes: readonly HexBuilder[],
 ): { readonly assignments: ReadonlyMap<HexId, number>; readonly random: RandomState } {
-  let randomState = random;
-
-  for (let attempt = 0; attempt < MAX_TOKEN_SHUFFLE_ATTEMPTS; attempt += 1) {
-    const shuffled = shuffle(randomState, BASE_MAP.numberTokenPool);
-    randomState = shuffled.state;
-
-    if (
-      !BASE_MAP.separateHighProbabilityTokens ||
-      highProbabilityTokensAreSeparated(producingHexes, shuffled.value)
-    ) {
-      return {
-        assignments: new Map(
-          producingHexes.map((hex, index) => {
-            const token = shuffled.value[index];
-            if (token === undefined) {
-              throw new Error(`No number token was assigned to ${hex.id}.`);
-            }
-            return [hex.id, token] as const;
-          }),
-        ),
-        random: randomState,
-      };
-    }
+  if (!map.separateHighProbabilityTokens) {
+    const shuffled = shuffle(random, map.numberTokenPool);
+    return {
+      assignments: new Map(
+        producingHexes.map((hex, index) => {
+          const token = shuffled.value[index];
+          if (token === undefined) throw new Error(`No number token was assigned to ${hex.id}.`);
+          return [hex.id, token] as const;
+        }),
+      ),
+      random: shuffled.state,
+    };
   }
 
-  throw new Error('Unable to generate a board with separated 6 and 8 number tokens.');
-}
-
-function boundaryEdgeAngle(edge: EdgeBuilder, verticesById: ReadonlyMap<VertexId, VertexBuilder>) {
-  const first = verticesById.get(edge.vertexAId);
-  const second = verticesById.get(edge.vertexBId);
-  if (first === undefined || second === undefined) {
-    throw new Error(`Boundary edge ${edge.id} references an unknown vertex.`);
+  const highTokens = map.numberTokenPool.filter((token) => token === 6 || token === 8);
+  const regularTokens = map.numberTokenPool.filter((token) => token !== 6 && token !== 8);
+  const colorClass = (hex: HexBuilder) => (((hex.coordinate.q - hex.coordinate.r) % 3) + 3) % 3;
+  const eligibleColorClasses = [0, 1, 2].filter(
+    (color) =>
+      producingHexes.filter((hex) => colorClass(hex) === color).length >= highTokens.length,
+  );
+  if (eligibleColorClasses.length === 0) {
+    throw new Error(`Unable to generate ${map.displayName} with separated 6 and 8 number tokens.`);
   }
 
-  const midpoint = topologyToWorld({
-    x: (first.point.x + second.point.x) / 2,
-    y: (first.point.y + second.point.y) / 2,
-  });
-  return Math.atan2(midpoint.y, midpoint.x);
+  const shuffledColors = shuffle(random, eligibleColorClasses);
+  const selectedColor = shuffledColors.value[0];
+  const highProbabilityHexCandidates = producingHexes.filter(
+    (hex) => colorClass(hex) === selectedColor,
+  );
+  const shuffledCandidates = shuffle(shuffledColors.state, highProbabilityHexCandidates);
+  const selectedHighProbabilityHexIds = new Set(
+    shuffledCandidates.value.slice(0, highTokens.length).map((hex) => hex.id),
+  );
+  const shuffledHighTokens = shuffle(shuffledCandidates.state, highTokens);
+  const shuffledRegularTokens = shuffle(shuffledHighTokens.state, regularTokens);
+  let highIndex = 0;
+  let regularIndex = 0;
+  const assignments = new Map<HexId, number>();
+
+  for (const hex of producingHexes) {
+    const token = selectedHighProbabilityHexIds.has(hex.id)
+      ? shuffledHighTokens.value[highIndex++]
+      : shuffledRegularTokens.value[regularIndex++];
+    if (token === undefined) throw new Error(`No number token was assigned to ${hex.id}.`);
+    assignments.set(hex.id, token);
+  }
+
+  return { assignments, random: shuffledRegularTokens.state };
 }
 
 function createPorts(
+  map: MapDefinition,
   random: RandomState,
-  edgeBuilders: readonly EdgeBuilder[],
+  hexBuildersByCoordinate: ReadonlyMap<string, HexBuilder>,
+  edgeBuildersById: ReadonlyMap<EdgeId, EdgeBuilder>,
   verticesById: ReadonlyMap<VertexId, VertexBuilder>,
 ): { readonly ports: Readonly<Record<string, PortState>>; readonly random: RandomState } {
-  const boundaryEdges = edgeBuilders
-    .filter((edge) => edge.adjacentHexIds.size === 1)
-    .sort(
-      (first, second) =>
-        boundaryEdgeAngle(first, verticesById) - boundaryEdgeAngle(second, verticesById),
-    );
-
-  if (boundaryEdges.length !== 30) {
-    throw new Error(`Base Map requires 30 boundary edges; generated ${boundaryEdges.length}.`);
-  }
-
-  const shuffledPorts = shuffle(random, BASE_MAP.portPool);
+  const placements = getMapPortPlacements(map);
+  const shuffledPorts = shuffle(random, map.portPool);
   const ports: Record<string, PortState> = {};
 
-  PORT_BOUNDARY_EDGE_INDICES.forEach((boundaryIndex, portIndex) => {
-    const edge = boundaryEdges[boundaryIndex];
+  placements.forEach((placement, portIndex) => {
+    const hex = hexBuildersByCoordinate.get(`${placement.coordinate.q},${placement.coordinate.r}`);
+    const edgeIdForPlacement = hex?.edgeIds[placement.edgeIndex];
+    const edge =
+      edgeIdForPlacement === undefined ? undefined : edgeBuildersById.get(edgeIdForPlacement);
     const definition: PortPoolEntry | undefined = shuffledPorts.value[portIndex];
-    if (edge === undefined || definition === undefined) {
+    if (edge === undefined || edge.adjacentHexIds.size !== 1 || definition === undefined) {
       throw new Error('Port placement references a missing boundary edge or port definition.');
     }
 
@@ -197,13 +178,17 @@ function createPorts(
 }
 
 export function generateBaseBoard(random: RandomState): GeneratedBoard {
-  const shuffledTerrain = shuffle(random, BASE_MAP.terrainPool);
+  return generateBoard(BASE_MAP, random);
+}
+
+export function generateBoard(map: MapDefinition, random: RandomState): GeneratedBoard {
+  const shuffledTerrain = shuffle(random, map.terrainPool);
   const vertexBuildersByPoint = new Map<string, VertexBuilder>();
   const verticesById = new Map<VertexId, VertexBuilder>();
   const edgeBuildersByKey = new Map<string, EdgeBuilder>();
   const hexBuilders: HexBuilder[] = [];
 
-  BASE_MAP.coordinates.forEach((coordinate, coordinateIndex) => {
+  map.coordinates.forEach((coordinate, coordinateIndex) => {
     const terrainId = shuffledTerrain.value[coordinateIndex];
     if (terrainId === undefined) {
       throw new Error(`No terrain was assigned to coordinate ${coordinate.q},${coordinate.r}.`);
@@ -246,9 +231,15 @@ export function generateBaseBoard(random: RandomState): GeneratedBoard {
   });
 
   const producingHexes = hexBuilders.filter((hex) => hex.terrainId !== TERRAIN_IDS.wasteland);
-  const tokenAssignment = assignNumberTokens(shuffledTerrain.state, producingHexes);
+  const tokenAssignment = assignNumberTokens(map, shuffledTerrain.state, producingHexes);
   const edgeBuilders = [...edgeBuildersByKey.values()];
-  const portGeneration = createPorts(tokenAssignment.random, edgeBuilders, verticesById);
+  const portGeneration = createPorts(
+    map,
+    tokenAssignment.random,
+    new Map(hexBuilders.map((hex) => [`${hex.coordinate.q},${hex.coordinate.r}`, hex] as const)),
+    new Map(edgeBuilders.map((edge) => [edge.id, edge] as const)),
+    verticesById,
+  );
 
   const hexes = Object.fromEntries(
     hexBuilders.map((hex): readonly [string, HexState] => [
@@ -258,7 +249,7 @@ export function generateBaseBoard(random: RandomState): GeneratedBoard {
         q: hex.coordinate.q,
         r: hex.coordinate.r,
         terrainId: hex.terrainId,
-        resourceId: findTerrainResourceId(hex.terrainId),
+        resourceId: findTerrainResourceId(map, hex.terrainId),
         numberToken: tokenAssignment.assignments.get(hex.id) ?? null,
         vertexIds: hex.vertexIds,
         edgeIds: hex.edgeIds,
@@ -293,7 +284,7 @@ export function generateBaseBoard(random: RandomState): GeneratedBoard {
   );
   const wasteland = hexBuilders.find((hex) => hex.terrainId === TERRAIN_IDS.wasteland);
   if (wasteland === undefined) {
-    throw new Error('Generated Base Map has no wasteland for the robber.');
+    throw new Error(`Generated ${map.displayName} has no wasteland for the robber.`);
   }
 
   return {

@@ -4,11 +4,12 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ActivityLog } from '../../src/ui/game/ActivityLog';
+import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
 import { PROGRESS_CARD_IDS } from '../../src/engine/content/progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
 import type { GameEvent } from '../../src/engine/core/events';
-import { cardInstanceId, edgeId, vertexId } from '../../src/engine/core/ids';
+import { cardInstanceId, edgeId, hexId, vertexId } from '../../src/engine/core/ids';
 import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 describe('game activity log', () => {
@@ -164,6 +165,12 @@ describe('game activity log', () => {
             level: 1,
             cost: 1,
           },
+          {
+            type: 'CITY_IMPROVEMENT_PERK_UNLOCKED',
+            playerId: TEST_PLAYER_IDS[0],
+            track: 'TRADE',
+            perk: 'TRADING_HOUSE',
+          },
         ]}
       />,
     );
@@ -173,5 +180,93 @@ describe('game activity log', () => {
     expect(draw?.querySelector('.activity-piece--progress')).not.toBeInTheDocument();
     const improvement = screen.getByText('Alex upgraded Politics to level 1.').closest('li');
     expect(improvement?.querySelector('.activity-improvement-chip--politics')).toBeInTheDocument();
+    const perk = screen.getByText('Alex unlocked Trading House from Trade level 3!').closest('li');
+    expect(perk?.querySelector('.activity-improvement-chip--trade')).toBeInTheDocument();
+  });
+
+  it('announces War Drums once, only after its final movement is chosen', () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const definition = KN_PROGRESS_CARDS.find((card) => card.effect === 'WAR_DRUMS');
+    if (definition === undefined) throw new Error('War Drums definition is missing.');
+    const cardId = cardInstanceId('activity-war-drums');
+
+    render(
+      <ActivityLog
+        state={state}
+        events={[
+          {
+            type: 'KN_PROGRESS_CARD_PLAYED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: cardId,
+            cardDefinitionId: definition.id,
+          },
+          {
+            type: 'WAR_DRUMS_MOVED',
+            playerId: TEST_PLAYER_IDS[0],
+            fromPosition: 4,
+            position: 2,
+            trackLength: 7,
+          },
+          {
+            type: 'KN_PROGRESS_CARD_RESOLVED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: cardId,
+            cardDefinitionId: definition.id,
+            targetIds: ['2'],
+          },
+        ]}
+      />,
+    );
+
+    const finalEntry = screen
+      .getByText('Alex played War Drums and moved the barbarian fleet 2 spaces back.')
+      .closest('li');
+    expect(finalEntry).toBeInTheDocument();
+    expect(finalEntry?.querySelector('.activity-kn-progress--politics')).toBeInTheDocument();
+    expect(screen.queryByText('Alex played War Drums.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alex resolved War Drums.')).not.toBeInTheDocument();
+  });
+
+  it('announces Reclamation with Trade artwork only after the terrain changes', () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const definition = KN_PROGRESS_CARDS.find((card) => card.effect === 'RECLAMATION');
+    if (definition === undefined) throw new Error('Reclamation definition is missing.');
+    const cardId = cardInstanceId('activity-reclamation');
+
+    render(
+      <ActivityLog
+        state={state}
+        events={[
+          {
+            type: 'KN_PROGRESS_CARD_PLAYED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: cardId,
+            cardDefinitionId: definition.id,
+          },
+          {
+            type: 'TERRAIN_RECLAIMED',
+            playerId: TEST_PLAYER_IDS[0],
+            hexId: hexId('activity-reclamation-hex'),
+            fromResourceId: RESOURCE_IDS.wood,
+            toResourceId: RESOURCE_IDS.brick,
+          },
+          {
+            type: 'KN_PROGRESS_CARD_RESOLVED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: cardId,
+            cardDefinitionId: definition.id,
+            targetIds: ['activity-reclamation-hex', RESOURCE_IDS.brick],
+          },
+        ]}
+      />,
+    );
+
+    const finalEntry = screen
+      .getByText('Alex played Reclamation and changed a Wood tile to Brick.')
+      .closest('li');
+    expect(finalEntry).toBeInTheDocument();
+    expect(finalEntry?.querySelector('.activity-kn-progress--trade')).toBeInTheDocument();
+    expect(screen.queryByText('Alex played Reclamation.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alex resolved Reclamation.')).not.toBeInTheDocument();
   });
 });

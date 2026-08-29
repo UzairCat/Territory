@@ -35,6 +35,23 @@ function tradeState(): GameState {
   };
 }
 
+function multiRecipientTradeState(): GameState {
+  const state = tradeState();
+  const template = state.players[TEST_PLAYER_IDS[1]]!;
+  return {
+    ...state,
+    players: {
+      ...state.players,
+      [TEST_PLAYER_IDS[2]]: {
+        ...template,
+        id: TEST_PLAYER_IDS[2],
+        name: 'Jordan',
+        resources: resourceBundle([[RESOURCE_IDS.brick, 2]]),
+      },
+    },
+  };
+}
+
 function stateWithOwnedPorts(): GameState {
   const state = tradeState();
   const genericPortId = portId('trade-generic-port');
@@ -108,7 +125,7 @@ function createOffer(state: GameState, id = tradeId('trade-offer')) {
     type: 'CREATE_TRADE',
     actorId: TEST_PLAYER_IDS[0],
     tradeId: id,
-    recipientId: TEST_PLAYER_IDS[1],
+    recipientIds: [TEST_PLAYER_IDS[1]],
     offered: resourceBundle([[RESOURCE_IDS.wood, 2]]),
     requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
   });
@@ -121,8 +138,8 @@ describe('trading rules', () => {
       id: actionId('bank-trade-default'),
       type: 'BANK_TRADE',
       actorId: TEST_PLAYER_IDS[0],
-      giveResourceId: RESOURCE_IDS.wood,
-      receiveResourceId: RESOURCE_IDS.livestock,
+      offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+      requested: resourceBundle([[RESOURCE_IDS.livestock, 1]]),
     });
 
     expect(result.ok).toBe(true);
@@ -145,6 +162,50 @@ describe('trading rules', () => {
     expect(isJsonSerializable(result.state)).toBe(true);
   });
 
+  it('combines multiple rate groups and requested card types in one bank trade', () => {
+    const original = tradeState();
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [TEST_PLAYER_IDS[0]]: {
+          ...original.players[TEST_PLAYER_IDS[0]]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 10]]),
+        },
+      },
+    };
+    const result = dispatch(state, {
+      id: actionId('bank-trade-multiple'),
+      type: 'BANK_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      offered: resourceBundle([[RESOURCE_IDS.wood, 8]]),
+      requested: resourceBundle([
+        [RESOURCE_IDS.grain, 1],
+        [RESOURCE_IDS.livestock, 1],
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({
+      wood: 2,
+      grain: 1,
+      livestock: 1,
+    });
+    expect(result.state.bank).toMatchObject({ wood: 27, grain: 18, livestock: 18 });
+    expect(result.events).toContainEqual({
+      type: 'TRADE_COMPLETED',
+      tradeId: null,
+      playerId: TEST_PLAYER_IDS[0],
+      recipientId: null,
+      offered: resourceBundle([[RESOURCE_IDS.wood, 8]]),
+      requested: resourceBundle([
+        [RESOURCE_IDS.grain, 1],
+        [RESOURCE_IDS.livestock, 1],
+      ]),
+    });
+  });
+
   it('uses the best owned generic or resource-specific port ratio', () => {
     const state = stateWithOwnedPorts();
 
@@ -156,13 +217,57 @@ describe('trading rules', () => {
       id: actionId('bank-trade-port'),
       type: 'BANK_TRADE',
       actorId: TEST_PLAYER_IDS[0],
-      giveResourceId: RESOURCE_IDS.wood,
-      receiveResourceId: RESOURCE_IDS.ore,
+      offered: resourceBundle([[RESOURCE_IDS.wood, 2]]),
+      requested: resourceBundle([[RESOURCE_IDS.ore, 1]]),
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.state.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({ wood: 4, ore: 1 });
     expect(result.state.bank).toMatchObject({ wood: 21, ore: 18 });
+  });
+
+  it('applies a 2:1 port discount to every group in a multi-card bank trade', () => {
+    const state = stateWithOwnedPorts();
+    const result = dispatch(state, {
+      id: actionId('bank-trade-port-multiple'),
+      type: 'BANK_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+      requested: resourceBundle([
+        [RESOURCE_IDS.grain, 1],
+        [RESOURCE_IDS.ore, 1],
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({
+      wood: 2,
+      grain: 2,
+      ore: 1,
+    });
+    expect(result.state.bank).toMatchObject({ wood: 23, grain: 18, ore: 18 });
+  });
+
+  it('rejects partial rate groups and mismatched multi-trade totals', () => {
+    const state = tradeState();
+    const invalidSelections: readonly [ResourceBundle, ResourceBundle][] = [
+      [resourceBundle([[RESOURCE_IDS.wood, 6]]), resourceBundle([[RESOURCE_IDS.grain, 1]])],
+      [resourceBundle([[RESOURCE_IDS.wood, 4]]), resourceBundle([[RESOURCE_IDS.grain, 2]])],
+    ];
+
+    for (const [index, [offered, requested]] of invalidSelections.entries()) {
+      const result = dispatch(state, {
+        id: actionId(`invalid-bank-multiple-${index}`),
+        type: 'BANK_TRADE',
+        actorId: TEST_PLAYER_IDS[0],
+        offered,
+        requested,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.state).toBe(state);
+      if (!result.ok) expect(result.error.code).toBe('INVALID_TRADE');
+    }
   });
 
   it('rejects illegal bank trades without changing state', () => {
@@ -174,8 +279,8 @@ describe('trading rules', () => {
           id: actionId('bank-wrong-player'),
           type: 'BANK_TRADE',
           actorId: TEST_PLAYER_IDS[1],
-          giveResourceId: RESOURCE_IDS.brick,
-          receiveResourceId: RESOURCE_IDS.wood,
+          offered: resourceBundle([[RESOURCE_IDS.brick, 4]]),
+          requested: resourceBundle([[RESOURCE_IDS.wood, 1]]),
         },
         'NOT_YOUR_TURN',
       ],
@@ -185,8 +290,8 @@ describe('trading rules', () => {
           id: actionId('bank-wrong-phase'),
           type: 'BANK_TRADE',
           actorId: TEST_PLAYER_IDS[0],
-          giveResourceId: RESOURCE_IDS.wood,
-          receiveResourceId: RESOURCE_IDS.brick,
+          offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+          requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
         },
         'WRONG_PHASE',
       ],
@@ -196,8 +301,8 @@ describe('trading rules', () => {
           id: actionId('bank-same-resource'),
           type: 'BANK_TRADE',
           actorId: TEST_PLAYER_IDS[0],
-          giveResourceId: RESOURCE_IDS.wood,
-          receiveResourceId: RESOURCE_IDS.wood,
+          offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+          requested: resourceBundle([[RESOURCE_IDS.wood, 1]]),
         },
         'INVALID_TRADE',
       ],
@@ -216,8 +321,8 @@ describe('trading rules', () => {
           id: actionId('bank-cannot-afford'),
           type: 'BANK_TRADE',
           actorId: TEST_PLAYER_IDS[0],
-          giveResourceId: RESOURCE_IDS.wood,
-          receiveResourceId: RESOURCE_IDS.brick,
+          offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+          requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
         },
         'INSUFFICIENT_RESOURCES',
       ],
@@ -230,8 +335,8 @@ describe('trading rules', () => {
           id: actionId('bank-empty-resource'),
           type: 'BANK_TRADE',
           actorId: TEST_PLAYER_IDS[0],
-          giveResourceId: RESOURCE_IDS.wood,
-          receiveResourceId: RESOURCE_IDS.brick,
+          offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+          requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
         },
         'INSUFFICIENT_BANK_RESOURCES',
       ],
@@ -245,7 +350,7 @@ describe('trading rules', () => {
     }
   });
 
-  it('records an exact player offer without moving cards, then accepts it atomically', () => {
+  it('records a player response, then lets the proposer confirm the trade atomically', () => {
     const state = tradeState();
     const created = createOffer(state);
 
@@ -255,7 +360,8 @@ describe('trading rules', () => {
     expect(created.state.tradeOffers[tradeId('trade-offer')]).toEqual({
       id: tradeId('trade-offer'),
       fromPlayerId: TEST_PLAYER_IDS[0],
-      recipientId: TEST_PLAYER_IDS[1],
+      recipientIds: [TEST_PLAYER_IDS[1]],
+      responses: { [TEST_PLAYER_IDS[1]]: 'PENDING' },
       offered: resourceBundle([[RESOURCE_IDS.wood, 2]]),
       requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
       status: 'OPEN',
@@ -263,17 +369,17 @@ describe('trading rules', () => {
       acceptedByPlayerId: null,
     });
     expect(created.state.pendingInteraction).toEqual({
-      type: 'TRADE_RESPONSE',
+      type: 'TRADE_RESPONSES',
       tradeId: tradeId('trade-offer'),
-      playerId: TEST_PLAYER_IDS[1],
+      playerId: TEST_PLAYER_IDS[0],
     });
 
     const blockedBankTrade = dispatch(created.state, {
       id: actionId('bank-trade-during-offer'),
       type: 'BANK_TRADE',
       actorId: TEST_PLAYER_IDS[0],
-      giveResourceId: RESOURCE_IDS.wood,
-      receiveResourceId: RESOURCE_IDS.grain,
+      offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+      requested: resourceBundle([[RESOURCE_IDS.grain, 1]]),
     });
     expect(blockedBankTrade.ok).toBe(false);
     if (!blockedBankTrade.ok) {
@@ -289,7 +395,7 @@ describe('trading rules', () => {
     });
     expect(wrongResponder.ok).toBe(false);
     if (!wrongResponder.ok) {
-      expect(wrongResponder.error.code).toBe('PENDING_INTERACTION_REQUIRED');
+      expect(wrongResponder.error.code).toBe('TRADE_STALE');
     }
 
     const accepted = dispatch(created.state, {
@@ -301,21 +407,39 @@ describe('trading rules', () => {
     });
     expect(accepted.ok).toBe(true);
     if (!accepted.ok) return;
-    expect(accepted.state.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({
+    expect(accepted.state.players).toBe(created.state.players);
+    expect(accepted.state.tradeOffers[tradeId('trade-offer')]).toMatchObject({
+      status: 'OPEN',
+      responses: { [TEST_PLAYER_IDS[1]]: 'ACCEPTED' },
+      acceptedByPlayerId: null,
+    });
+    expect(accepted.state.pendingInteraction).toEqual(created.state.pendingInteraction);
+    expect(accepted.events.map((event) => event.type)).toEqual(['TRADE_ACCEPTED']);
+
+    const confirmed = dispatch(accepted.state, {
+      id: actionId('confirm-trade'),
+      type: 'CONFIRM_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      tradeId: tradeId('trade-offer'),
+      recipientId: TEST_PLAYER_IDS[1],
+    });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    expect(confirmed.state.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({
       wood: 4,
       brick: 1,
     });
-    expect(accepted.state.players[TEST_PLAYER_IDS[1]]?.resources).toMatchObject({
+    expect(confirmed.state.players[TEST_PLAYER_IDS[1]]?.resources).toMatchObject({
       wood: 2,
       brick: 2,
     });
-    expect(accepted.state.tradeOffers[tradeId('trade-offer')]).toMatchObject({
+    expect(confirmed.state.tradeOffers[tradeId('trade-offer')]).toMatchObject({
       status: 'ACCEPTED',
       acceptedByPlayerId: TEST_PLAYER_IDS[1],
     });
-    expect(accepted.state.pendingInteraction).toBeNull();
-    expect(accepted.events.map((event) => event.type)).toEqual(['TRADE_COMPLETED']);
-    expect(isJsonSerializable(accepted.state)).toBe(true);
+    expect(confirmed.state.pendingInteraction).toBeNull();
+    expect(confirmed.events.map((event) => event.type)).toEqual(['TRADE_COMPLETED']);
+    expect(isJsonSerializable(confirmed.state)).toBe(true);
   });
 
   it('lets the intended opponent reject an offer without transferring resources', () => {
@@ -334,9 +458,153 @@ describe('trading rules', () => {
     expect(rejected.ok).toBe(true);
     if (!rejected.ok) return;
     expect(rejected.state.players).toBe(created.state.players);
-    expect(rejected.state.tradeOffers[tradeId('rejected-offer')]?.status).toBe('REJECTED');
+    expect(rejected.state.tradeOffers[tradeId('rejected-offer')]).toMatchObject({
+      status: 'CANCELLED',
+      responses: { [TEST_PLAYER_IDS[1]]: 'REJECTED' },
+    });
     expect(rejected.state.pendingInteraction).toBeNull();
     expect(rejected.events.map((event) => event.type)).toEqual(['TRADE_REJECTED']);
+  });
+
+  it('keeps a multi-player offer open until its final recipient rejects it', () => {
+    const state = multiRecipientTradeState();
+    const offered = dispatch(state, {
+      id: actionId('create-unwanted-multi-player-trade'),
+      type: 'CREATE_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      tradeId: tradeId('unwanted-multi-player-trade'),
+      recipientIds: [TEST_PLAYER_IDS[1], TEST_PLAYER_IDS[2]],
+      offered: resourceBundle([[RESOURCE_IDS.wood, 2]]),
+      requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
+    });
+    expect(offered.ok).toBe(true);
+    if (!offered.ok) return;
+
+    const firstRejection = dispatch(offered.state, {
+      id: actionId('sam-rejects-multi-player-trade'),
+      type: 'RESPOND_TO_TRADE',
+      actorId: TEST_PLAYER_IDS[1],
+      tradeId: tradeId('unwanted-multi-player-trade'),
+      accepted: false,
+    });
+    expect(firstRejection.ok).toBe(true);
+    if (!firstRejection.ok) return;
+    expect(firstRejection.state.tradeOffers[tradeId('unwanted-multi-player-trade')]).toMatchObject({
+      status: 'OPEN',
+      responses: {
+        [TEST_PLAYER_IDS[1]]: 'REJECTED',
+        [TEST_PLAYER_IDS[2]]: 'PENDING',
+      },
+    });
+    expect(firstRejection.state.pendingInteraction).toEqual(offered.state.pendingInteraction);
+
+    const finalRejection = dispatch(firstRejection.state, {
+      id: actionId('jordan-rejects-multi-player-trade'),
+      type: 'RESPOND_TO_TRADE',
+      actorId: TEST_PLAYER_IDS[2],
+      tradeId: tradeId('unwanted-multi-player-trade'),
+      accepted: false,
+    });
+    expect(finalRejection.ok).toBe(true);
+    if (!finalRejection.ok) return;
+    expect(finalRejection.state.tradeOffers[tradeId('unwanted-multi-player-trade')]).toMatchObject({
+      status: 'CANCELLED',
+      responses: {
+        [TEST_PLAYER_IDS[1]]: 'REJECTED',
+        [TEST_PLAYER_IDS[2]]: 'REJECTED',
+      },
+    });
+    expect(finalRejection.state.pendingInteraction).toBeNull();
+    expect(finalRejection.state.players).toBe(state.players);
+  });
+
+  it('keeps multiple acceptances open until the proposer chooses one opponent', () => {
+    const state = multiRecipientTradeState();
+    const offered = dispatch(state, {
+      id: actionId('create-multi-player-trade'),
+      type: 'CREATE_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      tradeId: tradeId('multi-player-trade'),
+      recipientIds: [TEST_PLAYER_IDS[1], TEST_PLAYER_IDS[2]],
+      offered: resourceBundle([[RESOURCE_IDS.wood, 2]]),
+      requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
+    });
+    expect(offered.ok).toBe(true);
+    if (!offered.ok) return;
+
+    const firstAcceptance = dispatch(offered.state, {
+      id: actionId('sam-accepts-multi-player-trade'),
+      type: 'RESPOND_TO_TRADE',
+      actorId: TEST_PLAYER_IDS[1],
+      tradeId: tradeId('multi-player-trade'),
+      accepted: true,
+    });
+    expect(firstAcceptance.ok).toBe(true);
+    if (!firstAcceptance.ok) return;
+    const secondAcceptance = dispatch(firstAcceptance.state, {
+      id: actionId('jordan-accepts-multi-player-trade'),
+      type: 'RESPOND_TO_TRADE',
+      actorId: TEST_PLAYER_IDS[2],
+      tradeId: tradeId('multi-player-trade'),
+      accepted: true,
+    });
+    expect(secondAcceptance.ok).toBe(true);
+    if (!secondAcceptance.ok) return;
+    expect(secondAcceptance.state.tradeOffers[tradeId('multi-player-trade')]?.responses).toEqual({
+      [TEST_PLAYER_IDS[1]]: 'ACCEPTED',
+      [TEST_PLAYER_IDS[2]]: 'ACCEPTED',
+    });
+
+    const confirmed = dispatch(secondAcceptance.state, {
+      id: actionId('confirm-jordan-multi-player-trade'),
+      type: 'CONFIRM_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      tradeId: tradeId('multi-player-trade'),
+      recipientId: TEST_PLAYER_IDS[2],
+    });
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    expect(confirmed.state.tradeOffers[tradeId('multi-player-trade')]).toMatchObject({
+      status: 'ACCEPTED',
+      acceptedByPlayerId: TEST_PLAYER_IDS[2],
+    });
+    expect(confirmed.state.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({
+      wood: 4,
+      brick: 1,
+    });
+    expect(confirmed.state.players[TEST_PLAYER_IDS[1]]?.resources).toEqual(
+      state.players[TEST_PLAYER_IDS[1]]?.resources,
+    );
+    expect(confirmed.state.players[TEST_PLAYER_IDS[2]]?.resources).toMatchObject({
+      wood: 2,
+      brick: 1,
+    });
+  });
+
+  it('expires an open offer without moving cards', () => {
+    const state = tradeState();
+    const created = createOffer(state, tradeId('expiring-engine-offer'));
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const expired = dispatch(created.state, {
+      id: actionId('expire-engine-offer'),
+      type: 'EXPIRE_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      tradeId: tradeId('expiring-engine-offer'),
+    });
+    expect(expired.ok).toBe(true);
+    if (!expired.ok) return;
+    expect(expired.state.players).toBe(created.state.players);
+    expect(expired.state.tradeOffers[tradeId('expiring-engine-offer')]?.status).toBe('CANCELLED');
+    expect(expired.state.pendingInteraction).toBeNull();
+    expect(expired.events).toEqual([
+      {
+        type: 'TRADE_EXPIRED',
+        tradeId: tradeId('expiring-engine-offer'),
+        playerId: TEST_PLAYER_IDS[0],
+      },
+    ]);
   });
 
   it('revalidates inventories on acceptance and cancels an open offer at end turn', () => {
@@ -398,7 +666,7 @@ describe('trading rules', () => {
         type: 'CREATE_TRADE',
         actorId: TEST_PLAYER_IDS[0],
         tradeId: tradeId(`invalid-bundle-${index}`),
-        recipientId: TEST_PLAYER_IDS[1],
+        recipientIds: [TEST_PLAYER_IDS[1]],
         offered,
         requested,
       });
@@ -412,7 +680,7 @@ describe('trading rules', () => {
       type: 'CREATE_TRADE',
       actorId: TEST_PLAYER_IDS[0],
       tradeId: tradeId('self-trade'),
-      recipientId: TEST_PLAYER_IDS[0],
+      recipientIds: [TEST_PLAYER_IDS[0]],
       offered: resourceBundle([[RESOURCE_IDS.wood, 1]]),
       requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
     });

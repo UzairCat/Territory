@@ -9,6 +9,10 @@ import { resolveProduction } from './production-rules';
 import { createDiscardQueue } from './robber-rules';
 import { cancelOpenTradeOffers } from './trade-rules';
 import { calculateScore } from './scoring-rules';
+import type { BoardState } from '../core/game-state';
+import type { HexId } from '../core/ids';
+import type { RandomState } from '../core/random';
+import { randomInteger } from '../core/random';
 
 export interface RollDiceOptions {
   readonly skipSevenDiscards?: boolean;
@@ -90,6 +94,66 @@ export interface TurnAdvanceResolution {
   readonly events: readonly GameEvent[];
 }
 
+function selectMadnessTargets(
+  board: BoardState,
+  random: RandomState,
+): { readonly hexIds: readonly [HexId, HexId] | null; readonly random: RandomState } {
+  const numbered = Object.values(board.hexes).filter((hex) => hex.numberToken !== null);
+  if (numbered.length < 2) return { hexIds: null, random };
+  const firstRoll = randomInteger(random, 0, numbered.length);
+  const first = numbered[firstRoll.value]!;
+  const different = numbered.filter(
+    (hex) => hex.id !== first.id && hex.numberToken !== first.numberToken,
+  );
+  const alternatives =
+    different.length > 0 ? different : numbered.filter((hex) => hex.id !== first.id);
+  const secondRoll = randomInteger(firstRoll.state, 0, alternatives.length);
+  return { hexIds: [first.id, alternatives[secondRoll.value]!.id], random: secondRoll.state };
+}
+
+function advanceInventorsMadness(state: GameState): {
+  readonly state: GameState;
+  readonly events: readonly GameEvent[];
+} {
+  if (state.inventorsMadness === null) return { state, events: [] };
+  let board = state.board;
+  const events: GameEvent[] = [];
+  const pending = state.inventorsMadness.pendingHexIds;
+  if (pending !== null) {
+    const first = board.hexes[pending[0]];
+    const second = board.hexes[pending[1]];
+    if (
+      first !== undefined &&
+      second !== undefined &&
+      first.numberToken !== null &&
+      second.numberToken !== null
+    ) {
+      board = {
+        ...board,
+        hexes: {
+          ...board.hexes,
+          [first.id]: { ...first, numberToken: second.numberToken },
+          [second.id]: { ...second, numberToken: first.numberToken },
+        },
+      };
+      events.push({ type: 'INVENTORS_MADNESS_SWAPPED', hexIds: pending });
+    }
+  }
+  const selected = selectMadnessTargets(board, state.random);
+  if (selected.hexIds !== null) {
+    events.push({ type: 'INVENTORS_MADNESS_TARGETS_SELECTED', hexIds: selected.hexIds });
+  }
+  return {
+    state: {
+      ...state,
+      board,
+      random: selected.random,
+      inventorsMadness: { pendingHexIds: selected.hexIds },
+    },
+    events,
+  };
+}
+
 export function advanceTurn(
   state: GameState,
   currentPlayerId: NonNullable<GameState['turn']['activePlayerId']>,
@@ -101,11 +165,16 @@ export function advanceTurn(
 
   const nextTurnNumber = state.turn.turnNumber + 1;
   const cancelledTrades = cancelOpenTradeOffers(state, currentPlayerId);
-  const nextPlayerScore = calculateScore(state, nextPlayerId);
+  const roundEnded = currentIndex === playerIds.length - 1;
+  const madness = roundEnded
+    ? advanceInventorsMadness({ ...state, tradeOffers: cancelledTrades.tradeOffers })
+    : { state: { ...state, tradeOffers: cancelledTrades.tradeOffers }, events: [] };
+  const nextPlayerScore = calculateScore(madness.state, nextPlayerId);
   const winsAtTurnStart = nextPlayerScore >= state.config.victoryTarget;
   const events: GameEvent[] = [
     ...cancelledTrades.events,
     { type: 'TURN_ENDED', playerId: currentPlayerId },
+    ...madness.events,
     { type: 'TURN_STARTED', playerId: nextPlayerId, turnNumber: nextTurnNumber },
     ...(winsAtTurnStart
       ? ([{ type: 'GAME_WON', playerId: nextPlayerId, score: nextPlayerScore }] as const)
@@ -125,9 +194,8 @@ export function advanceTurn(
   return {
     events,
     state: {
-      ...state,
+      ...madness.state,
       players,
-      tradeOffers: cancelledTrades.tradeOffers,
       pendingInteraction: null,
       turn: {
         ...state.turn,

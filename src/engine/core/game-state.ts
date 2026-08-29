@@ -132,12 +132,14 @@ export interface PortState {
   readonly resourceId: ResourceId | null;
 }
 
-export type TradeOfferStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+export type TradeOfferStatus = 'OPEN' | 'ACCEPTED' | 'CANCELLED';
+export type TradeResponseStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 
 export interface TradeOffer {
   readonly id: TradeId;
   readonly fromPlayerId: PlayerId;
-  readonly recipientId: PlayerId;
+  readonly recipientIds: readonly PlayerId[];
+  readonly responses: Readonly<Record<string, TradeResponseStatus>>;
   readonly offered: ResourceBundle;
   readonly requested: ResourceBundle;
   readonly status: TradeOfferStatus;
@@ -174,6 +176,10 @@ export interface BalancedDiceState {
   readonly recentTotals: readonly number[];
 }
 
+export interface InventorsMadnessState {
+  readonly pendingHexIds: readonly [HexId, HexId] | null;
+}
+
 export type KNSelectionPurpose =
   | 'AQUEDUCT_RESOURCE'
   | 'BARBARIAN_CITY_LOSS'
@@ -183,6 +189,8 @@ export type KNSelectionPurpose =
   | 'ENGINEER_WALL'
   | 'INVENTOR_FIRST_TOKEN'
   | 'INVENTOR_SECOND_TOKEN'
+  | 'RECLAMATION_HEX'
+  | 'RECLAMATION_RESOURCE'
   | 'MEDICINE_CITY'
   | 'ROAD_BUILDING'
   | 'SMITH_KNIGHT'
@@ -201,7 +209,7 @@ export type KNSelectionPurpose =
   | 'DESERTER_PLACE_KNIGHT'
   | 'DIPLOMAT_ROAD'
   | 'DIPLOMAT_RELOCATE_ROAD'
-  | 'INTRIGUE_KNIGHT'
+  | 'WAR_DRUMS_POSITION'
   | 'RELOCATE_DISPLACED_KNIGHT'
   | 'SABOTEUR_DISCARD'
   | 'SPY_PLAYER'
@@ -247,7 +255,7 @@ export type PendingInteraction =
       readonly sourceCardId: CardInstanceId;
       readonly remainingPlacements: number;
     }
-  | { readonly type: 'TRADE_RESPONSE'; readonly tradeId: TradeId; readonly playerId: PlayerId }
+  | { readonly type: 'TRADE_RESPONSES'; readonly tradeId: TradeId; readonly playerId: PlayerId }
   | {
       readonly type: 'KN_SELECTION';
       readonly playerId: PlayerId;
@@ -331,5 +339,6 @@ export interface GameState {
   readonly actionHistory: readonly ActionHistoryEntry[];
   readonly random: RandomState;
   readonly balancedDice: BalancedDiceState | null;
+  readonly inventorsMadness: InventorsMadnessState | null;
   readonly kn: KNState | null;
 }

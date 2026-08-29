@@ -1,14 +1,18 @@
 import { PLAYER_COLORS } from '../../engine/content/colors';
 import type { PlayerCount } from '../../engine/content/types';
 import type { GameConfig } from '../../engine/core/game-config';
+import { mapId } from '../../engine/core/ids';
 import type { ColorId, GameId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
+import { createRandomState, randomInteger } from '../../engine/core/random';
 import { BASE_MAP } from '../../engine/maps/base-map';
+import { MAPS } from '../../engine/maps/maps';
 import { CLASSIC_MODE } from '../../engine/modes/classic';
 import { KN_MODE } from '../../engine/modes/kn';
 
-export const AVAILABLE_MAPS = [BASE_MAP] as const;
+export const AVAILABLE_MAPS = MAPS;
 export const AVAILABLE_MODES = [CLASSIC_MODE, KN_MODE] as const;
 export const LOBBY_SIZES: readonly PlayerCount[] = [2, 3, 4];
+export const RANDOM_MAP_ID = mapId('random-map');
 
 export interface LocalLobbyPlayer {
   readonly id: PlayerId;
@@ -27,10 +31,11 @@ export interface LobbyConfig {
   readonly hideBankCards: boolean;
   readonly friendlyRobber: boolean;
   readonly balancedDice: boolean;
+  readonly inventorsMadness: boolean;
   readonly players: readonly LocalLobbyPlayer[];
 }
 
-export type LobbyRuleKey = 'hideBankCards' | 'friendlyRobber' | 'balancedDice';
+export type LobbyRuleKey = 'hideBankCards' | 'friendlyRobber' | 'balancedDice' | 'inventorsMadness';
 
 export type LobbyIssueCode =
   | 'PLAYER_COUNT_INCOMPLETE'
@@ -69,6 +74,7 @@ export function createDefaultLobby(seed: string): LobbyConfig {
     hideBankCards: false,
     friendlyRobber: false,
     balancedDice: false,
+    inventorsMadness: false,
     players: [],
   };
 }
@@ -102,6 +108,7 @@ export function firstAvailableColorId(
 export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
   const issues: LobbyIssue[] = [];
   const map = AVAILABLE_MAPS.find((entry) => entry.id === lobby.mapId);
+  const randomMapSelected = lobby.mapId === RANDOM_MAP_ID;
   const mode = AVAILABLE_MODES.find((entry) => entry.id === lobby.modeId);
   const normalizedNames = lobby.players.map((player) => player.name.trim().toLocaleLowerCase());
   const colorIds = lobby.players.map((player) => player.colorId);
@@ -183,7 +190,7 @@ export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
     });
   }
 
-  if (map === undefined) {
+  if (map === undefined && !randomMapSelected) {
     issues.push({ code: 'INVALID_MAP', message: 'Select an available map.' });
   }
 
@@ -208,6 +215,21 @@ export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
   return issues;
 }
 
+function resolveMapId(lobby: LobbyConfig): MapId {
+  if (lobby.mapId !== RANDOM_MAP_ID) return lobby.mapId;
+  const eligibleMaps = AVAILABLE_MAPS.filter(
+    (map) =>
+      map.supportedModeIds.includes(lobby.modeId) && map.supportedPlayerCounts.includes(lobby.size),
+  );
+  if (eligibleMaps.length === 0) return BASE_MAP.id;
+  const selection = randomInteger(
+    createRandomState(`${lobby.seed.trim()}:random-map`),
+    0,
+    eligibleMaps.length,
+  );
+  return eligibleMaps[selection.value]?.id ?? BASE_MAP.id;
+}
+
 export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfigResult {
   const issues = validateLobby(lobby);
   if (issues.length > 0) {
@@ -221,7 +243,7 @@ export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfig
       schemaVersion: 1,
       gameId: id,
       modeId: lobby.modeId,
-      mapId: lobby.mapId,
+      mapId: resolveMapId(lobby),
       playerCount: lobby.size,
       seed: lobby.seed.trim(),
       victoryTarget: lobby.victoryTarget,
@@ -229,6 +251,7 @@ export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfig
       hideBankCards: lobby.hideBankCards,
       friendlyRobber: lobby.friendlyRobber,
       balancedDice: lobby.balancedDice,
+      inventorsMadness: lobby.inventorsMadness,
       players: lobby.players.map((player, order) => ({
         id: player.id,
         name: player.name.trim(),

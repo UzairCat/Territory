@@ -22,6 +22,7 @@ export interface GameConfig {
   readonly hideBankCards?: boolean;
   readonly friendlyRobber?: boolean;
   readonly balancedDice?: boolean;
+  readonly inventorsMadness?: boolean;
   readonly players: readonly PlayerConfig[];
   readonly rules: ClassicRules;
 }
@@ -136,9 +137,12 @@ export function validateGameConfig(config: GameConfig): readonly GameConfigIssue
   }
 
   if (
-    [config.hideBankCards, config.friendlyRobber, config.balancedDice].some(
-      (value) => value !== undefined && typeof value !== 'boolean',
-    )
+    [
+      config.hideBankCards,
+      config.friendlyRobber,
+      config.balancedDice,
+      config.inventorsMadness,
+    ].some((value) => value !== undefined && typeof value !== 'boolean')
   ) {
     issues.push({ code: 'INVALID_RULE_TOGGLE', message: 'Rule toggles must be boolean values.' });
   }

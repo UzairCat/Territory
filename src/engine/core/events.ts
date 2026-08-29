@@ -58,6 +58,28 @@ export type GameEvent =
       readonly trackLength: number;
     }
   | {
+      readonly type: 'INVENTORS_MADNESS_TARGETS_SELECTED';
+      readonly hexIds: readonly [HexId, HexId];
+    }
+  | {
+      readonly type: 'INVENTORS_MADNESS_SWAPPED';
+      readonly hexIds: readonly [HexId, HexId];
+    }
+  | {
+      readonly type: 'TERRAIN_RECLAIMED';
+      readonly playerId: PlayerId;
+      readonly hexId: HexId;
+      readonly fromResourceId: ResourceId;
+      readonly toResourceId: ResourceId;
+    }
+  | {
+      readonly type: 'WAR_DRUMS_MOVED';
+      readonly playerId: PlayerId;
+      readonly fromPosition: number;
+      readonly position: number;
+      readonly trackLength: number;
+    }
+  | {
       readonly type: 'BARBARIAN_ATTACK_RESOLVED';
       readonly barbarianStrength: number;
       readonly defenderStrength: number;
@@ -105,6 +127,12 @@ export type GameEvent =
       readonly type: 'TRADE_OFFERED';
       readonly tradeId: TradeId;
       readonly playerId: PlayerId;
+      readonly recipientIds: readonly PlayerId[];
+    }
+  | {
+      readonly type: 'TRADE_ACCEPTED';
+      readonly tradeId: TradeId;
+      readonly playerId: PlayerId;
       readonly recipientId: PlayerId;
     }
   | {
@@ -114,6 +142,7 @@ export type GameEvent =
       readonly recipientId: PlayerId;
     }
   | { readonly type: 'TRADE_CANCELLED'; readonly tradeId: TradeId; readonly playerId: PlayerId }
+  | { readonly type: 'TRADE_EXPIRED'; readonly tradeId: TradeId; readonly playerId: PlayerId }
   | {
       readonly type: 'TRADE_COMPLETED';
       readonly tradeId: TradeId | null;
@@ -215,6 +244,12 @@ export type GameEvent =
       readonly track: KNProgressFamily;
       readonly level: number;
       readonly cost: number;
+    }
+  | {
+      readonly type: 'CITY_IMPROVEMENT_PERK_UNLOCKED';
+      readonly playerId: PlayerId;
+      readonly track: KNProgressFamily;
+      readonly perk: 'AQUEDUCT' | 'TRADING_HOUSE' | 'FORTRESS';
     }
   | {
       readonly type: 'METROPOLIS_CHANGED';

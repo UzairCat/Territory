@@ -4,11 +4,13 @@ import {
   buildGameConfig,
   createDefaultLobby,
   firstAvailableColorId,
+  RANDOM_MAP_ID,
   validateLobby,
   type LobbyConfig,
 } from '../../src/app/lobby/lobby-model';
 import { PLAYER_COLORS } from '../../src/engine/content/colors';
 import { gameId, playerId } from '../../src/engine/core/ids';
+import { MAPS } from '../../src/engine/maps/maps';
 import { KN_MODE } from '../../src/engine/modes/kn';
 
 function completeLobby(): LobbyConfig {
@@ -43,6 +45,20 @@ describe('local lobby model', () => {
     expect(result.config.turnTimeSeconds).toBe(60);
   });
 
+  it('resolves Random to a reproducible concrete map when the match starts', () => {
+    const lobby = { ...completeLobby(), mapId: RANDOM_MAP_ID };
+    const first = buildGameConfig(lobby, gameId('random-map-game-1'));
+    const second = buildGameConfig(lobby, gameId('random-map-game-2'));
+
+    expect(validateLobby(lobby)).toEqual([]);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(MAPS.map((map) => map.id)).toContain(first.config.mapId);
+    expect(first.config.mapId).not.toBe(RANDOM_MAP_ID);
+    expect(second.config.mapId).toBe(first.config.mapId);
+  });
+
   it('persists a configured turn time and uses the K+N victory target', () => {
     const lobby: LobbyConfig = {
       ...completeLobby(),
@@ -66,6 +82,7 @@ describe('local lobby model', () => {
       hideBankCards: true,
       friendlyRobber: true,
       balancedDice: true,
+      inventorsMadness: true,
     };
     const result = buildGameConfig(lobby, gameId('custom-rules'));
 
@@ -76,6 +93,7 @@ describe('local lobby model', () => {
       hideBankCards: true,
       friendlyRobber: true,
       balancedDice: true,
+      inventorsMadness: true,
       rules: { victoryTarget: 18, discardThreshold: 12 },
     });
   });

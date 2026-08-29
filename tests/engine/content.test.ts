@@ -4,7 +4,7 @@ import { BUILDING_DEFINITIONS } from '../../src/engine/content/buildings';
 import { PROGRESS_CARDS } from '../../src/engine/content/progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { validateClassicContent } from '../../src/engine/content/validate-content';
-import { BASE_MAP } from '../../src/engine/maps/base-map';
+import { MAPS } from '../../src/engine/maps/maps';
 import { CLASSIC_MODE } from '../../src/engine/modes/classic';
 
 describe('locked classic content', () => {
@@ -24,11 +24,32 @@ describe('locked classic content', () => {
     expect(CLASSIC_MODE.rules.bankCardsPerResource).toBe(19);
   });
 
-  it('defines the complete base map, ports, and progress deck', () => {
-    expect(BASE_MAP.coordinates).toHaveLength(19);
-    expect(BASE_MAP.terrainPool).toHaveLength(19);
-    expect(BASE_MAP.numberTokenPool).toHaveLength(18);
-    expect(BASE_MAP.portPool).toHaveLength(9);
+  it('defines every complete map, port pool, and the progress deck', () => {
+    expect(
+      MAPS.map((map) => [
+        map.displayName,
+        map.coordinates.length,
+        map.portPool.length,
+        map.landMassCount,
+      ]),
+    ).toEqual([
+      ['Base - Small', 19, 9, 1],
+      ['Base - Medium', 30, 11, 1],
+      ['Base - Large', 37, 12, 1],
+      ['Earth', 81, 27, 7],
+      ['USA', 144, 25, 1],
+      ['UK & Ireland', 63, 20, 3],
+      ['Diamond', 24, 9, 1],
+      ['Gear', 43, 14, 1],
+      ['Lakes', 39, 9, 1],
+      ['Pond', 24, 8, 1],
+      ['Twirl', 42, 12, 1],
+    ]);
+    for (const map of MAPS) {
+      const wastelandCount = map.terrainPool.filter((terrain) => terrain === 'wasteland').length;
+      expect(map.terrainPool).toHaveLength(map.coordinates.length);
+      expect(map.numberTokenPool).toHaveLength(map.coordinates.length - wastelandCount);
+    }
     expect(PROGRESS_CARDS.reduce((total, card) => total + card.count, 0)).toBe(25);
     expect(
       PROGRESS_CARDS.map(({ displayName, count, artwork, victoryPoints }) => ({

@@ -49,6 +49,7 @@ describe('application session store', () => {
     actions.setLobbyRule('hideBankCards', true);
     actions.setLobbyRule('friendlyRobber', true);
     actions.setLobbyRule('balancedDice', true);
+    actions.setLobbyRule('inventorsMadness', true);
     actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
     actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
 
@@ -58,9 +59,11 @@ describe('application session store', () => {
       hideBankCards: true,
       friendlyRobber: true,
       balancedDice: true,
+      inventorsMadness: true,
       rules: { discardThreshold: 11 },
     });
     expect(useAppStore.getState().gameState?.balancedDice?.remainingPairIds).toHaveLength(36);
+    expect(useAppStore.getState().gameState?.inventorsMadness).toEqual({ pendingHexIds: null });
   });
 
   it('submits setup actions through the engine and stores only accepted state', () => {

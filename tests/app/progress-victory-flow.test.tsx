@@ -17,10 +17,18 @@ import { cardInstanceId, edgeId, vertexId } from '../../src/engine/core/ids';
 import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 vi.mock('../../src/board-renderer/BoardViewport', () => ({
-  BoardViewport: ({ selectableTargets, resourceFlyovers = [], onSelect }: BoardViewportProps) => (
+  BoardViewport: ({
+    selectableTargets,
+    resourceFlyovers = [],
+    progressCardFlyovers = [],
+    onSelect,
+  }: BoardViewportProps) => (
     <section aria-label="Territory board">
       <output data-testid="resource-flyovers">
         {resourceFlyovers.map((flyover) => `${flyover.source.kind}:${flyover.resourceId}|`)}
+      </output>
+      <output data-testid="progress-card-flyovers">
+        {progressCardFlyovers.map((flyover) => `${flyover.source.kind}:${flyover.targetPlayerId}|`)}
       </output>
       {selectableTargets[0] === undefined ? null : (
         <button type="button" onClick={() => onSelect(selectableTargets[0]!)}>
@@ -109,6 +117,9 @@ describe('progress cards, open hands, and victory UI', () => {
     expect(screen.getByRole('button', { name: 'Play Year of Plenty' })).toBeDisabled();
     expect(screen.getByText('Next turn')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Progress cards' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('progress-card-flyovers')).toHaveTextContent(
+      `DECK:${TEST_PLAYER_IDS[0]}|`,
+    );
 
     const boughtState = useAppStore.getState().gameState;
     if (boughtState === null) throw new Error('Purchase did not retain game state.');
@@ -219,15 +230,24 @@ describe('progress cards, open hands, and victory UI', () => {
     };
     renderGame(state);
 
-    await user.click(screen.getByRole('button', { name: 'Play Road Building' }));
+    const roadBuildingCard = screen.getByRole('button', { name: 'Play Road Building' });
+    await user.click(roadBuildingCard);
+    await user.unhover(roadBuildingCard);
     const confirmation = screen.getByRole('dialog', { name: 'Road Building' });
+    expect(confirmation).toHaveClass('progress-card-tooltip--confirming');
+    expect(confirmation).toHaveTextContent('Place up to two legal connected Roads');
     expect(useAppStore.getState().gameState?.turn.phase).toBe('ACTION_PHASE');
-    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+    await user.click(roadBuildingCard);
+    const cancelledTooltip = screen.getByRole('tooltip', { name: 'Road Building' });
+    expect(within(cancelledTooltip).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(
+      within(cancelledTooltip).queryByRole('button', { name: 'Use Road Building' }),
+    ).toBeNull();
     expect(
       useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[0]]?.progressCardIds,
     ).toContain(CARD);
 
-    await user.click(screen.getByRole('button', { name: 'Play Road Building' }));
+    await user.click(roadBuildingCard);
     await user.click(
       within(screen.getByRole('dialog', { name: 'Road Building' })).getByRole('button', {
         name: 'Use Road Building',

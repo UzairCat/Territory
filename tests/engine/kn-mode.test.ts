@@ -78,6 +78,11 @@ describe('K+N mode foundations', () => {
     expect(state.kn?.progressDecks.POLITICS).toHaveLength(18);
     expect(Object.keys(state.kn?.progressCards ?? {})).toHaveLength(54);
     expect(KN_PROGRESS_CARDS.reduce((total, card) => total + card.count, 0)).toBe(54);
+    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'MERCHANT')?.count).toBe(4);
+    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'COMMODITY_MONOPOLY')?.count).toBe(3);
+    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'RECLAMATION')?.count).toBe(1);
+    expect(KN_PROGRESS_CARDS.find((card) => card.effect === 'WAR_DRUMS')?.count).toBe(2);
+    expect(KN_PROGRESS_CARDS.some((card) => card.displayName === 'Intrigue')).toBe(false);
     for (const commodity of COMMODITIES) {
       expect(state.commodityBank[commodity.id]).toBe(19);
     }
@@ -354,6 +359,54 @@ describe('K+N Knights, improvements, and attacks', () => {
     expect(state.kn?.metropolisOwners.SCIENCE).toBe(playerId);
     expect(state.board.vertices[cityVertex.id]?.building?.metropolis).toBe('SCIENCE');
     expect(calculateScore(state, playerId)).toBe(4);
+  });
+
+  it.each([
+    ['SCIENCE', COMMODITY_IDS.paper, 'AQUEDUCT'],
+    ['TRADE', COMMODITY_IDS.cloth, 'TRADING_HOUSE'],
+    ['POLITICS', COMMODITY_IDS.coin, 'FORTRESS'],
+  ] as const)('announces the %s level-three perk when it is unlocked', (track, goodId, perk) => {
+    let state = actionState(createKNState());
+    const playerId = TEST_PLAYER_IDS[0];
+    const player = state.players[playerId]!;
+    const cityVertex = Object.values(state.board.vertices)[0]!;
+    state = {
+      ...state,
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...player,
+          commodities: resourceBundle([[goodId, 3]]),
+          cityImprovements: { ...player.cityImprovements, [track]: 2 },
+        },
+      },
+      board: {
+        ...state.board,
+        vertices: {
+          ...state.board.vertices,
+          [cityVertex.id]: {
+            ...cityVertex,
+            building: { ownerId: playerId, type: 'MANSION' },
+          },
+        },
+      },
+    };
+
+    const result = dispatch(state, {
+      id: actionId(`unlock-${track.toLocaleLowerCase()}`),
+      type: 'BUY_IMPROVEMENT',
+      actorId: playerId,
+      track,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toContainEqual({
+      type: 'CITY_IMPROVEMENT_PERK_UNLOCKED',
+      playerId,
+      track,
+      perk,
+    });
   });
 
   it('warns before buying level four when no City can receive its Metropolis', () => {

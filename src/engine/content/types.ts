@@ -74,6 +74,8 @@ export interface PortPoolEntry {
 export interface MapDefinition {
   readonly id: MapId;
   readonly displayName: string;
+  readonly landMassCount: number;
+  readonly lakeCount?: number;
   readonly supportedPlayerCounts: readonly PlayerCount[];
   readonly supportedModeIds: readonly ModeId[];
   readonly coordinates: readonly AxialCoordinate[];

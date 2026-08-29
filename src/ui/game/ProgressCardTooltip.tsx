@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { ProgressCardDefinition } from '../../engine/content/types';
+import { Button } from '../components/Button';
 import { ProgressCardArtwork } from './ProgressCardArtwork';
 
 export type ProgressCardTooltipTone = 'READY' | 'WAITING' | 'PASSIVE' | 'UNAVAILABLE';
@@ -12,6 +13,13 @@ export interface ProgressCardTooltipAnchor {
   readonly width: number;
 }
 
+export interface ProgressCardTooltipConfirmation {
+  readonly confirmLabel: string;
+  readonly errorMessage: string | null;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+}
+
 interface ProgressCardTooltipProps {
   readonly id: string;
   readonly definition: ProgressCardDefinition;
@@ -19,6 +27,7 @@ interface ProgressCardTooltipProps {
   readonly statusDetail: string;
   readonly tone: ProgressCardTooltipTone;
   readonly anchor: ProgressCardTooltipAnchor;
+  readonly confirmation?: ProgressCardTooltipConfirmation;
 }
 
 function rulesSummary(definition: ProgressCardDefinition): string {
@@ -44,12 +53,13 @@ export function ProgressCardTooltip({
   statusDetail,
   tone,
   anchor,
+  confirmation,
 }: ProgressCardTooltipProps) {
   if (typeof document === 'undefined') return null;
 
   const viewportWidth = globalThis.innerWidth || 1024;
   const margin = 10;
-  const width = Math.min(260, viewportWidth - margin * 2);
+  const width = Math.min(confirmation === undefined ? 260 : 410, viewportWidth - margin * 2);
   const anchorCenter = anchor.left + anchor.width / 2;
   const center = Math.min(
     Math.max(anchorCenter, margin + width / 2),
@@ -67,9 +77,9 @@ export function ProgressCardTooltip({
   return createPortal(
     <aside
       id={id}
-      className="progress-card-tooltip"
+      className={`progress-card-tooltip ${confirmation === undefined ? '' : 'progress-card-tooltip--confirming'}`}
       data-tone={tone.toLowerCase()}
-      role="tooltip"
+      role={confirmation === undefined ? 'tooltip' : 'dialog'}
       aria-labelledby={headingId}
       style={style}
     >
@@ -86,6 +96,25 @@ export function ProgressCardTooltip({
         <span aria-hidden="true">i</span>
         <span>{statusDetail}</span>
       </footer>
+      {confirmation === undefined ? null : (
+        <div className="progress-card-tooltip__confirmation">
+          <strong>Use this card?</strong>
+          {confirmation.errorMessage === null ? null : (
+            <small role="alert">{confirmation.errorMessage}</small>
+          )}
+          <Button
+            data-progress-confirm-autofocus
+            className="progress-card-tooltip__confirm"
+            variant="primary"
+            onClick={confirmation.onConfirm}
+          >
+            {confirmation.confirmLabel}
+          </Button>
+          <Button variant="danger" onClick={confirmation.onCancel}>
+            Cancel
+          </Button>
+        </div>
+      )}
     </aside>,
     document.body,
   );

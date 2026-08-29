@@ -1,50 +1,34 @@
-import { useState } from 'react';
+import type { CSSProperties } from 'react';
 
 import { HAND_GOODS, isCommodityId } from '../../engine/content/commodities';
 import { RESOURCES } from '../../engine/content/resources';
-import { resourceBundle } from '../../engine/content/types';
 import type { ResourceBundle, ResourceDefinition } from '../../engine/content/types';
 import type { PlayerState } from '../../engine/core/game-state';
-import type { PlayerId, ResourceId } from '../../engine/core/ids';
+import type { ResourceId } from '../../engine/core/ids';
 import { canAfford } from '../../engine/rules/resource-rules';
 import { Button } from '../components/Button';
-import { Modal } from '../components/Modal';
-
-type TradeTab = 'BANK' | 'PLAYER';
-type Selection = Readonly<Record<string, number>>;
+import { ResourceArtwork } from './ResourceArtwork';
 
 interface TradeModalProps {
-  readonly open: boolean;
   readonly player: PlayerState;
   readonly opponents: readonly PlayerState[];
   readonly bank: ResourceBundle;
+  readonly hideBankCounts?: boolean;
   readonly bankRatios: Readonly<Record<string, number>>;
   readonly maximumRequestAmount: number;
+  readonly offered: ResourceBundle;
+  readonly requested: ResourceBundle;
   readonly errorMessage: string | null;
-  readonly onClearError: () => void;
   readonly onClose: () => void;
-  readonly onBankTrade: (giveResourceId: ResourceId, receiveResourceId: ResourceId) => void;
-  readonly onCreateTrade: (
-    recipientId: PlayerId,
-    offered: ResourceBundle,
-    requested: ResourceBundle,
-  ) => void;
+  readonly onBankTrade: (offered: ResourceBundle, requested: ResourceBundle) => void;
+  readonly onAddRequested: (resourceId: ResourceId) => void;
+  readonly onRemoveRequested: (resourceId: ResourceId) => void;
+  readonly onRemoveOffered: (resourceId: ResourceId) => void;
+  readonly onCreateTrade: (offered: ResourceBundle, requested: ResourceBundle) => void;
   readonly includeCommodities?: boolean;
 }
 
-function selectionBundle(
-  selection: Selection,
-  goods: readonly ResourceDefinition[],
-): ResourceBundle {
-  return resourceBundle(
-    goods.flatMap((resource) => {
-      const amount = selection[resource.id] ?? 0;
-      return amount > 0 ? ([[resource.id, amount]] as const) : [];
-    }),
-  );
-}
-
-function selectionTotal(selection: Selection): number {
+function selectionTotal(selection: ResourceBundle): number {
   return Object.values(selection).reduce<number>((total, amount) => total + (amount ?? 0), 0);
 }
 
@@ -54,315 +38,232 @@ function heldCount(player: PlayerState, resourceId: ResourceId): number {
     : (player.resources[resourceId] ?? 0);
 }
 
-function playerCardCount(player: PlayerState, goods: readonly ResourceDefinition[]): number {
-  return goods.reduce((total, good) => total + heldCount(player, good.id), 0);
-}
-
-interface BundleEditorProps {
-  readonly title: string;
-  readonly selectionName: 'offer' | 'request';
-  readonly selection: Selection;
-  readonly blockedBy: Selection;
-  readonly maximumFor: (resourceId: ResourceId) => number;
-  readonly availableFor?: (resourceId: ResourceId) => number;
-  readonly onAdjust: (resourceId: ResourceId, change: -1 | 1) => void;
+interface SelectedTradeCardsProps {
+  readonly bundle: ResourceBundle;
   readonly goods: readonly ResourceDefinition[];
+  readonly emptyText: string;
+  readonly actionName: string;
+  readonly onRemove: (resourceId: ResourceId) => void;
 }
 
-function BundleEditor({
-  title,
-  selectionName,
-  selection,
-  blockedBy,
-  maximumFor,
-  availableFor,
-  onAdjust,
+function SelectedTradeCards({
+  bundle,
   goods,
-}: BundleEditorProps) {
+  emptyText,
+  actionName,
+  onRemove,
+}: SelectedTradeCardsProps) {
+  const cards = goods.flatMap((resource) =>
+    Array.from({ length: bundle[resource.id] ?? 0 }, (_, index) => ({ resource, index })),
+  );
   return (
-    <fieldset className="trade-bundle-editor">
-      <legend>{title}</legend>
-      <div className="trade-bundle-editor__rows">
-        {goods.map((resource) => {
-          const selected = selection[resource.id] ?? 0;
-          const maximum = maximumFor(resource.id);
-          const blocked = (blockedBy[resource.id] ?? 0) > 0;
-          return (
-            <div key={resource.id} className="trade-resource-row">
-              <span
-                className="trade-resource-row__swatch"
-                style={{ backgroundColor: resource.color }}
-                aria-hidden="true"
-              />
-              <div>
-                <strong>{resource.displayName}</strong>
-                {availableFor === undefined ? null : (
-                  <small>{availableFor(resource.id)} available</small>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                aria-label={`Remove ${resource.displayName} from ${selectionName}`}
-                disabled={selected < 1}
-                onClick={() => onAdjust(resource.id, -1)}
-              >
-                −
-              </Button>
-              <output aria-label={`${resource.displayName} in ${selectionName}`}>{selected}</output>
-              <Button
-                variant="ghost"
-                aria-label={`Add ${resource.displayName} to ${selectionName}`}
-                disabled={blocked || selected >= maximum}
-                title={blocked ? 'A resource cannot appear on both sides of one trade.' : undefined}
-                onClick={() => onAdjust(resource.id, 1)}
-              >
-                +
-              </Button>
-            </div>
-          );
-        })}
-      </div>
-    </fieldset>
+    <div className="trade-tray__selected-cards">
+      {cards.length === 0 ? (
+        <span className="trade-tray__empty">{emptyText}</span>
+      ) : (
+        cards.map(({ resource, index }) => (
+          <button
+            key={`${resource.id}-${index}`}
+            type="button"
+            className="trade-tray-card"
+            style={{ '--resource-color': resource.color } as CSSProperties}
+            aria-label={`${actionName} ${resource.displayName}`}
+            onClick={() => onRemove(resource.id)}
+          >
+            <span className="trade-tray-card__art">
+              <ResourceArtwork resourceId={resource.id} />
+            </span>
+            <strong>{resource.displayName}</strong>
+          </button>
+        ))
+      )}
+    </div>
   );
 }
 
 export function TradeModal({
-  open,
   player,
   opponents,
   bank,
+  hideBankCounts = false,
   bankRatios,
   maximumRequestAmount,
+  offered,
+  requested,
   errorMessage,
-  onClearError,
   onClose,
   onBankTrade,
+  onAddRequested,
+  onRemoveRequested,
+  onRemoveOffered,
   onCreateTrade,
   includeCommodities = false,
 }: TradeModalProps) {
   const goods = includeCommodities ? HAND_GOODS : RESOURCES;
-  const [tab, setTab] = useState<TradeTab>('BANK');
-  const [giveResourceId, setGiveResourceId] = useState<ResourceId | null>(null);
-  const [receiveResourceId, setReceiveResourceId] = useState<ResourceId | null>(null);
-  const [recipientId, setRecipientId] = useState<PlayerId | null>(opponents[0]?.id ?? null);
-  const [offeredSelection, setOfferedSelection] = useState<Selection>({});
-  const [requestedSelection, setRequestedSelection] = useState<Selection>({});
-
-  const selectTab = (nextTab: TradeTab) => {
-    setTab(nextTab);
-    onClearError();
-  };
-  const selectedRatio = giveResourceId === null ? null : (bankRatios[giveResourceId] ?? null);
-  const canCompleteBankTrade =
-    giveResourceId !== null &&
-    receiveResourceId !== null &&
-    giveResourceId !== receiveResourceId &&
-    selectedRatio !== null &&
-    heldCount(player, giveResourceId) >= selectedRatio &&
-    (bank[receiveResourceId] ?? 0) >= 1;
-
-  const adjustBundle = (side: 'OFFER' | 'REQUEST', resourceId: ResourceId, change: -1 | 1) => {
-    const setter = side === 'OFFER' ? setOfferedSelection : setRequestedSelection;
-    const maximum = side === 'OFFER' ? heldCount(player, resourceId) : maximumRequestAmount;
-    setter((current) => {
-      const amount = current[resourceId] ?? 0;
-      if ((change < 0 && amount < 1) || (change > 0 && amount >= maximum)) return current;
-      return { ...current, [resourceId]: amount + change };
-    });
-    onClearError();
-  };
-
-  const offered = selectionBundle(offeredSelection, goods);
-  const requested = selectionBundle(requestedSelection, goods);
+  const currentHand = Object.fromEntries(
+    goods.map((good) => [good.id, heldCount(player, good.id)]),
+  ) as ResourceBundle;
   const canOfferPlayerTrade =
-    recipientId !== null &&
-    selectionTotal(offeredSelection) > 0 &&
-    selectionTotal(requestedSelection) > 0 &&
-    canAfford(resourceBundle(goods.map((good) => [good.id, heldCount(player, good.id)])), offered);
+    opponents.length > 0 &&
+    selectionTotal(offered) > 0 &&
+    selectionTotal(requested) > 0 &&
+    canAfford(currentHand, offered);
+  const offeredKinds = goods.filter((resource) => (offered[resource.id] ?? 0) > 0);
+  const requestedKinds = goods.filter((resource) => (requested[resource.id] ?? 0) > 0);
+  const offeredTotal = selectionTotal(offered);
+  const requestedTotal = selectionTotal(requested);
+  const bankRatesAreComplete = offeredKinds.every((resource) => {
+    const ratio = bankRatios[resource.id] ?? 4;
+    return (offered[resource.id] ?? 0) % ratio === 0;
+  });
+  const bankCardsEarned = offeredKinds.reduce(
+    (total, resource) => total + (offered[resource.id] ?? 0) / (bankRatios[resource.id] ?? 4),
+    0,
+  );
+  const bankSelectionOverlaps = offeredKinds.some((resource) => (requested[resource.id] ?? 0) > 0);
+  const canCompleteBankTrade =
+    offeredTotal > 0 &&
+    requestedTotal > 0 &&
+    requestedKinds.length > 0 &&
+    bankRatesAreComplete &&
+    bankCardsEarned === requestedTotal &&
+    !bankSelectionOverlaps &&
+    canAfford(bank, requested) &&
+    canAfford(currentHand, offered);
+  const offeredBankHint =
+    offeredKinds.length === 0
+      ? 'Click cards in your hand'
+      : `${offeredKinds
+          .map((resource) => `${resource.displayName} ${bankRatios[resource.id] ?? 4}:1`)
+          .join(
+            ' · ',
+          )} · ${bankRatesAreComplete ? `buys ${bankCardsEarned} bank card${bankCardsEarned === 1 ? '' : 's'}` : 'complete each rate group'}`;
 
   return (
-    <Modal
-      open={open}
-      title="Trade resources"
-      description="Exchange with the finite bank or make one exact offer to an opponent."
-      onClose={onClose}
+    <aside
+      className="trade-tray trade-tray--unified"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="trade-tray-title"
+      aria-describedby="trade-tray-description"
     >
-      <div className="trade-tabs" role="tablist" aria-label="Trade type">
-        <Button
-          data-modal-autofocus
-          role="tab"
-          aria-selected={tab === 'BANK'}
-          variant={tab === 'BANK' ? 'primary' : 'ghost'}
-          onClick={() => selectTab('BANK')}
-        >
-          Bank or port
-        </Button>
-        <Button
-          role="tab"
-          aria-selected={tab === 'PLAYER'}
-          variant={tab === 'PLAYER' ? 'primary' : 'ghost'}
-          onClick={() => selectTab('PLAYER')}
-        >
-          Player offer
-        </Button>
+      <header className="trade-tray__heading">
+        <span className="trade-tray__crest" aria-hidden="true">
+          ⇄
+        </span>
+        <div>
+          <strong id="trade-tray-title">Trade</strong>
+          <small id="trade-tray-description">
+            Select one shared offer, then use Bank for an immediate exchange or Players to send it
+            to {opponents.length} opponent{opponents.length === 1 ? '' : 's'}.
+          </small>
+        </div>
+      </header>
+
+      <div className="trade-tray__body">
+        <div className="trade-tray__player">
+          <section className="trade-tray__request-source" aria-label="Available cards to request">
+            <div>
+              <strong>Cards you want</strong>
+              <small>Click a card to move it into your request</small>
+            </div>
+            <div className="trade-tray__request-palette">
+              {goods.map((resource) => {
+                const amount = requested[resource.id] ?? 0;
+                const available = bank[resource.id] ?? 0;
+                const availability = hideBankCounts ? '' : `, ${available} in bank`;
+                return (
+                  <button
+                    key={resource.id}
+                    type="button"
+                    style={{ '--resource-color': resource.color } as CSSProperties}
+                    aria-label={`Add ${resource.displayName} to trade request${availability}`}
+                    disabled={amount >= maximumRequestAmount || (offered[resource.id] ?? 0) > 0}
+                    onClick={() => onAddRequested(resource.id)}
+                  >
+                    <span>
+                      <ResourceArtwork resourceId={resource.id} />
+                    </span>
+                    <b>{amount > 0 ? `×${amount}` : '+'}</b>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+          <section className="trade-tray__bundle-row trade-tray__bundle-row--request">
+            <div className="trade-tray__bundle-label">
+              <span aria-hidden="true">↓</span>
+              <div>
+                <strong>You request</strong>
+                <small>Click a selected card to return it</small>
+              </div>
+            </div>
+            <SelectedTradeCards
+              bundle={requested}
+              goods={goods}
+              emptyText="Choose requested cards"
+              actionName="Remove requested"
+              onRemove={onRemoveRequested}
+            />
+          </section>
+          <section className="trade-tray__bundle-row trade-tray__bundle-row--offer">
+            <div className="trade-tray__bundle-label">
+              <span aria-hidden="true">↑</span>
+              <div>
+                <strong>You offer</strong>
+                <small>
+                  {offeredKinds.length === 1 ? offeredBankHint : 'Click cards in your hand'}
+                </small>
+              </div>
+            </div>
+            <SelectedTradeCards
+              bundle={offered}
+              goods={goods}
+              emptyText="Selected hand cards move here"
+              actionName="Return offered"
+              onRemove={onRemoveOffered}
+            />
+          </section>
+        </div>
+        {errorMessage === null ? null : (
+          <p className="trade-tray__error" role="alert">
+            {errorMessage}
+          </p>
+        )}
       </div>
 
-      {tab === 'BANK' ? (
-        <div className="bank-trade" role="tabpanel">
-          <fieldset className="trade-resource-choices">
-            <legend>Give to the bank</legend>
-            <div>
-              {goods.map((resource) => {
-                const ratio = bankRatios[resource.id] ?? 4;
-                const available = heldCount(player, resource.id);
-                return (
-                  <button
-                    key={resource.id}
-                    type="button"
-                    className="trade-resource-choice"
-                    aria-label={`Give ${resource.displayName}: ${ratio} required, ${available} available`}
-                    aria-pressed={giveResourceId === resource.id}
-                    disabled={available < ratio}
-                    onClick={() => {
-                      setGiveResourceId(resource.id);
-                      if (receiveResourceId === resource.id) setReceiveResourceId(null);
-                      onClearError();
-                    }}
-                  >
-                    <i style={{ backgroundColor: resource.color }} aria-hidden="true" />
-                    <span>{resource.displayName}</span>
-                    <small>
-                      {ratio}:1 · {available} held
-                    </small>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <fieldset className="trade-resource-choices">
-            <legend>Receive from the bank</legend>
-            <div>
-              {goods.map((resource) => {
-                const available = bank[resource.id] ?? 0;
-                return (
-                  <button
-                    key={resource.id}
-                    type="button"
-                    className="trade-resource-choice"
-                    aria-label={`Receive ${resource.displayName}: ${available} in bank`}
-                    aria-pressed={receiveResourceId === resource.id}
-                    disabled={available < 1 || giveResourceId === resource.id}
-                    onClick={() => {
-                      setReceiveResourceId(resource.id);
-                      onClearError();
-                    }}
-                  >
-                    <i style={{ backgroundColor: resource.color }} aria-hidden="true" />
-                    <span>{resource.displayName}</span>
-                    <small>{available} in bank</small>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <div className="trade-summary" aria-live="polite">
-            {giveResourceId === null || selectedRatio === null
-              ? 'Choose the resource you will give.'
-              : receiveResourceId === null
-                ? `Give ${selectedRatio} cards. Now choose one resource to receive.`
-                : `Exchange ${selectedRatio} for 1.`}
-          </div>
-
-          {errorMessage === null ? null : (
-            <p className="modal-error" role="alert">
-              {errorMessage}
-            </p>
-          )}
-          <div className="modal__actions">
-            <Button variant="ghost" onClick={onClose}>
-              Done
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!canCompleteBankTrade}
-              onClick={() => {
-                if (giveResourceId !== null && receiveResourceId !== null) {
-                  onBankTrade(giveResourceId, receiveResourceId);
-                }
-              }}
-            >
-              Complete bank trade
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="player-trade" role="tabpanel">
-          <label className="field" htmlFor="trade-recipient">
-            <span>Offer to</span>
-            <select
-              id="trade-recipient"
-              value={recipientId ?? ''}
-              onChange={(event) => {
-                setRecipientId(event.target.value as PlayerId);
-                onClearError();
-              }}
-            >
-              {opponents.map((opponent) => (
-                <option key={opponent.id} value={opponent.id}>
-                  {opponent.name} · {playerCardCount(opponent, goods)} hand cards
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="trade-bundle-grid">
-            <BundleEditor
-              title="You give"
-              selectionName="offer"
-              selection={offeredSelection}
-              blockedBy={requestedSelection}
-              maximumFor={(resourceId) => heldCount(player, resourceId)}
-              availableFor={(resourceId) => heldCount(player, resourceId)}
-              onAdjust={(resourceId, change) => adjustBundle('OFFER', resourceId, change)}
-              goods={goods}
-            />
-            <BundleEditor
-              title="You request"
-              selectionName="request"
-              selection={requestedSelection}
-              blockedBy={offeredSelection}
-              maximumFor={() => maximumRequestAmount}
-              onAdjust={(resourceId, change) => adjustBundle('REQUEST', resourceId, change)}
-              goods={goods}
-            />
-          </div>
-
-          <p className="trade-note">
-            The recipient’s resources are checked when they accept the offer.
-          </p>
-          {errorMessage === null ? null : (
-            <p className="modal-error" role="alert">
-              {errorMessage}
-            </p>
-          )}
-          <div className="modal__actions">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!canOfferPlayerTrade}
-              onClick={() => {
-                if (recipientId !== null) onCreateTrade(recipientId, offered, requested);
-              }}
-            >
-              Send offer
-            </Button>
-          </div>
-        </div>
-      )}
-    </Modal>
+      <nav className="trade-tray__modes" aria-label="Trade actions">
+        <Button
+          className="trade-tray__mode--bank"
+          aria-label="Complete bank trade"
+          title={
+            canCompleteBankTrade
+              ? 'Complete this bank or port exchange'
+              : 'Choose a valid bank or port exchange first'
+          }
+          variant="primary"
+          disabled={!canCompleteBankTrade}
+          onClick={() => onBankTrade(offered, requested)}
+        >
+          <span aria-hidden="true">♜</span>
+          <small>Bank</small>
+        </Button>
+        <Button
+          className="trade-tray__mode--players"
+          aria-label="Send trade request"
+          title="Send this request to the other players"
+          variant="primary"
+          disabled={!canOfferPlayerTrade}
+          onClick={() => onCreateTrade(offered, requested)}
+        >
+          <span aria-hidden="true">♟♟</span>
+          <small>Players</small>
+        </Button>
+        <Button variant="danger" aria-label="Done" onClick={onClose}>
+          <span aria-hidden="true">×</span>
+          <small>Close</small>
+        </Button>
+      </nav>
+    </aside>
   );
 }

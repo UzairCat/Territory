@@ -24,10 +24,6 @@ function tradeGoods(state: GameState): readonly ResourceDefinition[] {
   return state.config.modeId === KN_MODE_ID ? HAND_GOODS : RESOURCES;
 }
 
-function isKnownResourceId(state: GameState, resourceId: ResourceId): boolean {
-  return tradeGoods(state).some((good) => good.id === resourceId);
-}
-
 function normalizeTradeBundle(state: GameState, resources: ResourceBundle): ResourceBundle | null {
   const goods = tradeGoods(state);
   const knownIds = new Set(goods.map((good) => good.id));
@@ -55,6 +51,10 @@ function bundlesOverlap(state: GameState, first: ResourceBundle, second: Resourc
   return tradeGoods(state).some(
     (resource) => (first[resource.id] ?? 0) > 0 && (second[resource.id] ?? 0) > 0,
   );
+}
+
+function tradeBundleTotal(state: GameState, bundle: ResourceBundle): number {
+  return tradeGoods(state).reduce((total, good) => total + (bundle[good.id] ?? 0), 0);
 }
 
 function playerOwnsPort(state: GameState, playerId: PlayerId, portId: PortId): boolean {
@@ -115,35 +115,61 @@ export function bankTrade(
       'Resolve the current interaction before trading with the bank.',
     );
   }
-  if (
-    !isKnownResourceId(state, action.giveResourceId) ||
-    !isKnownResourceId(state, action.receiveResourceId) ||
-    action.giveResourceId === action.receiveResourceId
-  ) {
-    return rejectAction(state, 'INVALID_TRADE', 'Choose two different valid resource types.');
-  }
-
   const player = state.players[action.actorId];
   if (player === undefined) {
     return rejectAction(state, 'INVALID_TARGET', 'The trading player does not exist.');
   }
-  const ratio = getBankTradeRatio(state, action.actorId, action.giveResourceId);
-  const offered = resourceBundle([[action.giveResourceId, ratio]]);
-  const requested = resourceBundle([[action.receiveResourceId, 1]]);
+  const offered = normalizeTradeBundle(state, action.offered);
+  const requested = normalizeTradeBundle(state, action.requested);
+  if (offered === null || requested === null || bundlesOverlap(state, offered, requested)) {
+    return rejectAction(
+      state,
+      'INVALID_TRADE',
+      'Offer and request valid, different card types for this bank trade.',
+    );
+  }
+
+  let earnedBankCards = 0;
+  for (const good of tradeGoods(state)) {
+    const amount = offered[good.id] ?? 0;
+    if (amount === 0) continue;
+    const ratio = getBankTradeRatio(state, action.actorId, good.id);
+    if (amount % ratio !== 0) {
+      return rejectAction(
+        state,
+        'INVALID_TRADE',
+        `${good.displayName} must be offered in groups of ${ratio} at your current bank rate.`,
+      );
+    }
+    earnedBankCards += amount / ratio;
+  }
+  const requestedCardCount = tradeBundleTotal(state, requested);
+  if (
+    !Number.isSafeInteger(earnedBankCards) ||
+    !Number.isSafeInteger(requestedCardCount) ||
+    earnedBankCards !== requestedCardCount
+  ) {
+    return rejectAction(
+      state,
+      'INVALID_TRADE',
+      `The offered rate groups buy ${earnedBankCards} cards, but ${requestedCardCount} were requested.`,
+    );
+  }
+
   const currentHand = playerHand(player);
   const currentBank = combinedBank(state.bank, state.commodityBank);
   if (!canAfford(currentHand, offered)) {
     return rejectAction(
       state,
       'INSUFFICIENT_RESOURCES',
-      `This bank trade requires ${ratio} matching resource cards.`,
+      'You no longer own every card included in this bank trade.',
     );
   }
   if (!canAfford(currentBank, requested)) {
     return rejectAction(
       state,
       'INSUFFICIENT_BANK_RESOURCES',
-      'The bank has none of the requested resource available.',
+      'The bank cannot supply every requested card.',
     );
   }
 
@@ -202,8 +228,26 @@ export function createTradeOffer(
   if (state.tradeOffers[action.tradeId] !== undefined) {
     return rejectAction(state, 'TRADE_ID_IN_USE', 'That trade identifier has already been used.');
   }
-  if (action.recipientId === action.actorId || state.players[action.recipientId] === undefined) {
-    return rejectAction(state, 'INVALID_TARGET', 'Choose a valid opponent for this trade.');
+  if (
+    Object.values(state.tradeOffers).some(
+      (trade) => trade.fromPlayerId === action.actorId && trade.status === 'OPEN',
+    )
+  ) {
+    return rejectAction(state, 'INVALID_TRADE', 'Resolve the current trade offer first.');
+  }
+  const recipientIds = [...new Set(action.recipientIds)];
+  if (
+    recipientIds.length === 0 ||
+    recipientIds.length !== action.recipientIds.length ||
+    recipientIds.some(
+      (recipientId) => recipientId === action.actorId || state.players[recipientId] === undefined,
+    )
+  ) {
+    return rejectAction(
+      state,
+      'INVALID_TARGET',
+      'Choose one or more valid opponents for this trade.',
+    );
   }
 
   const offered = normalizeTradeBundle(state, action.offered);
@@ -230,7 +274,10 @@ export function createTradeOffer(
   const trade: TradeOffer = {
     id: action.tradeId,
     fromPlayerId: action.actorId,
-    recipientId: action.recipientId,
+    recipientIds,
+    responses: Object.fromEntries(
+      recipientIds.map((recipientId) => [recipientId, 'PENDING' as const]),
+    ),
     offered,
     requested,
     status: 'OPEN',
@@ -241,9 +288,9 @@ export function createTradeOffer(
     ...state,
     tradeOffers: { ...state.tradeOffers, [trade.id]: trade },
     pendingInteraction: {
-      type: 'TRADE_RESPONSE',
+      type: 'TRADE_RESPONSES',
       tradeId: trade.id,
-      playerId: action.recipientId,
+      playerId: action.actorId,
     },
   };
   const events: GameEvent[] = [
@@ -251,7 +298,7 @@ export function createTradeOffer(
       type: 'TRADE_OFFERED',
       tradeId: trade.id,
       playerId: action.actorId,
-      recipientId: action.recipientId,
+      recipientIds,
     },
   ];
   return acceptAction(state, action, nextState, events);
@@ -268,9 +315,20 @@ export function getTradeAcceptance(
   playerId: PlayerId,
 ): TradeAcceptance {
   const trade = state.tradeOffers[tradeId];
-  if (trade === undefined || trade.status !== 'OPEN' || trade.recipientId !== playerId) {
+  if (trade === undefined || trade.status !== 'OPEN' || !trade.recipientIds.includes(playerId)) {
     return { canAccept: false, reason: 'This trade offer is no longer open.' };
   }
+  if (trade.responses[playerId] !== 'PENDING') {
+    return { canAccept: false, reason: 'You have already responded to this trade offer.' };
+  }
+  return getTradeCompletion(state, trade, playerId);
+}
+
+function getTradeCompletion(
+  state: GameState,
+  trade: TradeOffer,
+  playerId: PlayerId,
+): TradeAcceptance {
   const proposer = state.players[trade.fromPlayerId];
   const recipient = state.players[playerId];
   if (proposer === undefined || recipient === undefined) {
@@ -293,46 +351,91 @@ export function respondToTrade(
     return rejectAction(state, 'WRONG_PHASE', 'Trade offers can only resolve during action phase.');
   }
   const interaction = state.pendingInteraction;
-  if (
-    interaction?.type !== 'TRADE_RESPONSE' ||
-    interaction.tradeId !== action.tradeId ||
-    interaction.playerId !== action.actorId
-  ) {
+  if (interaction?.type !== 'TRADE_RESPONSES' || interaction.tradeId !== action.tradeId) {
     return rejectAction(
       state,
       'PENDING_INTERACTION_REQUIRED',
-      'This player is not expected to respond to that trade.',
+      'This trade offer is not waiting for responses.',
     );
   }
   const trade = state.tradeOffers[action.tradeId];
   if (trade === undefined) {
     return rejectAction(state, 'TRADE_NOT_FOUND', 'The trade offer could not be found.');
   }
-  if (trade.status !== 'OPEN' || trade.recipientId !== action.actorId) {
+  if (
+    trade.status !== 'OPEN' ||
+    !trade.recipientIds.includes(action.actorId) ||
+    trade.responses[action.actorId] !== 'PENDING'
+  ) {
     return rejectAction(state, 'TRADE_STALE', 'This trade offer is no longer open.');
   }
 
-  if (!action.accepted) {
-    const nextState: GameState = {
-      ...state,
-      tradeOffers: {
-        ...state.tradeOffers,
-        [trade.id]: { ...trade, status: 'REJECTED' },
-      },
-      pendingInteraction: null,
-    };
-    const events: GameEvent[] = [
-      {
-        type: 'TRADE_REJECTED',
-        tradeId: trade.id,
-        playerId: trade.fromPlayerId,
-        recipientId: action.actorId,
-      },
-    ];
-    return acceptAction(state, action, nextState, events);
+  if (action.accepted) {
+    const acceptance = getTradeAcceptance(state, trade.id, action.actorId);
+    if (!acceptance.canAccept) {
+      return rejectAction(
+        state,
+        'TRADE_STALE',
+        acceptance.reason ?? 'This trade is no longer valid.',
+      );
+    }
   }
 
-  const acceptance = getTradeAcceptance(state, trade.id, action.actorId);
+  const response = action.accepted ? ('ACCEPTED' as const) : ('REJECTED' as const);
+  const responses = { ...trade.responses, [action.actorId]: response };
+  const allRecipientsRejected = trade.recipientIds.every(
+    (recipientId) => responses[recipientId] === 'REJECTED',
+  );
+  const nextState: GameState = {
+    ...state,
+    tradeOffers: {
+      ...state.tradeOffers,
+      [trade.id]: {
+        ...trade,
+        responses,
+        status: allRecipientsRejected ? 'CANCELLED' : trade.status,
+      },
+    },
+    pendingInteraction: allRecipientsRejected ? null : state.pendingInteraction,
+  };
+  const events: GameEvent[] = [
+    {
+      type: action.accepted ? 'TRADE_ACCEPTED' : 'TRADE_REJECTED',
+      tradeId: trade.id,
+      playerId: trade.fromPlayerId,
+      recipientId: action.actorId,
+    },
+  ];
+  return acceptAction(state, action, nextState, events);
+}
+
+export function confirmTrade(
+  state: GameState,
+  action: Extract<GameAction, { readonly type: 'CONFIRM_TRADE' }>,
+): DispatchResult {
+  if (state.turn.phase !== 'ACTION_PHASE') {
+    return rejectAction(state, 'WRONG_PHASE', 'Trade offers can only resolve during action phase.');
+  }
+  const interaction = state.pendingInteraction;
+  if (interaction?.type !== 'TRADE_RESPONSES' || interaction.tradeId !== action.tradeId) {
+    return rejectAction(
+      state,
+      'PENDING_INTERACTION_REQUIRED',
+      'This trade offer is not waiting for confirmation.',
+    );
+  }
+  const trade = state.tradeOffers[action.tradeId];
+  if (trade === undefined) {
+    return rejectAction(state, 'TRADE_NOT_FOUND', 'The trade offer could not be found.');
+  }
+  if (
+    trade.status !== 'OPEN' ||
+    trade.fromPlayerId !== action.actorId ||
+    trade.responses[action.recipientId] !== 'ACCEPTED'
+  ) {
+    return rejectAction(state, 'TRADE_STALE', 'Choose an opponent who accepted this offer.');
+  }
+  const acceptance = getTradeCompletion(state, trade, action.recipientId);
   if (!acceptance.canAccept) {
     return rejectAction(
       state,
@@ -341,7 +444,7 @@ export function respondToTrade(
     );
   }
   const proposer = state.players[trade.fromPlayerId];
-  const recipient = state.players[action.actorId];
+  const recipient = state.players[action.recipientId];
   if (proposer === undefined || recipient === undefined) {
     return rejectAction(state, 'TRADE_STALE', 'A player in this trade is no longer available.');
   }
@@ -370,7 +473,7 @@ export function respondToTrade(
       [trade.id]: {
         ...trade,
         status: 'ACCEPTED',
-        acceptedByPlayerId: action.actorId,
+        acceptedByPlayerId: action.recipientId,
       },
     },
     pendingInteraction: null,
@@ -380,12 +483,57 @@ export function respondToTrade(
       type: 'TRADE_COMPLETED',
       tradeId: trade.id,
       playerId: trade.fromPlayerId,
-      recipientId: action.actorId,
+      recipientId: action.recipientId,
       offered: trade.offered,
       requested: trade.requested,
     },
   ];
   return acceptAction(state, action, nextState, events);
+}
+
+function closeTrade(
+  state: GameState,
+  action: Extract<GameAction, { readonly type: 'CANCEL_TRADE' | 'EXPIRE_TRADE' }>,
+): DispatchResult {
+  const trade = state.tradeOffers[action.tradeId];
+  if (trade === undefined) {
+    return rejectAction(state, 'TRADE_NOT_FOUND', 'The trade offer could not be found.');
+  }
+  if (trade.status !== 'OPEN' || trade.fromPlayerId !== action.actorId) {
+    return rejectAction(state, 'TRADE_STALE', 'This trade offer is no longer open.');
+  }
+  const nextState: GameState = {
+    ...state,
+    tradeOffers: {
+      ...state.tradeOffers,
+      [trade.id]: { ...trade, status: 'CANCELLED' },
+    },
+    pendingInteraction:
+      state.pendingInteraction?.type === 'TRADE_RESPONSES' &&
+      state.pendingInteraction.tradeId === trade.id
+        ? null
+        : state.pendingInteraction,
+  };
+  const events: GameEvent[] = [
+    action.type === 'EXPIRE_TRADE'
+      ? { type: 'TRADE_EXPIRED', tradeId: trade.id, playerId: trade.fromPlayerId }
+      : { type: 'TRADE_CANCELLED', tradeId: trade.id, playerId: trade.fromPlayerId },
+  ];
+  return acceptAction(state, action, nextState, events);
+}
+
+export function cancelTrade(
+  state: GameState,
+  action: Extract<GameAction, { readonly type: 'CANCEL_TRADE' }>,
+): DispatchResult {
+  return closeTrade(state, action);
+}
+
+export function expireTrade(
+  state: GameState,
+  action: Extract<GameAction, { readonly type: 'EXPIRE_TRADE' }>,
+): DispatchResult {
+  return closeTrade(state, action);
 }
 
 export interface CancelledTradeOffers {

@@ -9,7 +9,14 @@ import {
 import { discardResources, moveRobber, stealFromPlayer } from '../rules/robber-rules';
 import { resolveScoring } from '../rules/scoring-rules';
 import { placeSetupHouse, placeSetupRoad } from '../rules/setup-rules';
-import { bankTrade, createTradeOffer, respondToTrade } from '../rules/trade-rules';
+import {
+  bankTrade,
+  cancelTrade,
+  confirmTrade,
+  createTradeOffer,
+  expireTrade,
+  respondToTrade,
+} from '../rules/trade-rules';
 import { endTurn, rollDice } from '../rules/turn-rules';
 import { resolveTimeout } from '../rules/timeout-rules';
 import { rollKNDice } from '../rules/kn-turn-rules';
@@ -145,6 +152,9 @@ export function dispatch(
   else if (action.type === 'BANK_TRADE') result = bankTrade(state, action);
   else if (action.type === 'CREATE_TRADE') result = createTradeOffer(state, action);
   else if (action.type === 'RESPOND_TO_TRADE') result = respondToTrade(state, action);
+  else if (action.type === 'CONFIRM_TRADE') result = confirmTrade(state, action);
+  else if (action.type === 'CANCEL_TRADE') result = cancelTrade(state, action);
+  else if (action.type === 'EXPIRE_TRADE') result = expireTrade(state, action);
   else if (action.type === 'BUY_PROGRESS_CARD') result = buyProgressCard(state, action);
   else if (action.type === 'PLAY_PROGRESS_CARD') result = playProgressCard(state, action);
   else if (action.type === 'PLAY_KN_PROGRESS_CARD') result = playKNProgressCard(state, action);

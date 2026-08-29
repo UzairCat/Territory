@@ -772,6 +772,19 @@ export function buyImprovement(
       cost: costAmount,
     },
   ];
+  if (level === 3) {
+    events.push({
+      type: 'CITY_IMPROVEMENT_PERK_UNLOCKED',
+      playerId: action.actorId,
+      track: action.track,
+      perk:
+        action.track === 'SCIENCE'
+          ? 'AQUEDUCT'
+          : action.track === 'TRADE'
+            ? 'TRADING_HOUSE'
+            : 'FORTRESS',
+    });
+  }
   if (claimsMetropolis && candidates.length === 1) {
     const placed = placeMetropolis(nextState, action.actorId, action.track, candidates[0]!);
     nextState = placed.state;

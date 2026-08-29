@@ -19,11 +19,12 @@ export type KNProgressEffect =
   | 'MERCHANT'
   | 'RESOURCE_MONOPOLY'
   | 'COMMODITY_MONOPOLY'
+  | 'RECLAMATION'
   | 'BISHOP'
   | 'CONSTITUTION'
   | 'DESERTER'
   | 'DIPLOMAT'
-  | 'INTRIGUE'
+  | 'WAR_DRUMS'
   | 'SABOTEUR'
   | 'SPY'
   | 'WARLORD'
@@ -143,7 +144,7 @@ export const KN_PROGRESS_CARDS: readonly KNProgressCardDefinition[] = [
   trade(
     'MERCHANT',
     'Merchant',
-    6,
+    4,
     'Place the Merchant on an adjacent producing tile for one point and a 2:1 trade rate.',
   ),
   trade(
@@ -155,8 +156,14 @@ export const KN_PROGRESS_CARDS: readonly KNProgressCardDefinition[] = [
   trade(
     'COMMODITY_MONOPOLY',
     'Commodity Monopoly',
-    2,
+    3,
     'Take one card of one commodity from every opponent.',
+  ),
+  trade(
+    'RECLAMATION',
+    'Reclamation',
+    1,
+    'Permanently change one producing tile without the robber or a 6/8 token into a different resource terrain.',
   ),
   politics(
     'BISHOP',
@@ -183,7 +190,12 @@ export const KN_PROGRESS_CARDS: readonly KNProgressCardDefinition[] = [
     2,
     'Remove one open Road. If it was yours, you may relocate it.',
   ),
-  politics('INTRIGUE', 'Intrigue', 2, 'Displace an enemy Knight touching one of your Roads.'),
+  politics(
+    'WAR_DRUMS',
+    'War Drums',
+    2,
+    'Move the barbarian fleet one space forward, one space back, or two spaces back.',
+  ),
   politics(
     'SABOTEUR',
     'Saboteur',

@@ -2,17 +2,20 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { TERRAINS } from '../../engine/content/resources';
-import type { PlayerCount } from '../../engine/content/types';
-import type { PlayerId } from '../../engine/core/ids';
+import type { MapDefinition, PlayerCount } from '../../engine/content/types';
+import type { MapId, PlayerId } from '../../engine/core/ids';
+import { getMapPortPlacements } from '../../engine/maps/map-utils';
 import { Button } from '../../ui/components/Button';
 import { Modal } from '../../ui/components/Modal';
 import { Panel } from '../../ui/components/Panel';
+import { CityActionIcon, HouseActionIcon, WallActionIcon } from '../../ui/game/ActionArtwork';
 import { PlayerEditorModal } from '../../ui/lobby/PlayerEditorModal';
 import { PlayerSlot } from '../../ui/lobby/PlayerSlot';
 import {
   AVAILABLE_MAPS,
   AVAILABLE_MODES,
   LOBBY_SIZES,
+  RANDOM_MAP_ID,
   validateLobby,
   type LobbyRuleKey,
   type LocalLobbyPlayer,
@@ -20,6 +23,93 @@ import {
 import { useAppStore } from '../stores/app-store';
 
 const TURN_TIMES = [30, 45, 60, 90, 120, 180, 300] as const;
+const MAPS_PER_PAGE = 4;
+
+type LobbyMapOption =
+  | {
+      readonly kind: 'RANDOM';
+      readonly id: MapId;
+      readonly displayName: 'Random';
+    }
+  | {
+      readonly kind: 'MAP';
+      readonly id: MapId;
+      readonly displayName: string;
+      readonly map: MapDefinition;
+    };
+
+const MAP_OPTIONS: readonly LobbyMapOption[] = [
+  { kind: 'RANDOM', id: RANDOM_MAP_ID, displayName: 'Random' },
+  ...AVAILABLE_MAPS.map((map): LobbyMapOption => ({
+    kind: 'MAP',
+    id: map.id,
+    displayName: map.displayName,
+    map,
+  })),
+];
+
+const MAP_PREVIEW_PORT_OFFSETS = [
+  { x: 9, y: -15, rotation: 30 },
+  { x: 18, y: 0, rotation: 90 },
+  { x: 9, y: 15, rotation: 150 },
+  { x: -9, y: 15, rotation: 210 },
+  { x: -18, y: 0, rotation: 270 },
+  { x: -9, y: -15, rotation: 330 },
+] as const;
+
+interface MapPreviewLayout {
+  readonly scale: number;
+  readonly centerX: number;
+  readonly centerY: number;
+  readonly tiles: readonly { readonly x: number; readonly y: number }[];
+  readonly ports: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly rotation: number;
+  }[];
+}
+
+function createMapPreviewLayout(map: MapDefinition): MapPreviewLayout {
+  const tiles = map.coordinates.map((coordinate) => ({
+    x: (coordinate.q + coordinate.r / 2) * 17,
+    y: coordinate.r * 14.5,
+  }));
+  const placements = getMapPortPlacements(map);
+  const ports = placements.map((placement) => {
+    const coordinateIndex = map.coordinates.findIndex(
+      (coordinate) =>
+        coordinate.q === placement.coordinate.q && coordinate.r === placement.coordinate.r,
+    );
+    const tile = tiles[coordinateIndex];
+    const offset = MAP_PREVIEW_PORT_OFFSETS[placement.edgeIndex];
+    if (tile === undefined || offset === undefined) {
+      throw new Error(`Cannot preview a port on ${map.displayName}.`);
+    }
+    return {
+      x: tile.x + offset.x,
+      y: tile.y + offset.y,
+      rotation: offset.rotation,
+    };
+  });
+  const extentPoints = [...tiles, ...ports];
+  const minimumX = Math.min(...extentPoints.map((point) => point.x));
+  const maximumX = Math.max(...extentPoints.map((point) => point.x));
+  const minimumY = Math.min(...extentPoints.map((point) => point.y));
+  const maximumY = Math.max(...extentPoints.map((point) => point.y));
+  const contentWidth = maximumX - minimumX + 27;
+  const contentHeight = maximumY - minimumY + 31;
+  return {
+    scale: Math.min(1, 142 / contentWidth, 88 / contentHeight),
+    centerX: (minimumX + maximumX) / 2,
+    centerY: (minimumY + maximumY) / 2,
+    tiles,
+    ports,
+  };
+}
+
+const MAP_PREVIEW_LAYOUTS = new Map(
+  AVAILABLE_MAPS.map((map) => [map.id, createMapPreviewLayout(map)] as const),
+);
 
 const LOBBY_RULES: readonly {
   readonly key: LobbyRuleKey;
@@ -44,6 +134,12 @@ const LOBBY_RULES: readonly {
     label: 'Balanced Dice',
     description: 'Use a managed roll deck with fewer repeated totals.',
     icon: '⚄',
+  },
+  {
+    key: 'inventorsMadness',
+    label: "Inventor's Madness",
+    description: 'Telegraph and swap two random number tokens after each full round.',
+    icon: '⇄',
   },
 ];
 
@@ -124,13 +220,29 @@ export function LocalLobbyScreen() {
   const [editingPlayerId, setEditingPlayerId] = useState<PlayerId | null>(null);
   const [pendingSize, setPendingSize] = useState<PlayerCount | null>(null);
   const [startFailure, setStartFailure] = useState<readonly string[]>([]);
+  const [mapPage, setMapPage] = useState(() =>
+    Math.max(
+      0,
+      Math.floor(
+        Math.max(
+          0,
+          MAP_OPTIONS.findIndex((option) => option.id === lobby.mapId),
+        ) / MAPS_PER_PAGE,
+      ),
+    ),
+  );
   const lobbyIssues = useMemo(() => validateLobby(lobby), [lobby]);
   const editingPlayer = lobby.players.find((player) => player.id === editingPlayerId) ?? null;
   const selectedMode = AVAILABLE_MODES.find((mode) => mode.id === lobby.modeId);
-  const selectedMap = AVAILABLE_MAPS.find((map) => map.id === lobby.mapId);
+  const selectedMapOption = MAP_OPTIONS.find((option) => option.id === lobby.mapId);
   const turnTimeIndex = Math.max(
     0,
     TURN_TIMES.findIndex((seconds) => seconds === lobby.turnTimeSeconds),
+  );
+  const mapPageCount = Math.max(1, Math.ceil(MAP_OPTIONS.length / MAPS_PER_PAGE));
+  const visibleMapOptions = MAP_OPTIONS.slice(
+    mapPage * MAPS_PER_PAGE,
+    mapPage * MAPS_PER_PAGE + MAPS_PER_PAGE,
   );
 
   const openAddPlayer = () => {
@@ -172,7 +284,7 @@ export function LocalLobbyScreen() {
           <small>Local match room</small>
           <h1>Territory Lobby</h1>
           <span>
-            {selectedMode?.displayName ?? 'Game'} · {selectedMap?.displayName ?? 'Map'}
+            {selectedMode?.displayName ?? 'Game'} · {selectedMapOption?.displayName ?? 'Map'}
           </span>
         </div>
         <div className="lobby-room-header__actions">
@@ -279,11 +391,49 @@ export function LocalLobbyScreen() {
                     aria-pressed={selected}
                     onClick={() => setLobbyMode(mode.id)}
                   >
-                    <span className="lobby-room-mode-art" aria-hidden="true">
-                      <i />
-                      <i />
-                      <i />
-                      {mode.kind === 'K_N' ? <b>♞</b> : null}
+                    <span
+                      className={`lobby-room-mode-art lobby-room-mode-art--${mode.kind.toLocaleLowerCase()}`}
+                      aria-hidden="true"
+                    >
+                      <span className="lobby-room-mode-art__halo" />
+                      <span className="lobby-room-mode-art__surface" />
+                      {mode.kind === 'K_N' ? (
+                        <>
+                          <span className="lobby-room-mode-banners">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                          <span className="lobby-room-mode-piece lobby-room-mode-piece--wall">
+                            <WallActionIcon />
+                          </span>
+                          <span className="lobby-room-mode-piece lobby-room-mode-piece--city">
+                            <CityActionIcon />
+                          </span>
+                          <span className="lobby-room-mode-knight lobby-room-mode-knight--rear">
+                            <i />
+                            <b />
+                          </span>
+                          <span className="lobby-room-mode-knight lobby-room-mode-knight--front">
+                            <i />
+                            <b />
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="lobby-room-mode-piece lobby-room-mode-piece--house-rear">
+                            <HouseActionIcon />
+                          </span>
+                          <span className="lobby-room-mode-piece lobby-room-mode-piece--house-front">
+                            <HouseActionIcon />
+                          </span>
+                          <span className="lobby-room-mode-robber">
+                            <i />
+                            <b />
+                            <em />
+                          </span>
+                        </>
+                      )}
                     </span>
                     <strong>{mode.displayName}</strong>
                     <small>
@@ -301,26 +451,83 @@ export function LocalLobbyScreen() {
           <section className="lobby-room-choice-section" aria-labelledby="map-title">
             <div className="lobby-room-choice-heading">
               <h3 id="map-title">Map</h3>
-              <p>Choose the board layout for this match.</p>
+              <div className="lobby-map-pagination" aria-label="Map pages">
+                <button
+                  type="button"
+                  aria-label="Previous maps"
+                  disabled={mapPage === 0}
+                  onClick={() => setMapPage((page) => Math.max(0, page - 1))}
+                >
+                  ‹
+                </button>
+                <span>
+                  {mapPage + 1}/{mapPageCount}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next maps"
+                  disabled={mapPage >= mapPageCount - 1}
+                  onClick={() => setMapPage((page) => Math.min(mapPageCount - 1, page + 1))}
+                >
+                  ›
+                </button>
+              </div>
             </div>
             <select
               className="visually-hidden"
               aria-label="Map"
               value={lobby.mapId}
               onChange={(event) => {
-                const map = AVAILABLE_MAPS.find((entry) => entry.id === event.target.value);
-                if (map !== undefined) setLobbyMap(map.id);
+                const option = MAP_OPTIONS.find((entry) => entry.id === event.target.value);
+                if (option !== undefined) {
+                  setMapPage(
+                    Math.floor(
+                      Math.max(
+                        0,
+                        MAP_OPTIONS.findIndex((entry) => entry.id === option.id),
+                      ) / MAPS_PER_PAGE,
+                    ),
+                  );
+                  setLobbyMap(option.id);
+                }
               }}
             >
-              {AVAILABLE_MAPS.map((map) => (
-                <option key={map.id} value={map.id}>
-                  {map.displayName}
+              {MAP_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.displayName}
                 </option>
               ))}
             </select>
-            <div className="lobby-room-map-grid">
-              {AVAILABLE_MAPS.map((map) => {
-                const selected = map.id === lobby.mapId;
+            <div className="lobby-room-map-grid" key={mapPage}>
+              {visibleMapOptions.map((option) => {
+                const selected = option.id === lobby.mapId;
+                if (option.kind === 'RANDOM') {
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`lobby-room-map-card lobby-room-map-card--random ${selected ? 'is-selected' : ''}`}
+                      aria-label="Select Random map"
+                      aria-pressed={selected}
+                      onClick={() => setLobbyMap(option.id)}
+                    >
+                      <span
+                        className="lobby-map-preview lobby-map-preview--random"
+                        aria-hidden="true"
+                      >
+                        <strong>?</strong>
+                      </span>
+                      <span>
+                        <strong>Random</strong>
+                        <small>Picks one existing map when the match starts</small>
+                      </span>
+                      {selected ? <em>✓</em> : null}
+                    </button>
+                  );
+                }
+                const map = option.map;
+                const preview = MAP_PREVIEW_LAYOUTS.get(map.id);
+                if (preview === undefined) return null;
                 return (
                   <button
                     key={map.id}
@@ -331,40 +538,67 @@ export function LocalLobbyScreen() {
                     onClick={() => setLobbyMap(map.id)}
                   >
                     <span className="lobby-map-preview" aria-hidden="true">
-                      {map.coordinates.map((coordinate, index) => {
-                        const terrainId = map.terrainPool[index % map.terrainPool.length];
-                        const terrain = TERRAINS.find((entry) => entry.id === terrainId);
-                        return (
+                      <span className="lobby-map-preview__wash" />
+                      <span className="lobby-map-preview__ports">
+                        {preview.ports.map((port, index) => (
                           <i
-                            key={`${coordinate.q}:${coordinate.r}`}
+                            key={index}
                             style={
                               {
-                                left: `calc(50% + ${coordinate.q * 17 + coordinate.r * 8.5}px)`,
-                                top: `calc(50% + ${coordinate.r * 14.5}px)`,
-                                '--lobby-hex-color': terrain?.color ?? '#77715f',
+                                left: `calc(50% + ${(port.x - preview.centerX) * preview.scale}px)`,
+                                top: `calc(50% + ${(port.y - preview.centerY) * preview.scale}px)`,
+                                '--lobby-port-rotation': `${port.rotation}deg`,
+                                '--lobby-map-scale': preview.scale,
                               } as CSSProperties
                             }
                           />
-                        );
-                      })}
+                        ))}
+                      </span>
+                      <span
+                        className="lobby-map-preview__board"
+                        data-compact={preview.scale < 0.72 ? 'true' : undefined}
+                      >
+                        {map.coordinates.map((coordinate, index) => {
+                          const terrainId =
+                            map.terrainPool[(index * 7 + 3) % map.terrainPool.length];
+                          const terrain = TERRAINS.find((entry) => entry.id === terrainId);
+                          const token =
+                            terrain?.resourceId === null
+                              ? null
+                              : map.numberTokenPool[index % map.numberTokenPool.length];
+                          return (
+                            <i
+                              key={`${coordinate.q}:${coordinate.r}`}
+                              data-terrain={terrain?.id}
+                              style={
+                                {
+                                  left: `calc(50% + ${(preview.tiles[index]!.x - preview.centerX) * preview.scale}px)`,
+                                  top: `calc(50% + ${(preview.tiles[index]!.y - preview.centerY) * preview.scale}px)`,
+                                  '--lobby-hex-color': terrain?.color ?? '#77715f',
+                                  '--lobby-map-scale': preview.scale,
+                                } as CSSProperties
+                              }
+                            >
+                              {token === null ? <b>◆</b> : <b>{token}</b>}
+                            </i>
+                          );
+                        })}
+                      </span>
                     </span>
                     <span>
                       <strong>{map.displayName}</strong>
                       <small>
                         {map.coordinates.length} tiles · {map.portPool.length} ports
+                        {map.landMassCount > 1 ? ` · ${map.landMassCount} islands` : ''}
+                        {(map.lakeCount ?? 0) > 0
+                          ? ` · ${map.lakeCount} lake${map.lakeCount === 1 ? '' : 's'}`
+                          : ''}
                       </small>
                     </span>
                     {selected ? <em>✓</em> : null}
                   </button>
                 );
               })}
-              <div className="lobby-room-map-card lobby-room-map-card--coming" aria-hidden="true">
-                <span className="lobby-map-preview lobby-map-preview--coming">＋</span>
-                <span>
-                  <strong>More maps</strong>
-                  <small>New layouts can slot in here</small>
-                </span>
-              </div>
             </div>
           </section>
 
@@ -376,19 +610,30 @@ export function LocalLobbyScreen() {
             <div className="lobby-room-rule-grid">
               {LOBBY_RULES.map((rule) => {
                 const enabled = lobby[rule.key];
+                const tooltipId = `lobby-rule-tooltip-${rule.key}`;
                 return (
                   <button
                     key={rule.key}
                     type="button"
                     className={enabled ? 'is-selected' : ''}
                     aria-label={rule.label}
+                    aria-describedby={tooltipId}
                     aria-pressed={enabled}
-                    title={rule.description}
                     onClick={() => setLobbyRule(rule.key, !enabled)}
                   >
-                    <span aria-hidden="true">{rule.icon}</span>
+                    <span className="lobby-rule-icon" aria-hidden="true">
+                      {rule.icon}
+                    </span>
                     <strong>{rule.label}</strong>
-                    <small>{enabled ? 'On' : 'Off'}</small>
+                    <small className="lobby-rule-state">{enabled ? 'On' : 'Off'}</small>
+                    <span id={tooltipId} className="lobby-rule-tooltip" role="tooltip">
+                      <span className="lobby-rule-tooltip__heading">
+                        <b>{rule.label}</b>
+                        <em>{enabled ? 'Enabled' : 'Disabled'}</em>
+                      </span>
+                      <span>{rule.description}</span>
+                      <small>Click to turn this room rule {enabled ? 'off' : 'on'}.</small>
+                    </span>
                   </button>
                 );
               })}

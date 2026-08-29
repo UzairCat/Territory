@@ -18,6 +18,7 @@ interface PlayerPanelProps {
   readonly winner: boolean;
   readonly kNMode?: boolean;
   readonly wallCount?: number;
+  readonly cityCount?: number;
   readonly knProgressCards?: NonNullable<GameState['kn']>['progressCards'] | undefined;
 }
 
@@ -48,6 +49,7 @@ export function PlayerPanel({
   winner,
   kNMode = false,
   wallCount = 0,
+  cityCount = 0,
   knProgressCards,
 }: PlayerPanelProps) {
   const [progressSummaryAnchor, setProgressSummaryAnchor] = useState<ProgressSummaryAnchor | null>(
@@ -66,6 +68,8 @@ export function PlayerPanel({
     (total, knight) => total + (knight.active ? knight.level : 0),
     0,
   );
+  const knightPowerGlows =
+    holdsLargestForce || (cityCount > 0 && activeKnightStrength >= cityCount);
   const progressCount = kNMode ? player.knProgressCardIds.length : player.progressCardIds.length;
   const progressFamilyCounts = player.knProgressCardIds.reduce<Record<KNProgressFamily, number>>(
     (counts, cardId) => {
@@ -159,7 +163,9 @@ export function PlayerPanel({
             </div>
             <div title={`Longest bridge: ${longestRoadLength}`}>
               <dt className="visually-hidden">Longest bridge</dt>
-              <dd className="game-player-kn__plain-stat">
+              <dd
+                className={`game-player-kn__plain-stat ${holdsLongestRoad ? 'is-award-holder' : ''}`}
+              >
                 <span className="game-player__bridge-art" aria-hidden="true">
                   <i />
                 </span>
@@ -170,7 +176,9 @@ export function PlayerPanel({
               title={`Active Knight strength ${activeKnightStrength}; ${wallCount} Walls; safe hand limit ${7 + wallCount * 2}`}
             >
               <dt className="visually-hidden">Active Knight strength</dt>
-              <dd className="game-player-kn__plain-stat game-player-kn__plain-stat--knights">
+              <dd
+                className={`game-player-kn__plain-stat game-player-kn__plain-stat--knights ${knightPowerGlows ? 'is-award-holder' : ''}`}
+              >
                 <span aria-hidden="true">⚔</span>
                 <strong>{activeKnightStrength}</strong>
               </dd>
@@ -264,7 +272,10 @@ export function PlayerPanel({
               <strong>{progressCount}</strong>
             </dd>
           </div>
-          <div className="game-player__stat game-player__stat--robber" title="Robbers used">
+          <div
+            className={`game-player__stat game-player__stat--robber ${holdsLargestForce ? 'is-award-holder' : ''}`}
+            title="Robbers used"
+          >
             <dt className="visually-hidden">Robbers used</dt>
             <dd>
               <span className="game-player__robber-art" aria-hidden="true">
@@ -273,7 +284,10 @@ export function PlayerPanel({
               <strong>{robberCount}</strong>
             </dd>
           </div>
-          <div className="game-player__stat game-player__stat--bridge" title="Longest bridge">
+          <div
+            className={`game-player__stat game-player__stat--bridge ${holdsLongestRoad ? 'is-award-holder' : ''}`}
+            title="Longest bridge"
+          >
             <dt className="visually-hidden">Longest bridge</dt>
             <dd>
               <span className="game-player__bridge-art" aria-hidden="true">

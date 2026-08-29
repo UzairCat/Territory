@@ -1,4 +1,5 @@
 import { TERRAINS } from '../engine/content/resources';
+import type { KNProgressFamily } from '../engine/content/types';
 import type {
   BoardState,
   BuildingState,
@@ -43,12 +44,18 @@ export interface ResourceFlyover {
     | { readonly kind: 'PLAYER'; readonly playerId: PlayerId };
   readonly resourceId: ResourceId;
   readonly delayMs: number;
+  readonly target?:
+    { readonly kind: 'BANK' } | { readonly kind: 'PLAYER'; readonly playerId: PlayerId };
+  /** @deprecated Prefer the explicit target field. */
   readonly targetPlayerId?: PlayerId;
 }
 
 export interface ProgressCardFlyover {
   readonly id: string;
-  readonly sourcePlayerId: PlayerId;
+  readonly source:
+    | { readonly kind: 'PLAYER'; readonly playerId: PlayerId }
+    | { readonly kind: 'DECK'; readonly family?: KNProgressFamily };
+  readonly targetPlayerId: PlayerId;
   readonly cardDefinitionId: CardDefinitionId;
   readonly delayMs: number;
 }
@@ -174,10 +181,17 @@ function portLabel(port: PortState): string {
 function renderPort(
   port: PortState,
   edgeById: ReadonlyMap<EdgeId, RenderEdge>,
+  boardEdgeById: ReadonlyMap<EdgeId, EdgeState>,
+  hexById: ReadonlyMap<HexId, HexState>,
   hexSize: number,
 ): RenderPort {
   const edge = edgeById.get(port.edgeId);
-  if (edge === undefined) throw new Error(`Cannot render ${port.id} without its boundary edge.`);
+  const boardEdge = boardEdgeById.get(port.edgeId);
+  const shoreHex =
+    boardEdge?.adjacentHexIds.length === 1 ? hexById.get(boardEdge.adjacentHexIds[0]!) : undefined;
+  if (edge === undefined || shoreHex === undefined) {
+    throw new Error(`Cannot render ${port.id} without its boundary edge and shore hex.`);
+  }
   const midpoint = {
     x: (edge.first.x + edge.second.x) / 2,
     y: (edge.first.y + edge.second.y) / 2,
@@ -187,7 +201,8 @@ function renderPort(
   const edgeLength = Math.hypot(edgeDeltaX, edgeDeltaY) || 1;
   let normalX = -edgeDeltaY / edgeLength;
   let normalY = edgeDeltaX / edgeLength;
-  if (normalX * midpoint.x + normalY * midpoint.y < 0) {
+  const shoreCenter = axialToWorld(shoreHex, hexSize);
+  if (normalX * (shoreCenter.x - midpoint.x) + normalY * (shoreCenter.y - midpoint.y) > 0) {
     normalX *= -1;
     normalY *= -1;
   }
@@ -219,6 +234,8 @@ export function createBoardRenderModel(
   );
   const edges = Object.values(board.edges).map((edge) => renderEdge(edge, positions));
   const edgeById = new Map(edges.map((edge) => [edge.target.id, edge] as const));
+  const boardEdgeById = new Map(Object.values(board.edges).map((edge) => [edge.id, edge] as const));
+  const hexById = new Map(Object.values(board.hexes).map((hex) => [hex.id, hex] as const));
   const vertices = Object.values(board.vertices).map((vertex): RenderVertex => {
     const position = positions.get(vertex.id);
     if (position === undefined) throw new Error(`Cannot render unknown vertex ${vertex.id}.`);
@@ -229,7 +246,9 @@ export function createBoardRenderModel(
       knight: knights.find((knight) => knight.id === vertex.knightId) ?? null,
     };
   });
-  const ports = Object.values(board.ports).map((port) => renderPort(port, edgeById, hexSize));
+  const ports = Object.values(board.ports).map((port) =>
+    renderPort(port, edgeById, boardEdgeById, hexById, hexSize),
+  );
   const extentPoints = [
     ...hexes.flatMap((hex) => hex.corners),
     ...ports.map((port) => port.position),

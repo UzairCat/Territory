@@ -146,7 +146,7 @@ export function downgradeBarbarianCity(
   };
 }
 
-function resolveBarbarianAttack(state: GameState): KNResolution {
+export function resolveBarbarianAttack(state: GameState): KNResolution {
   const kn = state.kn;
   const activePlayerId = state.turn.activePlayerId;
   if (kn === null || activePlayerId === null) return { state, events: [] };
@@ -283,15 +283,13 @@ function resolveBarbarianAttack(state: GameState): KNResolution {
       barbarianPosition: 0,
       firstBarbarianAttackResolved: true,
       attackSummary,
-      pendingRoll: {
-        playerId: activePlayerId,
-        red: kn.redDieResult ?? 1,
-        regular: kn.regularDieResult ?? 1,
-        event: kn.eventDieResult ?? 'BARBARIAN',
-        numericTotal: (kn.redDieResult ?? 1) + (kn.regularDieResult ?? 1),
-        stage: 'NUMBER',
-        skipSevenDiscards: kn.pendingRoll?.skipSevenDiscards === true,
-      },
+      pendingRoll:
+        kn.pendingRoll === null
+          ? null
+          : {
+              ...kn.pendingRoll,
+              stage: 'NUMBER',
+            },
     },
   };
   events.push({

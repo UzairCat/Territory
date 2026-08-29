@@ -7,6 +7,7 @@ import {
   ActionSupplyBadge,
   CityActionIcon,
   HouseActionIcon,
+  KnightActionIcon,
   ResourceCostCards,
   RoadActionIcon,
   WallActionIcon,
@@ -41,11 +42,7 @@ const COPY: Readonly<
   KNIGHT: {
     name: 'Knight',
     action: 'Build Basic Knight',
-    icon: (
-      <span className="board-build-knight-icon" aria-hidden="true">
-        <i />
-      </span>
-    ),
+    icon: <KnightActionIcon />,
   },
   WALL: {
     name: 'City Wall',

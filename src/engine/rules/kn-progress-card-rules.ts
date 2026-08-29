@@ -3,7 +3,7 @@ import {
   getKNProgressCardDefinition,
   type KNProgressCardDefinition,
 } from '../content/kn-progress-cards';
-import { RESOURCES, RESOURCE_IDS, TERRAIN_IDS } from '../content/resources';
+import { RESOURCES, RESOURCE_IDS, TERRAINS, TERRAIN_IDS } from '../content/resources';
 import { resourceBundle } from '../content/types';
 import type { ResourceBundle } from '../content/types';
 import type { GameAction } from '../core/actions';
@@ -22,12 +22,8 @@ import type {
 } from '../core/ids';
 import { actionId } from '../core/ids';
 import { randomInteger } from '../core/random';
-import {
-  buyImprovement,
-  getLegalKnightPlacementVertexIds,
-  getLegalDisplacedKnightVertexIds,
-} from './kn-construction-rules';
-import { rollKNDice } from './kn-turn-rules';
+import { buyImprovement, getLegalKnightPlacementVertexIds } from './kn-construction-rules';
+import { resolveBarbarianAttack, rollKNDice } from './kn-turn-rules';
 import type { RollDiceOptions } from './turn-rules';
 import { isLegalRoadEdge } from './build-rules';
 import {
@@ -323,6 +319,25 @@ function resourceHexesTouchingPlayer(state: GameState, playerId: PlayerId): read
     .map((hex) => hex.id);
 }
 
+function eligibleReclamationHexIds(state: GameState): readonly HexId[] {
+  return Object.values(state.board.hexes)
+    .filter(
+      (hex) =>
+        hex.resourceId !== null &&
+        hex.id !== state.board.robberHexId &&
+        hex.numberToken !== 6 &&
+        hex.numberToken !== 8,
+    )
+    .map((hex) => hex.id);
+}
+
+function reclamationResourceIds(state: GameState, hexId: HexId): readonly ResourceId[] {
+  const currentResourceId = state.board.hexes[hexId]?.resourceId;
+  return RESOURCES.filter((resource) => resource.id !== currentResourceId).map(
+    (resource) => resource.id,
+  );
+}
+
 function openRoadIds(state: GameState): readonly EdgeId[] {
   return Object.values(state.board.edges)
     .filter((edge) => {
@@ -564,6 +579,12 @@ export function playKNProgressCard(state: GameState, action: KNCardAction): Disp
         .map((hex) => hex.id),
     );
   }
+  if (effect === 'RECLAMATION') {
+    return choice('RECLAMATION_HEX', eligibleReclamationHexIds(state), {
+      canCancel: true,
+      context: { committed: false },
+    });
+  }
   if (effect === 'MEDICINE')
     return choice('MEDICINE_CITY', legalMedicineVertices(state, action.actorId));
   if (effect === 'ROAD_BUILDING') {
@@ -644,22 +665,17 @@ export function playKNProgressCard(state: GameState, action: KNCardAction): Disp
     );
   }
   if (effect === 'DIPLOMAT') return choice('DIPLOMAT_ROAD', openRoadIds(state));
-  if (effect === 'INTRIGUE') {
-    const touching = new Set<VertexId>();
-    for (const edge of Object.values(state.board.edges)) {
-      if (edge.roadOwnerId === action.actorId) {
-        touching.add(edge.vertexAId);
-        touching.add(edge.vertexBId);
-      }
-    }
-    return choice(
-      'INTRIGUE_KNIGHT',
-      Object.values(state.players)
-        .filter((player) => player.id !== action.actorId)
-        .flatMap((player) => player.knights)
-        .filter((knight) => touching.has(knight.vertexId))
-        .map((knight) => knight.id),
-    );
+  if (effect === 'WAR_DRUMS') {
+    const kn = state.kn!;
+    const current = kn.barbarianPosition;
+    const positions = [current + 1, current - 1, current - 2]
+      .filter((position) => position >= 0 && position <= kn.barbarianTrackLength)
+      .filter((position, index, values) => values.indexOf(position) === index)
+      .map(String);
+    return choice('WAR_DRUMS_POSITION', positions, {
+      canCancel: true,
+      context: { currentPosition: current, committed: false },
+    });
   }
   if (effect === 'SABOTEUR') {
     const actorScore = calculateScore(state, action.actorId);
@@ -1005,6 +1021,140 @@ export function resolveKNProgressCardSelection(
     const finished = finishCard(nextState, activePlayerId, cardInstanceId, {
       targetIds: [firstHex.id, secondHex.id],
     });
+    return { ok: true, state: finished.state, events: [...events, ...finished.events] };
+  } else if (interaction.purpose === 'RECLAMATION_HEX') {
+    const hex = state.board.hexes[selected as HexId];
+    const eligibleHexIds = eligibleReclamationHexIds(state);
+    if (hex === undefined || !eligibleHexIds.includes(hex.id)) {
+      return rejectAction(
+        state,
+        'INVALID_TARGET',
+        'Choose a producing tile without the robber or a 6/8 number token.',
+      );
+    }
+    return {
+      ok: true,
+      state: withChoice(
+        state,
+        activePlayerId,
+        cardInstanceId,
+        'RECLAMATION_RESOURCE',
+        [...eligibleHexIds, ...reclamationResourceIds(state, hex.id)],
+        {
+          canCancel: true,
+          context: {
+            activePlayerId,
+            selectedHexId: hex.id,
+            eligibleHexIds,
+            committed: false,
+          },
+        },
+      ),
+      events: [],
+    };
+  } else if (interaction.purpose === 'RECLAMATION_RESOURCE') {
+    const eligibleHexIds = eligibleReclamationHexIds(state);
+    const selectedHex = state.board.hexes[selected as HexId];
+    if (selectedHex !== undefined && eligibleHexIds.includes(selectedHex.id)) {
+      return {
+        ok: true,
+        state: withChoice(
+          state,
+          activePlayerId,
+          cardInstanceId,
+          'RECLAMATION_RESOURCE',
+          [...eligibleHexIds, ...reclamationResourceIds(state, selectedHex.id)],
+          {
+            canCancel: true,
+            context: {
+              activePlayerId,
+              selectedHexId: selectedHex.id,
+              eligibleHexIds,
+              committed: false,
+            },
+          },
+        ),
+        events: [],
+      };
+    }
+    const hexId = interaction.context.selectedHexId as HexId | undefined;
+    const hex = hexId === undefined ? undefined : state.board.hexes[hexId];
+    const resourceId = selected as ResourceId;
+    const terrain = TERRAINS.find((candidate) => candidate.resourceId === resourceId);
+    if (
+      hex === undefined ||
+      hex.resourceId === null ||
+      hex.id === state.board.robberHexId ||
+      hex.numberToken === 6 ||
+      hex.numberToken === 8 ||
+      terrain === undefined ||
+      resourceId === hex.resourceId
+    ) {
+      return rejectAction(state, 'INVALID_TARGET', 'That Reclamation change is not legal.');
+    }
+    const fromResourceId = hex.resourceId;
+    const merchant = state.kn!.merchant;
+    nextState = {
+      ...state,
+      board: {
+        ...state.board,
+        hexes: {
+          ...state.board.hexes,
+          [hex.id]: {
+            ...hex,
+            terrainId: terrain.id,
+            resourceId,
+          },
+        },
+      },
+      kn: {
+        ...state.kn!,
+        merchant: merchant?.hexId === hex.id ? { ...merchant, resourceId } : merchant,
+      },
+    };
+    events.push({
+      type: 'TERRAIN_RECLAIMED',
+      playerId: activePlayerId,
+      hexId: hex.id,
+      fromResourceId,
+      toResourceId: resourceId,
+    });
+    const finished = finishCard(nextState, activePlayerId, cardInstanceId, {
+      resourceId,
+      targetIds: [hex.id],
+    });
+    return { ok: true, state: finished.state, events: [...events, ...finished.events] };
+  } else if (interaction.purpose === 'WAR_DRUMS_POSITION') {
+    const kn = state.kn!;
+    const current = kn.barbarianPosition;
+    const position = Number(selected);
+    if (
+      !Number.isSafeInteger(position) ||
+      ![current + 1, current - 1, current - 2].includes(position) ||
+      position < 0 ||
+      position > kn.barbarianTrackLength
+    ) {
+      return rejectAction(state, 'INVALID_TARGET', 'Choose a marked barbarian fleet position.');
+    }
+    nextState = { ...state, kn: { ...kn, barbarianPosition: position } };
+    events.push({
+      type: 'WAR_DRUMS_MOVED',
+      playerId: activePlayerId,
+      fromPosition: current,
+      position,
+      trackLength: kn.barbarianTrackLength,
+    });
+    const finished = finishCard(nextState, activePlayerId, cardInstanceId, {
+      targetIds: [String(position)],
+    });
+    if (position >= kn.barbarianTrackLength) {
+      const attack = resolveBarbarianAttack(finished.state);
+      return {
+        ok: true,
+        state: attack.state,
+        events: [...events, ...finished.events, ...attack.events],
+      };
+    }
     return { ok: true, state: finished.state, events: [...events, ...finished.events] };
   } else if (interaction.purpose === 'MEDICINE_CITY') {
     const vertex = state.board.vertices[selected as VertexId];
@@ -1558,91 +1708,6 @@ export function resolveKNProgressCardSelection(
       },
     };
     events.push({ type: 'ROAD_BUILT', playerId: activePlayerId, edgeId: edge.id });
-  } else if (interaction.purpose === 'INTRIGUE_KNIGHT') {
-    if (interaction.context.step === 'RELOCATE') {
-      const targetId = interaction.context.targetPlayerId as PlayerId;
-      const knightId = interaction.context.knightId as KnightId;
-      const target = state.players[targetId]!;
-      const knight = target.knights.find((candidate) => candidate.id === knightId);
-      const vertex = state.board.vertices[selected as VertexId];
-      if (knight === undefined || vertex === undefined)
-        return rejectAction(state, 'INVALID_TARGET', 'That relocation is no longer legal.');
-      nextState = {
-        ...state,
-        players: {
-          ...state.players,
-          [targetId]: {
-            ...target,
-            knights: target.knights.map((candidate) =>
-              candidate.id === knight.id ? { ...candidate, vertexId: vertex.id } : candidate,
-            ),
-          },
-        },
-        board: {
-          ...state.board,
-          vertices: { ...state.board.vertices, [vertex.id]: { ...vertex, knightId: knight.id } },
-        },
-      };
-      events.push({
-        type: 'KNIGHT_MOVED',
-        playerId: targetId,
-        knightId: knight.id,
-        fromVertexId: knight.vertexId,
-        vertexId: vertex.id,
-      });
-    } else {
-      const found = findKnight(state, selected as KnightId);
-      if (found === null || found.player.id === activePlayerId)
-        return rejectAction(state, 'INVALID_TARGET', 'Choose an opponent Knight.');
-      const origin = state.board.vertices[found.knight.vertexId]!;
-      nextState = {
-        ...state,
-        board: {
-          ...state.board,
-          vertices: { ...state.board.vertices, [origin.id]: { ...origin, knightId: null } },
-        },
-      };
-      const destinations = getLegalDisplacedKnightVertexIds(nextState, found.knight);
-      if (destinations.length === 0) {
-        nextState = {
-          ...nextState,
-          players: {
-            ...nextState.players,
-            [found.player.id]: {
-              ...found.player,
-              knights: found.player.knights.filter((candidate) => candidate.id !== found.knight.id),
-            },
-          },
-        };
-        events.push({
-          type: 'KNIGHT_REMOVED',
-          playerId: found.player.id,
-          knightId: found.knight.id,
-        });
-      } else {
-        return {
-          ok: true,
-          state: withChoice(
-            nextState,
-            found.player.id,
-            cardInstanceId,
-            'INTRIGUE_KNIGHT',
-            destinations,
-            {
-              canCancel: false,
-              context: {
-                activePlayerId,
-                targetPlayerId: found.player.id,
-                knightId: found.knight.id,
-                step: 'RELOCATE',
-                committed: true,
-              },
-            },
-          ),
-          events,
-        };
-      }
-    }
   } else if (interaction.purpose === 'SABOTEUR_DISCARD') {
     const bundle = selectedBundle(action.selections);
     const player = state.players[action.actorId]!;

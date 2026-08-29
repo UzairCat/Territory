@@ -3,11 +3,11 @@ import { RESOURCES } from '../content/resources';
 import { COMMODITIES } from '../content/commodities';
 import { resourceBundle } from '../content/types';
 import { validateClassicContent } from '../content/validate-content';
-import { generateBaseBoard } from '../board/generate-board';
+import { generateBoard } from '../board/generate-board';
 import { validateBoard } from '../board/validate-board';
 import { generateProgressDeck } from '../cards/generate-deck';
 import { generateKNProgressDecks } from '../cards/generate-kn-decks';
-import { BASE_MAP } from '../maps/base-map';
+import { getMapDefinition } from '../maps/maps';
 import { CLASSIC_MODE } from '../modes/classic';
 import { KN_MODE } from '../modes/kn';
 import type { GameConfigIssue } from './game-config';
@@ -30,6 +30,7 @@ function toCreateGameIssue(issue: GameConfigIssue): CreateGameIssue {
 }
 
 export function createGame(config: GameState['config']): CreateGameResult {
+  const map = getMapDefinition(config.mapId);
   const issues: CreateGameIssue[] = [
     ...validateGameConfig(config).map(toCreateGameIssue),
     ...validateClassicContent(),
@@ -39,18 +40,25 @@ export function createGame(config: GameState['config']): CreateGameResult {
     issues.push({ code: 'UNSUPPORTED_MODE', message: 'The requested game mode is unavailable.' });
   }
 
-  if (config.mapId !== BASE_MAP.id) {
+  if (map === undefined) {
     issues.push({ code: 'UNSUPPORTED_MAP', message: 'The requested map is unavailable.' });
   }
 
-  if (!BASE_MAP.supportedPlayerCounts.includes(config.playerCount)) {
+  if (map !== undefined && !map.supportedPlayerCounts.includes(config.playerCount)) {
     issues.push({
       code: 'MAP_PLAYER_COUNT_UNSUPPORTED',
       message: 'The selected map does not support this player count.',
     });
   }
 
-  if (issues.length > 0) {
+  if (map !== undefined && !map.supportedModeIds.includes(config.modeId)) {
+    issues.push({
+      code: 'MAP_MODE_UNSUPPORTED',
+      message: 'The selected map does not support this game mode.',
+    });
+  }
+
+  if (issues.length > 0 || map === undefined) {
     return { ok: false, issues };
   }
 
@@ -58,13 +66,13 @@ export function createGame(config: GameState['config']): CreateGameResult {
   const shuffledPlayers = shuffle(createRandomState(config.seed), initialPlayers);
   const orderedPlayers = shuffledPlayers.value.map((player, order) => ({ ...player, order }));
   const resolvedConfig = { ...config, players: orderedPlayers };
-  let generatedBoard: ReturnType<typeof generateBaseBoard>;
+  let generatedBoard: ReturnType<typeof generateBoard>;
   let generatedDeck: ReturnType<typeof generateProgressDeck> | null = null;
   let generatedKNDecks: ReturnType<typeof generateKNProgressDecks> | null = null;
 
   try {
-    generatedBoard = generateBaseBoard(shuffledPlayers.state);
-    const boardIssues = validateBoard(generatedBoard.board);
+    generatedBoard = generateBoard(map, shuffledPlayers.state);
+    const boardIssues = validateBoard(generatedBoard.board, map);
     if (boardIssues.length > 0) {
       return { ok: false, issues: boardIssues };
     }
@@ -159,6 +167,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
       balancedDice: config.balancedDice
         ? { remainingPairIds: Array.from({ length: 36 }, (_, index) => index), recentTotals: [] }
         : null,
+      inventorsMadness: config.inventorsMadness ? { pendingHexIds: null } : null,
       kn:
         !isKN || generatedKNDecks === null
           ? null

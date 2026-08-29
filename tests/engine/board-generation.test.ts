@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateBaseBoard } from '../../src/engine/board/generate-board';
+import { generateBaseBoard, generateBoard } from '../../src/engine/board/generate-board';
 import { areAxialNeighbors } from '../../src/engine/board/geometry';
 import { validateBoard } from '../../src/engine/board/validate-board';
 import type { BoardState } from '../../src/engine/core/game-state';
 import { createRandomState } from '../../src/engine/core/random';
 import { TERRAIN_IDS } from '../../src/engine/content/resources';
+import { MAPS } from '../../src/engine/maps/maps';
+import { coordinateLakeCount, coordinateLandMasses } from '../../src/engine/maps/map-utils';
 
 describe('Base Map generation', () => {
   it('creates the complete deterministic topology and passes validation', () => {
@@ -80,5 +82,25 @@ describe('Base Map generation', () => {
     };
 
     expect(validateBoard(invalid).map((entry) => entry.code)).toContain('INVALID_PORT_PLACEMENT');
+  });
+});
+
+describe('all map generation', () => {
+  it.each(MAPS)('$displayName creates its complete deterministic topology', (map) => {
+    const seed = `map-${map.id}`;
+    const first = generateBoard(map, createRandomState(seed));
+    const second = generateBoard(map, createRandomState(seed));
+
+    expect(second).toEqual(first);
+    expect(validateBoard(first.board, map)).toEqual([]);
+    expect(Object.keys(first.board.hexes)).toHaveLength(map.coordinates.length);
+    expect(Object.keys(first.board.ports)).toHaveLength(map.portPool.length);
+    expect(coordinateLandMasses(map.coordinates)).toHaveLength(map.landMassCount);
+    if (map.lakeCount !== undefined) {
+      expect(coordinateLakeCount(map.coordinates)).toBe(map.lakeCount);
+    }
+
+    const portVertexIds = Object.values(first.board.ports).flatMap((port) => port.vertexIds);
+    expect(new Set(portVertexIds)).toHaveLength(portVertexIds.length);
   });
 });

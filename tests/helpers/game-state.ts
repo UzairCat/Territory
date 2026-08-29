@@ -128,6 +128,7 @@ export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameStat
     actionHistory: [],
     random: createRandomState(config.seed),
     balancedDice: null,
+    inventorsMadness: null,
     kn: null,
   };
 }

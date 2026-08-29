@@ -16,6 +16,20 @@ function eventTones(events: readonly GameEvent[]): readonly Tone[] {
       { frequency: 659, offset: 0.23, duration: 0.24 },
     ];
   }
+  const perkUnlock = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'CITY_IMPROVEMENT_PERK_UNLOCKED' }> =>
+      event.type === 'CITY_IMPROVEMENT_PERK_UNLOCKED',
+  );
+  if (perkUnlock !== undefined) {
+    const root = perkUnlock.track === 'SCIENCE' ? 262 : perkUnlock.track === 'TRADE' ? 294 : 220;
+    return [
+      { frequency: root, offset: 0, duration: 0.1, wave: 'triangle' },
+      { frequency: root * 1.25, offset: 0.07, duration: 0.13, wave: 'sine' },
+      { frequency: root * 1.5, offset: 0.14, duration: 0.16, wave: 'triangle' },
+      { frequency: root * 2, offset: 0.24, duration: 0.28, wave: 'sine' },
+      { frequency: root * 3, offset: 0.31, duration: 0.2, wave: 'sine' },
+    ];
+  }
   if (events.some((event) => event.type === 'LONGEST_ROAD_CHANGED' && event.playerId !== null)) {
     return [
       { frequency: 196, offset: 0, duration: 0.1, wave: 'triangle' },

@@ -1,16 +1,17 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { HAND_GOODS } from '../engine/content/commodities';
 import { getKNProgressCardDefinition } from '../engine/content/kn-progress-cards';
+import { PROGRESS_CARDS } from '../engine/content/progress-cards';
 import type { BoardState, GameState, KNState } from '../engine/core/game-state';
-import type { HexId, VertexId } from '../engine/core/ids';
+import type { HexId, ResourceId, VertexId } from '../engine/core/ids';
 import type {
   BoardTarget,
   BoardViewportPoint,
   ProgressCardFlyover,
   ResourceFlyover,
 } from './render-model';
-import type { TerritoryBoard } from './TerritoryBoard';
+import type { TerritoryBoard, TerritoryBoardOptions } from './TerritoryBoard';
 import { Button } from '../ui/components/Button';
 import { resourceGlyph } from '../ui/game/game-icons';
 
@@ -26,6 +27,11 @@ export interface BoardViewportProps {
   readonly inventorSelectedHexId?: HexId | null;
   readonly inventorPendingHexId?: HexId | null;
   readonly numberTokenSwap?: readonly [HexId, HexId] | null;
+  readonly madnessHighlightedHexIds?: readonly HexId[];
+  readonly terrainChange?: {
+    readonly hexId: HexId;
+    readonly fromResourceId: ResourceId;
+  } | null;
   readonly merchantPlacementActive?: boolean;
   readonly animatedTarget: BoardTarget | null;
   readonly robberMove: {
@@ -51,24 +57,38 @@ function playResourceFlyover(
 ): void {
   const hexSource =
     flyover.source.kind === 'HEX' ? renderer.getHexScreenPosition(flyover.source.hexId) : null;
+  const sourceHand =
+    flyover.source.kind === 'PLAYER'
+      ? document.querySelector<HTMLElement>(
+          `.hand-tray[data-hand-player="${flyover.source.playerId}"]`,
+        )
+      : null;
   const domSource =
     flyover.source.kind === 'BANK'
       ? document.querySelector<HTMLElement>(`[data-bank-card="${flyover.resourceId}"]`)
       : flyover.source.kind === 'PLAYER'
-        ? document.querySelector<HTMLElement>(`[data-player-panel="${flyover.source.playerId}"]`)
+        ? (sourceHand?.querySelector<HTMLElement>(`[data-resource-card="${flyover.resourceId}"]`) ??
+          sourceHand?.querySelector<HTMLElement>('.resource-hand') ??
+          document.querySelector<HTMLElement>(`[data-player-panel="${flyover.source.playerId}"]`))
         : null;
   const visibleHand = document.querySelector<HTMLElement>('.hand-tray');
+  const explicitTargetPlayerId =
+    flyover.target?.kind === 'PLAYER' ? flyover.target.playerId : flyover.targetPlayerId;
   const matchingHand =
-    flyover.targetPlayerId === undefined ||
-    visibleHand?.dataset.handPlayer === flyover.targetPlayerId
+    explicitTargetPlayerId === undefined ||
+    visibleHand?.dataset.handPlayer === explicitTargetPlayerId
       ? visibleHand
       : null;
   const inventoryTarget =
-    matchingHand?.querySelector<HTMLElement>(`[data-resource-card="${flyover.resourceId}"]`) ??
-    matchingHand?.querySelector<HTMLElement>('.resource-hand') ??
-    (flyover.targetPlayerId === undefined
-      ? document.querySelector<HTMLElement>('.hand-tray .resource-hand')
-      : document.querySelector<HTMLElement>(`[data-player-panel="${flyover.targetPlayerId}"]`));
+    flyover.target?.kind === 'BANK'
+      ? document.querySelector<HTMLElement>(`[data-bank-card="${flyover.resourceId}"]`)
+      : (matchingHand?.querySelector<HTMLElement>(`[data-resource-card="${flyover.resourceId}"]`) ??
+        matchingHand?.querySelector<HTMLElement>('.resource-hand') ??
+        (explicitTargetPlayerId === undefined
+          ? document.querySelector<HTMLElement>('.hand-tray .resource-hand')
+          : document.querySelector<HTMLElement>(
+              `[data-player-panel="${explicitTargetPlayerId}"]`,
+            )));
   if ((hexSource === null && domSource === null) || inventoryTarget === null) return;
 
   const hostBounds = host.getBoundingClientRect();
@@ -143,23 +163,39 @@ function playProgressCardFlyover(
   flyover: ProgressCardFlyover,
   activeElements: Set<HTMLElement>,
 ): void {
-  const source = document.querySelector<HTMLElement>(
-    `[data-player-panel="${flyover.sourcePlayerId}"]`,
+  const source =
+    flyover.source.kind === 'PLAYER'
+      ? document.querySelector<HTMLElement>(`[data-player-panel="${flyover.source.playerId}"]`)
+      : (document.querySelector<HTMLElement>(
+          flyover.source.family === undefined
+            ? '[data-progress-deck="BASE"]'
+            : `[data-progress-deck="${flyover.source.family}"]`,
+        ) ?? document.querySelector<HTMLElement>('.bank-panel'));
+  const visibleHand = document.querySelector<HTMLElement>('.hand-tray');
+  if (visibleHand?.dataset.handPlayer !== flyover.targetPlayerId) return;
+  const target = visibleHand.querySelector<HTMLElement>('.progress-tray__cards');
+  const knDefinition = getKNProgressCardDefinition(flyover.cardDefinitionId);
+  const baseDefinition = PROGRESS_CARDS.find(
+    (definition) => definition.id === flyover.cardDefinitionId,
   );
-  const target = document.querySelector<HTMLElement>('.hand-tray .progress-tray__cards');
-  const definition = getKNProgressCardDefinition(flyover.cardDefinitionId);
-  if (source === null || target === null || definition === undefined) return;
+  if (source === null || target === null) return;
 
   const sourceBounds = source.getBoundingClientRect();
   const targetBounds = target.getBoundingClientRect();
   const card = document.createElement('span');
-  card.className = `progress-flyover-card progress-flyover-card--${definition.family.toLocaleLowerCase()}`;
+  card.className = `progress-flyover-card${knDefinition === undefined ? '' : ` progress-flyover-card--${knDefinition.family.toLocaleLowerCase()}`}`;
   card.setAttribute('aria-hidden', 'true');
   const art = document.createElement('strong');
   art.textContent =
-    definition.family === 'SCIENCE' ? '⚗' : definition.family === 'TRADE' ? '⚖' : '♜';
+    knDefinition?.family === 'SCIENCE'
+      ? '⚗'
+      : knDefinition?.family === 'TRADE'
+        ? '⚖'
+        : knDefinition?.family === 'POLITICS'
+          ? '♜'
+          : '🧭';
   const label = document.createElement('small');
-  label.textContent = definition.displayName;
+  label.textContent = knDefinition?.displayName ?? baseDefinition?.displayName ?? 'Progress Card';
   card.append(art, label);
   document.body.append(card);
   activeElements.add(card);
@@ -212,6 +248,13 @@ function playProgressCardFlyover(
     });
 }
 
+function useStableByKey<T>(value: T, key: string): T {
+  // Object identity is deliberately reduced to the visual fields encoded by key. Hand counts,
+  // deck state, and freshly allocated-but-equivalent arrays must not rebuild the Pixi renderer.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => value, [key]);
+}
+
 export function BoardViewport({
   board,
   players = {},
@@ -224,6 +267,8 @@ export function BoardViewport({
   inventorSelectedHexId = null,
   inventorPendingHexId = null,
   numberTokenSwap = null,
+  madnessHighlightedHexIds = [],
+  terrainChange = null,
   merchantPlacementActive = false,
   animatedTarget,
   robberMove,
@@ -241,8 +286,106 @@ export function BoardViewport({
   const inspectRef = useRef(onInspect);
   const selectRef = useRef(onSelect);
   const debugRef = useRef(showDebugIds);
+  const rendererReadyRef = useRef<Promise<void> | null>(null);
+  const appliedRenderInputRef = useRef<{
+    readonly board: BoardState;
+    readonly options: TerritoryBoardOptions;
+  } | null>(null);
   const playedFlyoverIdsRef = useRef(new Set<string>());
   const activeFlyoverElementsRef = useRef(new Set<HTMLElement>());
+  const currentKnights = Object.values(players).flatMap((player) => player.knights);
+  const stableKnights = useStableByKey(
+    currentKnights,
+    currentKnights
+      .map(
+        (knight) =>
+          `${knight.id}:${knight.ownerId}:${knight.vertexId}:${knight.level}:${knight.active ? 1 : 0}`,
+      )
+      .join('|'),
+  );
+  const merchant = knState?.merchant ?? null;
+  const stableMerchant = useStableByKey(
+    merchant,
+    merchant === null ? '' : `${merchant.ownerId}:${merchant.hexId}:${merchant.resourceId}`,
+  );
+  const stableSelectableTargets = useStableByKey(
+    selectableTargets,
+    selectableTargets.map((target) => `${target.kind}:${target.id}`).join('|'),
+  );
+  const stableHighlightedHexIds = useStableByKey(highlightedHexIds, highlightedHexIds.join('|'));
+  const stableEmphasizedVertexIds = useStableByKey(
+    emphasizedVertexIds,
+    emphasizedVertexIds.join('|'),
+  );
+  const stableMadnessHighlightedHexIds = useStableByKey(
+    madnessHighlightedHexIds,
+    madnessHighlightedHexIds.join('|'),
+  );
+  const stablePlayerColors = useStableByKey(
+    playerColors,
+    Object.entries(playerColors)
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([playerId, color]) => `${playerId}:${color}`)
+      .join('|'),
+  );
+  const renderInput = useMemo(
+    () => ({
+      board,
+      options: {
+        onInspect: (target: BoardTarget | null) => inspectRef.current(target),
+        onSelect: (target: BoardTarget, point: BoardViewportPoint) => {
+          const host = hostRef.current;
+          if (host === null) return;
+          const bounds = host.getBoundingClientRect();
+          selectRef.current(target, { x: bounds.left + point.x, y: bounds.top + point.y });
+        },
+        selectableTargets: stableSelectableTargets,
+        highlightedHexIds: stableHighlightedHexIds,
+        emphasizedVertexIds: stableEmphasizedVertexIds,
+        inventorSelectionActive,
+        inventorSelectedHexId,
+        inventorPendingHexId,
+        numberTokenSwap,
+        madnessHighlightedHexIds: stableMadnessHighlightedHexIds,
+        terrainChange,
+        merchantPlacementActive,
+        animatedTarget,
+        robberMove,
+        playerColors: stablePlayerColors,
+        reducedMotion,
+        showTargetPulses,
+        showRobberAttention,
+        knights: stableKnights,
+        merchant: stableMerchant,
+      } satisfies TerritoryBoardOptions,
+    }),
+    [
+      animatedTarget,
+      board,
+      inventorPendingHexId,
+      inventorSelectedHexId,
+      inventorSelectionActive,
+      merchantPlacementActive,
+      numberTokenSwap,
+      reducedMotion,
+      robberMove,
+      showRobberAttention,
+      showTargetPulses,
+      stableEmphasizedVertexIds,
+      stableHighlightedHexIds,
+      stableKnights,
+      stableMadnessHighlightedHexIds,
+      stableMerchant,
+      stablePlayerColors,
+      stableSelectableTargets,
+      terrainChange,
+    ],
+  );
+  const renderInputRef = useRef(renderInput);
+
+  useEffect(() => {
+    renderInputRef.current = renderInput;
+  }, [renderInput]);
 
   useEffect(
     () => () => {
@@ -264,62 +407,17 @@ export function BoardViewport({
     const host = hostRef.current;
     if (host === null) return undefined;
     let cancelled = false;
-    const pendingResourceFlyovers = resourceFlyovers.filter(
-      (flyover) => !playedFlyoverIdsRef.current.has(flyover.id),
-    );
-    const pendingProgressCardFlyovers = progressCardFlyovers.filter(
-      (flyover) => !playedFlyoverIdsRef.current.has(flyover.id),
-    );
+    let renderer: TerritoryBoard | null = null;
 
-    void import('./TerritoryBoard')
+    const ready = import('./TerritoryBoard')
       .then(async ({ TerritoryBoard: Renderer }) => {
         if (cancelled) return;
-        const renderer = new Renderer(host, board, {
-          onInspect: (target) => inspectRef.current(target),
-          onSelect: (target, point) => {
-            const bounds = host.getBoundingClientRect();
-            selectRef.current(target, { x: bounds.left + point.x, y: bounds.top + point.y });
-          },
-          selectableTargets,
-          highlightedHexIds,
-          emphasizedVertexIds,
-          inventorSelectionActive,
-          inventorSelectedHexId,
-          inventorPendingHexId,
-          numberTokenSwap,
-          merchantPlacementActive,
-          animatedTarget,
-          robberMove,
-          playerColors,
-          reducedMotion,
-          showTargetPulses,
-          showRobberAttention,
-          knights: Object.values(players).flatMap((player) => player.knights),
-          merchant: knState?.merchant ?? null,
-        });
+        const initialInput = renderInputRef.current;
+        renderer = new Renderer(host, initialInput.board, initialInput.options);
         rendererRef.current = renderer;
         renderer.setDebugIdsVisible(debugRef.current);
         await renderer.mount();
-        if (!cancelled) {
-          for (const flyover of pendingResourceFlyovers) {
-            playedFlyoverIdsRef.current.add(flyover.id);
-            if (
-              !reducedMotion &&
-              !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-            ) {
-              playResourceFlyover(renderer, host, flyover, activeFlyoverElementsRef.current);
-            }
-          }
-          for (const flyover of pendingProgressCardFlyovers) {
-            playedFlyoverIdsRef.current.add(flyover.id);
-            if (
-              !reducedMotion &&
-              !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-            ) {
-              playProgressCardFlyover(flyover, activeFlyoverElementsRef.current);
-            }
-          }
-        }
+        if (!cancelled) appliedRenderInputRef.current = initialInput;
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -327,33 +425,68 @@ export function BoardViewport({
           error instanceof Error ? error.message : 'Unable to initialize the board renderer.';
         host.classList.add('board-viewport--error');
       });
+    rendererReadyRef.current = ready;
 
     return () => {
       cancelled = true;
-      rendererRef.current?.destroy();
-      rendererRef.current = null;
+      if (rendererReadyRef.current === ready) rendererReadyRef.current = null;
+      if (rendererRef.current === renderer) rendererRef.current = null;
+      if (appliedRenderInputRef.current !== null) appliedRenderInputRef.current = null;
+      renderer?.destroy();
     };
-  }, [
-    animatedTarget,
-    board,
-    knState,
-    players,
-    highlightedHexIds,
-    emphasizedVertexIds,
-    inventorSelectionActive,
-    inventorSelectedHexId,
-    inventorPendingHexId,
-    numberTokenSwap,
-    merchantPlacementActive,
-    playerColors,
-    progressCardFlyovers,
-    reducedMotion,
-    resourceFlyovers,
-    robberMove,
-    selectableTargets,
-    showTargetPulses,
-    showRobberAttention,
-  ]);
+  }, []);
+
+  useEffect(() => {
+    const ready = rendererReadyRef.current;
+    const nextInput = renderInput;
+    if (ready === null) return undefined;
+    let cancelled = false;
+    void ready.then(() => {
+      if (cancelled || appliedRenderInputRef.current === nextInput) return;
+      rendererRef.current?.update(nextInput.board, nextInput.options);
+      appliedRenderInputRef.current = nextInput;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [renderInput]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const ready = rendererReadyRef.current;
+    if (host === null || ready === null) return undefined;
+    let cancelled = false;
+    const pendingResourceFlyovers = resourceFlyovers.filter(
+      (flyover) => !playedFlyoverIdsRef.current.has(flyover.id),
+    );
+    const pendingProgressCardFlyovers = progressCardFlyovers.filter(
+      (flyover) => !playedFlyoverIdsRef.current.has(flyover.id),
+    );
+
+    void ready.then(() => {
+      if (cancelled) return;
+      const renderer = rendererRef.current;
+      if (renderer === null) return;
+      const motionDisabled =
+        reducedMotion || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      for (const flyover of pendingResourceFlyovers) {
+        playedFlyoverIdsRef.current.add(flyover.id);
+        if (!motionDisabled) {
+          playResourceFlyover(renderer, host, flyover, activeFlyoverElementsRef.current);
+        }
+      }
+      for (const flyover of pendingProgressCardFlyovers) {
+        playedFlyoverIdsRef.current.add(flyover.id);
+        if (!motionDisabled) {
+          playProgressCardFlyover(flyover, activeFlyoverElementsRef.current);
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [progressCardFlyovers, reducedMotion, resourceFlyovers]);
 
   useEffect(() => {
     debugRef.current = showDebugIds;

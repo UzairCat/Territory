@@ -73,7 +73,8 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
         </output>
         <output data-testid="progress-card-flyovers">
           {progressCardFlyovers.map(
-            (flyover) => `${flyover.sourcePlayerId}:${flyover.cardDefinitionId}|`,
+            (flyover) =>
+              `${flyover.source.kind === 'PLAYER' ? flyover.source.playerId : `deck-${flyover.source.family ?? 'base'}`}:${flyover.cardDefinitionId}|`,
           )}
         </output>
         <output data-testid="emphasized-vertices">{emphasizedVertexIds.join('|')}</output>
@@ -184,6 +185,44 @@ describe('K+N compact choice flows', () => {
       ore: 1,
     });
     expect(screen.getByTestId('resource-flyovers')).toHaveTextContent('BANK:ore|');
+  });
+
+  it('chooses a tied defender reward from a three-deck shelf with a 15-second timer', async () => {
+    const user = userEvent.setup();
+    const original = knActionState();
+    if (original.kn === null) throw new Error('Defender reward fixture has no K+N state.');
+    const state: GameState = {
+      ...original,
+      turn: { ...original.turn, phase: 'CARD_RESOLUTION' },
+      pendingInteraction: {
+        type: 'KN_SELECTION',
+        playerId: TEST_PLAYER_IDS[0],
+        purpose: 'DEFENDER_TIE_DECK',
+        eligibleIds: ['SCIENCE', 'TRADE', 'POLITICS'],
+        minimumSelections: 1,
+        maximumSelections: 1,
+        queue: [TEST_PLAYER_IDS[0]],
+        canCancel: false,
+        context: {},
+      },
+    };
+    renderGame(state);
+
+    const tray = screen.getByRole('dialog', { name: 'Choose your defender reward' });
+    expect(
+      screen.getByLabelText('Choose Defender Reward: 15 seconds remaining'),
+    ).toBeInTheDocument();
+    const confirm = within(tray).getByRole('button', { name: 'Confirm' });
+    expect(confirm).toBeDisabled();
+    await user.click(within(tray).getByRole('button', { name: 'Choose the Trade Progress deck' }));
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+
+    const player = useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[0]];
+    expect(
+      (player?.knProgressCardIds.length ?? 0) + (player?.revealedKNProgressCardIds.length ?? 0),
+    ).toBe(1);
+    expect(screen.getByTestId('progress-card-flyovers')).toHaveTextContent('deck-TRADE:');
   });
 
   it('chooses Resource Monopoly from the hand tray instead of a central modal', async () => {
@@ -897,10 +936,24 @@ describe('K+N compact choice flows', () => {
     };
     renderGame(state);
 
-    await user.click(screen.getByRole('button', { name: 'Play Alchemist' }));
+    const alchemistCard = screen.getByRole('button', { name: 'Play Alchemist' });
+    await user.click(alchemistCard);
+    await user.unhover(alchemistCard);
     const confirmation = screen.getByRole('dialog', { name: 'Alchemist' });
+    expect(confirmation).toHaveClass('progress-card-tooltip--confirming');
+    expect(confirmation).toHaveTextContent(definition.description);
     expect(within(confirmation).queryByRole('combobox')).toBeNull();
-    await user.click(within(confirmation).getByRole('button', { name: 'Play Alchemist' }));
+    await user.click(alchemistCard);
+    const cancelledTooltip = screen.getByRole('tooltip', { name: 'Alchemist' });
+    expect(within(cancelledTooltip).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(within(cancelledTooltip).queryByRole('button', { name: 'Play Alchemist' })).toBeNull();
+
+    await user.click(alchemistCard);
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Alchemist' })).getByRole('button', {
+        name: 'Play Alchemist',
+      }),
+    );
 
     const tray = screen.getByRole('dialog', { name: 'Set the Alchemist dice' });
     expect(within(tray).getAllByRole('button', { name: /Choose white die/ })).toHaveLength(6);
@@ -1079,6 +1132,74 @@ describe('K+N compact choice flows', () => {
       `${replacementFirstHex.id}|${secondHex.id}`,
     );
     expect(useAppStore.getState().gameState?.pendingInteraction).toBeNull();
+
+    const diceEvent: GameEvent = {
+      type: 'DICE_ROLLED',
+      playerId: TEST_PLAYER_IDS[0],
+      dice: [3, 4],
+    };
+    act(() => {
+      useAppStore.setState((current) => ({
+        recentGameEvents: [diceEvent],
+        gameEventHistory: [...current.gameEventHistory, diceEvent],
+      }));
+    });
+    expect(screen.getByTestId('number-token-swap')).toHaveTextContent(
+      `${replacementFirstHex.id}|${secondHex.id}`,
+    );
+  });
+
+  it('lets Reclamation be cancelled from its hand card before or after choosing a tile', async () => {
+    const user = userEvent.setup();
+    const original = knActionState();
+    if (original.kn === null) throw new Error('Reclamation fixture has no K+N state.');
+    const definition = KN_PROGRESS_CARDS.find((candidate) => candidate.effect === 'RECLAMATION');
+    const card = Object.values(original.kn.progressCards).find(
+      (candidate) => candidate.definitionId === definition?.id,
+    );
+    const targetHex = Object.values(original.board.hexes).find(
+      (hex) =>
+        hex.resourceId !== null &&
+        hex.id !== original.board.robberHexId &&
+        hex.numberToken !== 6 &&
+        hex.numberToken !== 8,
+    );
+    if (definition === undefined || card === undefined || targetHex === undefined) {
+      throw new Error('Reclamation fixture is incomplete.');
+    }
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [TEST_PLAYER_IDS[0]]: {
+          ...original.players[TEST_PLAYER_IDS[0]]!,
+          knProgressCardIds: [card.instanceId],
+        },
+      },
+      kn: {
+        ...original.kn,
+        progressCards: {
+          ...original.kn.progressCards,
+          [card.instanceId]: { ...card, ownerId: TEST_PLAYER_IDS[0] },
+        },
+      },
+    };
+    renderGame(state);
+
+    await user.click(screen.getByRole('button', { name: 'Play Reclamation' }));
+    expect(screen.getByRole('button', { name: 'Cancel Reclamation' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: `Select HEX ${targetHex.id}` }));
+    expect(useAppStore.getState().gameState?.pendingInteraction).toMatchObject({
+      purpose: 'RECLAMATION_RESOURCE',
+      canCancel: true,
+    });
+    await user.click(screen.getByRole('button', { name: 'Cancel Reclamation' }));
+
+    expect(useAppStore.getState().gameState?.pendingInteraction).toBeNull();
+    expect(
+      useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[0]]?.knProgressCardIds,
+    ).toContain(card.instanceId);
+    expect(screen.getByRole('button', { name: 'Play Reclamation' })).toBeInTheDocument();
   });
 
   it('keeps renderer highlight inputs stable while the map inspector follows hover', async () => {
@@ -1373,77 +1494,6 @@ describe('K+N compact choice flows', () => {
     ).toEqual([2, 2]);
   });
 
-  it('plays Intrigue directly by highlighting opponent Knights touching the active road network', async () => {
-    const user = userEvent.setup();
-    const original = knActionState();
-    if (original.kn === null) throw new Error('Intrigue fixture has no K+N state.');
-    const definition = KN_PROGRESS_CARDS.find((candidate) => candidate.effect === 'INTRIGUE');
-    const card = Object.values(original.kn.progressCards).find(
-      (candidate) => candidate.definitionId === definition?.id,
-    );
-    const edge = Object.values(original.board.edges)[0];
-    if (card === undefined || edge === undefined)
-      throw new Error('Intrigue fixture is incomplete.');
-    const enemyKnight = {
-      id: knightId('intrigue-target'),
-      ownerId: TEST_PLAYER_IDS[1],
-      vertexId: edge.vertexBId,
-      level: 1 as const,
-      active: false,
-      placedTurn: 1,
-      activeSinceTurn: null,
-      lastActionTurn: null,
-      upgradedTurn: null,
-    };
-    const state: GameState = {
-      ...original,
-      players: {
-        ...original.players,
-        [TEST_PLAYER_IDS[0]]: {
-          ...original.players[TEST_PLAYER_IDS[0]]!,
-          knProgressCardIds: [card.instanceId],
-        },
-        [TEST_PLAYER_IDS[1]]: {
-          ...original.players[TEST_PLAYER_IDS[1]]!,
-          knights: [enemyKnight],
-        },
-      },
-      board: {
-        ...original.board,
-        edges: {
-          ...original.board.edges,
-          [edge.id]: { ...edge, roadOwnerId: TEST_PLAYER_IDS[0] },
-        },
-        vertices: {
-          ...original.board.vertices,
-          [edge.vertexBId]: {
-            ...original.board.vertices[edge.vertexBId]!,
-            knightId: enemyKnight.id,
-          },
-        },
-      },
-      kn: {
-        ...original.kn,
-        progressCards: {
-          ...original.kn.progressCards,
-          [card.instanceId]: { ...card, ownerId: TEST_PLAYER_IDS[0] },
-        },
-      },
-    };
-    renderGame(state);
-
-    await user.click(screen.getByRole('button', { name: 'Play Intrigue' }));
-    expect(screen.queryByRole('dialog', { name: 'Intrigue' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Cancel Intrigue' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: `Select VERTEX ${edge.vertexBId}` }));
-
-    const resolved = useAppStore.getState().gameState;
-    expect(
-      resolved?.players[TEST_PLAYER_IDS[1]]?.knights.length === 0 ||
-        resolved?.pendingInteraction?.type === 'KN_SELECTION',
-    ).toBe(true);
-  });
-
   it('warns when Medicine has no eligible House and opens City Wall buying from the City', async () => {
     const user = userEvent.setup();
     const original = knActionState();
@@ -1590,6 +1640,31 @@ describe('K+N compact choice flows', () => {
     expect(tooltip).not.toHaveTextContent('Politics');
   });
 
+  it('marks the classic longest-road and knight-force icons as award holders', () => {
+    const state = knActionState();
+    const player = state.players[TEST_PLAYER_IDS[0]]!;
+    const view = render(
+      <PlayerPanel
+        player={player}
+        position={1}
+        active
+        score={5}
+        longestRoadLength={6}
+        robberCount={3}
+        holdsLongestRoad
+        holdsLargestForce
+        winner={false}
+      />,
+    );
+
+    expect(view.container.querySelector('.game-player__stat--bridge')).toHaveClass(
+      'is-award-holder',
+    );
+    expect(view.container.querySelector('.game-player__stat--robber')).toHaveClass(
+      'is-award-holder',
+    );
+  });
+
   it('uses compact player details without Defender points and treats equal defense as enough', () => {
     const original = knActionState();
     const player = {
@@ -1629,16 +1704,17 @@ describe('K+N compact choice flows', () => {
 
     const view = render(
       <PlayerPanel
-        player={player}
+        player={{ ...player, knights: [matchingKnight] }}
         position={1}
         active
         score={4}
         longestRoadLength={3}
         robberCount={0}
-        holdsLongestRoad={false}
+        holdsLongestRoad
         holdsLargestForce={false}
         winner={false}
         kNMode
+        cityCount={1}
         wallCount={2}
       />,
     );
@@ -1646,6 +1722,13 @@ describe('K+N compact choice flows', () => {
     expect(screen.getByTitle('2 City Walls')).toHaveTextContent('2 walls');
     expect(screen.getByTitle('Safe hand limit')).toHaveTextContent('Safe 11');
     expect(view.container.querySelector('.game-player-kn__improvement-grid')).not.toBeNull();
+    expect(
+      view.container.querySelector('.game-player-kn__plain-stat .game-player__bridge-art')
+        ?.parentElement,
+    ).toHaveClass('is-award-holder');
+    expect(view.container.querySelector('.game-player-kn__plain-stat--knights')).toHaveClass(
+      'is-award-holder',
+    );
 
     view.rerender(<BarbarianTracker state={trackerState} />);
     expect(view.container.querySelector('.board-barbarian-tracker__stat--defense')).toHaveClass(

@@ -86,10 +86,12 @@ export function KNChoiceTray({
 
   const purpose = interaction.purpose;
   const choosingAqueduct = purpose === 'AQUEDUCT_RESOURCE';
+  const choosingDefenderDeck = purpose === 'DEFENDER_TIE_DECK';
   const choosingAlchemist = purpose === 'ALCHEMIST_DICE';
   const choosingResourceMonopoly = purpose === 'RESOURCE_MONOPOLY';
   const choosingCommodityMonopoly = purpose === 'COMMODITY_MONOPOLY';
   const choosingMerchantFleet = purpose === 'MERCHANT_FLEET_GOOD';
+  const choosingReclamation = purpose === 'RECLAMATION_RESOURCE';
   const choosingHarborPlayer = purpose === 'COMMERCIAL_HARBOR_PLAYER';
   const choosingHarborResource = purpose === 'COMMERCIAL_HARBOR_RESOURCE';
   const choosingHarborCommodity = purpose === 'COMMERCIAL_HARBOR_COMMODITY';
@@ -108,6 +110,7 @@ export function KNChoiceTray({
     choosingResourceMonopoly ||
     choosingCommodityMonopoly ||
     choosingMerchantFleet ||
+    choosingReclamation ||
     choosingHarborCommodity ||
     choosingMasterCards;
   const choosingDirectHand =
@@ -117,7 +120,8 @@ export function KNChoiceTray({
     !choosingGoods &&
     !choosingDirectHand &&
     !choosingSpyCard &&
-    !choosingAlchemist
+    !choosingAlchemist &&
+    !choosingDefenderDeck
   )
     return null;
 
@@ -125,108 +129,124 @@ export function KNChoiceTray({
   const targetPlayer = targetPlayerId === undefined ? undefined : state.players[targetPlayerId];
   const title = choosingAqueduct
     ? 'Choose an Aqueduct card'
-    : choosingAlchemist
-      ? 'Set the Alchemist dice'
-      : choosingResourceMonopoly
-        ? 'Choose a resource for Resource Monopoly'
-        : choosingCommodityMonopoly
-          ? 'Choose a commodity for Commodity Monopoly'
-          : choosingMerchantFleet
-            ? 'Choose a good for Merchant Fleet'
-            : choosingHarborPlayer
-              ? 'Choose a Commercial Harbor partner'
-              : choosingHarborResource
-                ? `Choose a card to give ${targetPlayer?.name ?? 'that player'}`
-                : choosingHarborCommodity
-                  ? `${state.players[interaction.playerId]?.name ?? 'Player'}, choose a commodity to return`
-                  : choosingMasterPlayer
-                    ? 'Choose a player for Master Merchant'
-                    : choosingMasterCards
-                      ? `Choose two of ${targetPlayer?.name ?? 'that player'}’s cards`
-                      : choosingDeserterPlayer
-                        ? 'Choose a player for Deserter'
-                        : choosingSaboteur
-                          ? `${state.players[interaction.playerId]?.name ?? 'Player'}, discard cards for Saboteur`
-                          : choosingWeddingCards
-                            ? `${state.players[interaction.playerId]?.name ?? 'Player'}, choose Wedding cards to give`
-                            : choosingProgressDiscard
-                              ? 'Return a Progress Card'
-                              : choosingSpyPlayer
-                                ? 'Choose a player to spy on'
-                                : `Choose one of ${targetPlayer?.name ?? 'that player'}’s Progress Cards`;
+    : choosingDefenderDeck
+      ? 'Choose your defender reward'
+      : choosingAlchemist
+        ? 'Set the Alchemist dice'
+        : choosingResourceMonopoly
+          ? 'Choose a resource for Resource Monopoly'
+          : choosingCommodityMonopoly
+            ? 'Choose a commodity for Commodity Monopoly'
+            : choosingMerchantFleet
+              ? 'Choose a good for Merchant Fleet'
+              : choosingReclamation
+                ? 'Choose the tile’s new resource'
+                : choosingHarborPlayer
+                  ? 'Choose a Commercial Harbor partner'
+                  : choosingHarborResource
+                    ? `Choose a card to give ${targetPlayer?.name ?? 'that player'}`
+                    : choosingHarborCommodity
+                      ? `${state.players[interaction.playerId]?.name ?? 'Player'}, choose a commodity to return`
+                      : choosingMasterPlayer
+                        ? 'Choose a player for Master Merchant'
+                        : choosingMasterCards
+                          ? `Choose two of ${targetPlayer?.name ?? 'that player'}’s cards`
+                          : choosingDeserterPlayer
+                            ? 'Choose a player for Deserter'
+                            : choosingSaboteur
+                              ? `${state.players[interaction.playerId]?.name ?? 'Player'}, discard cards for Saboteur`
+                              : choosingWeddingCards
+                                ? `${state.players[interaction.playerId]?.name ?? 'Player'}, choose Wedding cards to give`
+                                : choosingProgressDiscard
+                                  ? 'Return a Progress Card'
+                                  : choosingSpyPlayer
+                                    ? 'Choose a player to spy on'
+                                    : `Choose one of ${targetPlayer?.name ?? 'that player'}’s Progress Cards`;
   const description = choosingAqueduct
     ? 'Select one available resource from the bank, then confirm your choice.'
-    : choosingAlchemist
-      ? 'Choose one white die and one red die. The Event die will still be rolled.'
-      : choosingResourceMonopoly
-        ? 'Collect up to two of the selected resource from every opponent.'
-        : choosingCommodityMonopoly
-          ? 'Collect up to one of the selected commodity from every opponent.'
-          : choosingMerchantFleet
-            ? 'Trade the selected resource or commodity at 2:1 until this turn ends.'
-            : choosingHarborPlayer
-              ? 'Choose an opponent who has a commodity.'
-              : choosingHarborResource
-                ? 'Click one resource in your hand. Click it here to put it back.'
-                : choosingHarborCommodity
-                  ? `Choose one commodity to exchange for ${resourceLabel(interaction.context.resourceId as ResourceId)}.`
-                  : choosingMasterPlayer
-                    ? 'Only players with more victory points and hand cards are available.'
-                    : choosingMasterCards
-                      ? 'Every card is shown separately. Choose exactly two.'
-                      : choosingDeserterPlayer
-                        ? 'Choose an opponent, then select one of their glowing Knights on the board.'
-                        : choosingSaboteur
-                          ? 'Click cards in your hand to move them here, then confirm your discard.'
-                          : choosingWeddingCards
-                            ? 'Click cards in your hand to move them here, then confirm the gift.'
-                            : choosingProgressDiscard
-                              ? 'Click a Progress Card in your hand, then confirm the return.'
-                              : choosingSpyPlayer
-                                ? 'Only players holding at least one Progress Card are available.'
-                                : 'The selected card will move directly into your Progress inventory.';
+    : choosingDefenderDeck
+      ? 'Select one Progress deck. Its top card will move into your hand.'
+      : choosingAlchemist
+        ? 'Choose one white die and one red die. The Event die will still be rolled.'
+        : choosingResourceMonopoly
+          ? 'Collect up to two of the selected resource from every opponent.'
+          : choosingCommodityMonopoly
+            ? 'Collect up to one of the selected commodity from every opponent.'
+            : choosingMerchantFleet
+              ? 'Trade the selected resource or commodity at 2:1 until this turn ends.'
+              : choosingReclamation
+                ? 'Choose a different resource. This terrain change is permanent.'
+                : choosingHarborPlayer
+                  ? 'Choose an opponent who has a commodity.'
+                  : choosingHarborResource
+                    ? 'Click one resource in your hand. Click it here to put it back.'
+                    : choosingHarborCommodity
+                      ? `Choose one commodity to exchange for ${resourceLabel(interaction.context.resourceId as ResourceId)}.`
+                      : choosingMasterPlayer
+                        ? 'Only players with more victory points and hand cards are available.'
+                        : choosingMasterCards
+                          ? 'Every card is shown separately. Choose exactly two.'
+                          : choosingDeserterPlayer
+                            ? 'Choose an opponent, then select one of their glowing Knights on the board.'
+                            : choosingSaboteur
+                              ? 'Click cards in your hand to move them here, then confirm your discard.'
+                              : choosingWeddingCards
+                                ? 'Click cards in your hand to move them here, then confirm the gift.'
+                                : choosingProgressDiscard
+                                  ? 'Click a Progress Card in your hand, then confirm the return.'
+                                  : choosingSpyPlayer
+                                    ? 'Only players holding at least one Progress Card are available.'
+                                    : 'The selected card will move directly into your Progress inventory.';
   const trayKind = choosingAqueduct
     ? 'aqueduct'
-    : choosingAlchemist
-      ? 'alchemist'
-      : choosingResourceMonopoly || choosingCommodityMonopoly
-        ? 'monopoly'
-        : choosingMerchantFleet
-          ? 'merchant-fleet'
-          : choosingHarborPlayer || choosingHarborResource || choosingHarborCommodity
-            ? 'harbor'
-            : choosingMasterPlayer || choosingMasterCards
-              ? 'master-merchant'
-              : choosingDeserterPlayer
-                ? 'deserter'
-                : choosingSaboteur
-                  ? 'saboteur'
-                  : choosingWeddingCards
-                    ? 'wedding'
-                    : choosingProgressDiscard
-                      ? 'progress-discard'
-                      : 'spy';
+    : choosingDefenderDeck
+      ? 'defender-reward'
+      : choosingAlchemist
+        ? 'alchemist'
+        : choosingResourceMonopoly || choosingCommodityMonopoly
+          ? 'monopoly'
+          : choosingMerchantFleet
+            ? 'merchant-fleet'
+            : choosingReclamation
+              ? 'reclamation'
+              : choosingHarborPlayer || choosingHarborResource || choosingHarborCommodity
+                ? 'harbor'
+                : choosingMasterPlayer || choosingMasterCards
+                  ? 'master-merchant'
+                  : choosingDeserterPlayer
+                    ? 'deserter'
+                    : choosingSaboteur
+                      ? 'saboteur'
+                      : choosingWeddingCards
+                        ? 'wedding'
+                        : choosingProgressDiscard
+                          ? 'progress-discard'
+                          : 'spy';
   const crest = choosingAqueduct
     ? '↧'
-    : choosingAlchemist
-      ? '⚗'
-      : choosingResourceMonopoly || choosingCommodityMonopoly
-        ? '◎'
-        : choosingMerchantFleet
-          ? '⛵'
-          : choosingHarborPlayer || choosingHarborResource || choosingHarborCommodity
-            ? '⚓'
-            : choosingMasterPlayer || choosingMasterCards
-              ? '♜'
-              : choosingDeserterPlayer
-                ? '♞'
-                : choosingSaboteur
-                  ? '✂'
-                  : choosingWeddingCards
-                    ? '◇'
-                    : choosingProgressDiscard
-                      ? '↥'
-                      : '⌕';
+    : choosingDefenderDeck
+      ? '🛡'
+      : choosingAlchemist
+        ? '⚗'
+        : choosingResourceMonopoly || choosingCommodityMonopoly
+          ? '◎'
+          : choosingMerchantFleet
+            ? '⛵'
+            : choosingReclamation
+              ? '♻'
+              : choosingHarborPlayer || choosingHarborResource || choosingHarborCommodity
+                ? '⚓'
+                : choosingMasterPlayer || choosingMasterCards
+                  ? '♜'
+                  : choosingDeserterPlayer
+                    ? '♞'
+                    : choosingSaboteur
+                      ? '✂'
+                      : choosingWeddingCards
+                        ? '◇'
+                        : choosingProgressDiscard
+                          ? '↥'
+                          : '⌕';
   const selectionCount = (id: string) => selections.filter((selection) => selection === id).length;
   const selectionValid =
     selections.length >= interaction.minimumSelections &&
@@ -352,6 +372,33 @@ export function KNChoiceTray({
               </div>
             ))}
           </div>
+        ) : choosingDefenderDeck ? (
+          <div className="kn-choice-tray__options" aria-label="Defender reward Progress decks">
+            {(['SCIENCE', 'TRADE', 'POLITICS'] as const).map((family) => {
+              const selected = selections[0] === family;
+              const available = interaction.eligibleIds.includes(family);
+              const familyLabel =
+                family === 'SCIENCE' ? 'Science' : family === 'TRADE' ? 'Trade' : 'Politics';
+              const glyph = family === 'SCIENCE' ? '⚗' : family === 'TRADE' ? '⚖' : '♜';
+              return (
+                <button
+                  key={family}
+                  type="button"
+                  className={`kn-choice-tray__progress-card kn-choice-tray__progress-card--${family.toLocaleLowerCase()} ${selected ? 'is-selected' : ''}`}
+                  disabled={!available}
+                  aria-label={`Choose the ${familyLabel} Progress deck`}
+                  aria-pressed={selected}
+                  onClick={() => updateSelections([family])}
+                >
+                  <span className="kn-choice-tray__deck-mark" aria-hidden="true">
+                    {glyph}
+                  </span>
+                  <strong>{familyLabel}</strong>
+                  <small>{state.kn?.progressDecks[family].length ?? 0} cards</small>
+                </button>
+              );
+            })}
+          </div>
         ) : choosingDirectHand ? null : (
           <div
             className={`kn-choice-tray__options ${choosingPlayer ? 'kn-choice-tray__options--players' : ''}`}
@@ -372,9 +419,11 @@ export function KNChoiceTray({
                         ? 'Up to 1 per opponent'
                         : choosingMerchantFleet
                           ? '2:1 until turn end'
-                          : choosingHarborCommodity
-                            ? 'In hand'
-                            : `Take from ${targetPlayer?.name ?? 'player'}`;
+                          : choosingReclamation
+                            ? 'Permanent terrain change'
+                            : choosingHarborCommodity
+                              ? 'In hand'
+                              : `Take from ${targetPlayer?.name ?? 'player'}`;
                   const actionLabel = choosingAqueduct
                     ? `Choose ${resourceLabel(good.id)} from the bank`
                     : choosingResourceMonopoly
@@ -383,9 +432,11 @@ export function KNChoiceTray({
                         ? `Choose ${resourceLabel(good.id)} for Commodity Monopoly`
                         : choosingMerchantFleet
                           ? `Choose ${resourceLabel(good.id)} for Merchant Fleet`
-                          : choosingHarborCommodity
-                            ? `Return ${resourceLabel(good.id)} through Commercial Harbor`
-                            : `Take ${resourceLabel(good.id)} with Master Merchant`;
+                          : choosingReclamation
+                            ? `Change the selected tile to ${resourceLabel(good.id)}`
+                            : choosingHarborCommodity
+                              ? `Return ${resourceLabel(good.id)} through Commercial Harbor`
+                              : `Take ${resourceLabel(good.id)} with Master Merchant`;
                   return (
                     <button
                       key={displayCard.key}

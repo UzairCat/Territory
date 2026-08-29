@@ -259,6 +259,44 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
           tone: 'danger',
         },
       ];
+    case 'INVENTORS_MADNESS_TARGETS_SELECTED':
+      return [
+        {
+          icon: '⌁',
+          message: "Inventor's Madness marked two number tokens for the next round.",
+          tone: 'accent',
+        },
+      ];
+    case 'INVENTORS_MADNESS_SWAPPED':
+      return [
+        {
+          icon: '⇄',
+          message: "Inventor's Madness swapped the two marked number tokens.",
+          tone: 'accent',
+        },
+      ];
+    case 'TERRAIN_RECLAIMED':
+      return [
+        {
+          icon: '♻',
+          message: `${playerName(event.playerId)} played Reclamation and changed a ${resourceName(event.fromResourceId)} tile to ${resourceName(event.toResourceId)}.`,
+          tone: 'accent',
+          progressFamily: 'TRADE',
+        },
+      ];
+    case 'WAR_DRUMS_MOVED': {
+      const movement = event.position - event.fromPosition;
+      const movementLabel =
+        movement === 1 ? '1 space forward' : movement === -1 ? '1 space back' : '2 spaces back';
+      return [
+        {
+          icon: '♫',
+          message: `${playerName(event.playerId)} played War Drums and moved the barbarian fleet ${movementLabel}.`,
+          tone: movement > 0 ? 'danger' : 'accent',
+          progressFamily: 'POLITICS',
+        },
+      ];
+    }
     case 'BARBARIAN_ATTACK_RESOLVED':
       return [
         {
@@ -361,6 +399,10 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       ];
     case 'TRADE_OFFERED': {
       const trade = state.tradeOffers[event.tradeId];
+      const recipients =
+        event.recipientIds.length === 1
+          ? playerName(event.recipientIds[0]!)
+          : `${event.recipientIds.length} opponents`;
       const terms =
         trade === undefined
           ? ''
@@ -368,13 +410,21 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       return [
         {
           icon: '⇄',
-          message: `${playerName(event.playerId)} offered ${playerName(event.recipientId)} a trade${terms}.`,
+          message: `${playerName(event.playerId)} offered ${recipients} a trade${terms}.`,
           ...(trade === undefined
             ? {}
             : { resources: trade.offered, secondaryResources: trade.requested }),
         },
       ];
     }
+    case 'TRADE_ACCEPTED':
+      return [
+        {
+          icon: '✓',
+          message: `${playerName(event.recipientId)} accepted ${playerName(event.playerId)}’s trade offer.`,
+          tone: 'accent',
+        },
+      ];
     case 'TRADE_REJECTED':
       return [
         {
@@ -388,6 +438,14 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
         {
           icon: '×',
           message: `${playerName(event.playerId)}’s open trade was cancelled.`,
+          tone: 'muted',
+        },
+      ];
+    case 'TRADE_EXPIRED':
+      return [
+        {
+          icon: '⌛',
+          message: `${playerName(event.playerId)}’s trade offer expired.`,
           tone: 'muted',
         },
       ];
@@ -455,6 +513,7 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       ];
     case 'KN_PROGRESS_CARD_PLAYED': {
       const definition = getKNProgressCardDefinition(event.cardDefinitionId);
+      if (definition?.effect === 'WAR_DRUMS' || definition?.effect === 'RECLAMATION') return [];
       return [
         {
           icon: '✦',
@@ -468,6 +527,7 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
     }
     case 'KN_PROGRESS_CARD_RESOLVED': {
       const definition = getKNProgressCardDefinition(event.cardDefinitionId);
+      if (definition?.effect === 'WAR_DRUMS' || definition?.effect === 'RECLAMATION') return [];
       const transferTotal = Object.values(event.transfers ?? {}).reduce(
         (total, amount) => total + amount,
         0,
@@ -538,6 +598,22 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
           improvementTrack: event.track,
         },
       ];
+    case 'CITY_IMPROVEMENT_PERK_UNLOCKED': {
+      const perkName =
+        event.perk === 'AQUEDUCT'
+          ? 'Aqueduct'
+          : event.perk === 'TRADING_HOUSE'
+            ? 'Trading House'
+            : 'Fortress';
+      return [
+        {
+          icon: '✦',
+          message: `${playerName(event.playerId)} unlocked ${perkName} from ${event.track[0]}${event.track.slice(1).toLocaleLowerCase()} level 3!`,
+          tone: 'accent',
+          improvementTrack: event.track,
+        },
+      ];
+    }
     case 'METROPOLIS_CHANGED':
       return [
         {

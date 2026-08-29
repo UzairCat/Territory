@@ -1,6 +1,7 @@
-import { BASE_MAP } from '../maps/base-map';
 import { CLASSIC_MODE } from '../modes/classic';
 import type { ResourceId } from '../core/ids';
+import { MAPS } from '../maps/maps';
+import { coordinateLakeCount, coordinateLandMasses, getMapPortPlacements } from '../maps/map-utils';
 import { BUILDINGS } from './buildings';
 import { PROGRESS_CARDS } from './progress-cards';
 import { RESOURCES, TERRAIN_IDS, TERRAINS } from './resources';
@@ -17,9 +18,7 @@ function issue(code: string, message: string): ContentValidationIssue {
 export function validateClassicContent(): readonly ContentValidationIssue[] {
   const issues: ContentValidationIssue[] = [];
   const resourceIds = new Set(RESOURCES.map((resource) => resource.id));
-  const coordinateKeys = new Set(
-    BASE_MAP.coordinates.map((coordinate) => `${coordinate.q},${coordinate.r}`),
-  );
+  const terrainIds = new Set(TERRAINS.map((terrain) => terrain.id));
 
   if (RESOURCES.length !== 5 || resourceIds.size !== RESOURCES.length) {
     issues.push(
@@ -28,34 +27,91 @@ export function validateClassicContent(): readonly ContentValidationIssue[] {
   }
 
   if (TERRAINS.length !== 6 || !TERRAINS.some((terrain) => terrain.id === TERRAIN_IDS.wasteland)) {
-    issues.push(
-      issue('INVALID_TERRAINS', 'Base Map requires five producing terrains and a wasteland.'),
+    issues.push(issue('INVALID_TERRAINS', 'Maps require five producing terrains and a wasteland.'));
+  }
+
+  for (const map of MAPS) {
+    const coordinateKeys = new Set(
+      map.coordinates.map((coordinate) => `${coordinate.q},${coordinate.r}`),
     );
-  }
-
-  if (BASE_MAP.coordinates.length !== 19 || coordinateKeys.size !== 19) {
-    issues.push(issue('INVALID_COORDINATES', 'Base Map requires 19 unique axial coordinates.'));
-  }
-
-  if (BASE_MAP.terrainPool.length !== 19) {
-    issues.push(issue('INVALID_TERRAIN_POOL', 'Base Map terrain pool must contain 19 tiles.'));
-  }
-
-  if (BASE_MAP.numberTokenPool.length !== 18) {
-    issues.push(issue('INVALID_TOKEN_POOL', 'Base Map must contain 18 producing number tokens.'));
-  }
-
-  if (BASE_MAP.portPool.length !== 9) {
-    issues.push(issue('INVALID_PORT_POOL', 'Base Map must contain nine ports.'));
-  }
-
-  const specificPorts = BASE_MAP.portPool.filter((port) => port.resourceId !== null);
-  const genericPorts = BASE_MAP.portPool.filter((port) => port.resourceId === null);
-
-  if (specificPorts.length !== 5 || genericPorts.length !== 4) {
-    issues.push(
-      issue('INVALID_PORT_DISTRIBUTION', 'Ports must contain five 2:1 and four 3:1 entries.'),
-    );
+    const wastelandCount = map.terrainPool.filter(
+      (terrainId) => terrainId === TERRAIN_IDS.wasteland,
+    ).length;
+    if (coordinateKeys.size !== map.coordinates.length) {
+      issues.push(
+        issue('INVALID_COORDINATES', `${map.displayName} requires unique axial coordinates.`),
+      );
+    }
+    if (
+      map.terrainPool.length !== map.coordinates.length ||
+      map.terrainPool.some((terrainId) => !terrainIds.has(terrainId)) ||
+      wastelandCount < 1
+    ) {
+      issues.push(
+        issue(
+          'INVALID_TERRAIN_POOL',
+          `${map.displayName} must define one known terrain for every tile and a wasteland.`,
+        ),
+      );
+    }
+    if (
+      map.numberTokenPool.length !== map.coordinates.length - wastelandCount ||
+      map.numberTokenPool.some(
+        (token) => !Number.isSafeInteger(token) || token < 2 || token > 12 || token === 7,
+      )
+    ) {
+      issues.push(
+        issue(
+          'INVALID_TOKEN_POOL',
+          `${map.displayName} must define one valid number token per producing tile.`,
+        ),
+      );
+    }
+    if (
+      map.portPool.length < 1 ||
+      map.portPool.some(
+        (port) =>
+          (port.resourceId === null && port.tradeRatio !== 3) ||
+          (port.resourceId !== null &&
+            (port.tradeRatio !== 2 || !resourceIds.has(port.resourceId))),
+      )
+    ) {
+      issues.push(
+        issue('INVALID_PORT_POOL', `${map.displayName} contains an invalid port definition.`),
+      );
+    }
+    if (coordinateLandMasses(map.coordinates).length !== map.landMassCount) {
+      issues.push(
+        issue(
+          'INVALID_LAND_MASS_COUNT',
+          `${map.displayName} does not match its declared landmass count.`,
+        ),
+      );
+    }
+    if (
+      map.lakeCount !== undefined &&
+      (!Number.isSafeInteger(map.lakeCount) ||
+        map.lakeCount < 0 ||
+        coordinateLakeCount(map.coordinates) !== map.lakeCount)
+    ) {
+      issues.push(
+        issue('INVALID_LAKE_COUNT', `${map.displayName} does not match its declared lake count.`),
+      );
+    }
+    try {
+      if (getMapPortPlacements(map).length !== map.portPool.length) {
+        issues.push(issue('INVALID_PORT_PLACEMENT', `${map.displayName} cannot place every port.`));
+      }
+    } catch (error) {
+      issues.push(
+        issue(
+          'INVALID_PORT_PLACEMENT',
+          error instanceof Error
+            ? `${map.displayName}: ${error.message}`
+            : `${map.displayName} cannot place every port.`,
+        ),
+      );
+    }
   }
 
   for (const building of BUILDINGS) {

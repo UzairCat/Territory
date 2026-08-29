@@ -8,7 +8,8 @@ import {
 } from 'pixi.js';
 
 import type { BoardState, KnightState, KNState } from '../engine/core/game-state';
-import type { HexId, VertexId } from '../engine/core/ids';
+import { TERRAINS } from '../engine/content/resources';
+import type { HexId, ResourceId, VertexId } from '../engine/core/ids';
 import {
   createBoardRenderModel,
   type BoardRenderModel,
@@ -18,7 +19,7 @@ import {
   type RenderPort,
 } from './render-model';
 
-interface TerritoryBoardOptions {
+export interface TerritoryBoardOptions {
   readonly onInspect: (target: BoardTarget | null) => void;
   readonly onSelect: (target: BoardTarget, position: BoardViewportPoint) => void;
   readonly selectableTargets: readonly BoardTarget[];
@@ -28,6 +29,11 @@ interface TerritoryBoardOptions {
   readonly inventorSelectedHexId?: HexId | null;
   readonly inventorPendingHexId?: HexId | null;
   readonly numberTokenSwap?: readonly [HexId, HexId] | null;
+  readonly madnessHighlightedHexIds?: readonly HexId[];
+  readonly terrainChange?: {
+    readonly hexId: HexId;
+    readonly fromResourceId: ResourceId;
+  } | null;
   readonly merchantPlacementActive?: boolean;
   readonly animatedTarget: BoardTarget | null;
   readonly robberMove: {
@@ -281,7 +287,12 @@ function createTerrainDetails(hex: RenderHex): Container {
   return details;
 }
 
-function createNumberToken(hex: RenderHex, selected = false, pending = false): Container | null {
+function createNumberToken(
+  hex: RenderHex,
+  selected = false,
+  pending = false,
+  madness = false,
+): Container | null {
   if (hex.numberToken === null) return null;
   const group = new Container();
   group.eventMode = 'none';
@@ -289,11 +300,18 @@ function createNumberToken(hex: RenderHex, selected = false, pending = false): C
   const centerY = hex.center.y + 20;
   group.position.set(hex.center.x, centerY);
   const selectionGlow =
-    selected || pending
+    selected || pending || madness
       ? new Graphics()
           .roundRect(-25, -28, 49, 54, 10)
-          .fill({ color: pending ? '#62bde2' : '#f3cb55', alpha: 0.22 })
-          .stroke({ color: pending ? '#bcecff' : '#ffe78b', width: 4, alpha: 1 })
+          .fill({
+            color: madness ? '#9a78e8' : pending ? '#62bde2' : '#f3cb55',
+            alpha: 0.22,
+          })
+          .stroke({
+            color: madness ? '#d9c5ff' : pending ? '#bcecff' : '#ffe78b',
+            width: 4,
+            alpha: 1,
+          })
       : null;
   const shadow = new Graphics()
     .roundRect(-18, -20, 39, 44, 7)
@@ -1024,24 +1042,29 @@ export class TerritoryBoard {
   readonly targets = new Map<string, Graphics>();
 
   private readonly host: HTMLElement;
-  private readonly model: BoardRenderModel;
+  private model: BoardRenderModel;
   private readonly onInspect: TerritoryBoardOptions['onInspect'];
   private readonly onSelect: TerritoryBoardOptions['onSelect'];
-  private readonly selectableTargetKeys: ReadonlySet<string>;
-  private readonly highlightedHexIds: ReadonlySet<HexId>;
-  private readonly emphasizedVertexIds: ReadonlySet<VertexId>;
-  private readonly inventorSelectionActive: boolean;
-  private readonly inventorSelectedHexId: HexId | null;
-  private readonly inventorPendingHexId: HexId | null;
-  private readonly numberTokenSwap: readonly [HexId, HexId] | null;
-  private readonly merchantPlacementActive: boolean;
-  private readonly animatedTargetKey: string | null;
-  private readonly robberMove: TerritoryBoardOptions['robberMove'];
-  private readonly playerColors: TerritoryBoardOptions['playerColors'];
-  private readonly showTargetPulses: boolean;
-  private readonly robberSelectionActive: boolean;
-  private readonly reducedMotion: boolean;
-  private readonly world = new Container();
+  private selectableTargetKeys: ReadonlySet<string>;
+  private highlightedHexIds: ReadonlySet<HexId>;
+  private emphasizedVertexIds: ReadonlySet<VertexId>;
+  private inventorSelectionActive: boolean;
+  private inventorSelectedHexId: HexId | null;
+  private inventorPendingHexId: HexId | null;
+  private numberTokenSwap: readonly [HexId, HexId] | null;
+  private numberTokenSwapStartedAt: number | null;
+  private madnessHighlightedHexIds: ReadonlySet<HexId>;
+  private terrainChange: TerritoryBoardOptions['terrainChange'];
+  private merchantPlacementActive: boolean;
+  private animatedTargetKey: string | null;
+  private robberMove: TerritoryBoardOptions['robberMove'];
+  private playerColors: TerritoryBoardOptions['playerColors'];
+  private showTargetPulses: boolean;
+  private robberSelectionActive: boolean;
+  private reducedMotion: boolean;
+  // The board moves as one camera-controlled unit. A render group lets Pixi update that
+  // transform on the GPU instead of walking every child while the player pans or zooms.
+  private readonly world = new Container({ isRenderGroup: true });
   private readonly debugLayer = new Container();
   private readonly application = new Application();
   private readonly pulsingTargets: Array<{
@@ -1050,7 +1073,11 @@ export class TerritoryBoard {
     readonly baseY: number;
     readonly bobDistance: number;
   }> = [];
+  private readonly transientTickerCallbacks = new Set<() => void>();
   private resizeObserver: ResizeObserver | null = null;
+  private intersectionObserver: IntersectionObserver | null = null;
+  private pageVisible = typeof document === 'undefined' || !document.hidden;
+  private viewportVisible = true;
   private mounted = false;
   private destroyed = false;
   private dragging = false;
@@ -1069,6 +1096,10 @@ export class TerritoryBoard {
     this.inventorSelectedHexId = options.inventorSelectedHexId ?? null;
     this.inventorPendingHexId = options.inventorPendingHexId ?? null;
     this.numberTokenSwap = options.numberTokenSwap ?? null;
+    this.numberTokenSwapStartedAt =
+      this.numberTokenSwap === null ? null : globalThis.performance.now();
+    this.madnessHighlightedHexIds = new Set(options.madnessHighlightedHexIds ?? []);
+    this.terrainChange = options.terrainChange ?? null;
     this.merchantPlacementActive = options.merchantPlacementActive ?? false;
     this.animatedTargetKey =
       options.animatedTarget === null ? null : targetKey(options.animatedTarget);
@@ -1085,6 +1116,7 @@ export class TerritoryBoard {
       antialias: true,
       autoDensity: true,
       backgroundAlpha: 0,
+      powerPreference: 'high-performance',
       resolution: Math.min(globalThis.devicePixelRatio || 1, 2),
       resizeTo: this.host,
     });
@@ -1118,10 +1150,75 @@ export class TerritoryBoard {
       this.fitBoard();
     });
     this.resizeObserver.observe(this.host);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+    if (typeof IntersectionObserver !== 'undefined') {
+      this.intersectionObserver = new IntersectionObserver(([entry]) => {
+        this.viewportVisible = entry?.isIntersecting ?? true;
+        this.syncRenderActivity();
+      });
+      this.intersectionObserver.observe(this.host);
+    }
+    this.syncRenderActivity();
   }
 
   setDebugIdsVisible(visible: boolean): void {
     this.debugLayer.visible = visible;
+  }
+
+  update(board: BoardState, options: TerritoryBoardOptions): void {
+    if (!this.mounted || this.destroyed) return;
+    const previousHexIds = this.model.hexes.map((hex) => hex.target.id).join('|');
+    const nextModel = createBoardRenderModel(
+      board,
+      70,
+      options.knights ?? [],
+      options.merchant ?? null,
+    );
+    const nextHexIds = nextModel.hexes.map((hex) => hex.target.id).join('|');
+
+    this.application.ticker.remove(this.animateTargetPulse);
+    for (const callback of this.transientTickerCallbacks) this.application.ticker.remove(callback);
+    this.transientTickerCallbacks.clear();
+    this.pulsingTargets.length = 0;
+    this.targets.clear();
+    this.model = nextModel;
+    this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
+    this.highlightedHexIds = new Set(options.highlightedHexIds);
+    this.emphasizedVertexIds = new Set(options.emphasizedVertexIds ?? []);
+    this.inventorSelectionActive = options.inventorSelectionActive ?? false;
+    this.inventorSelectedHexId = options.inventorSelectedHexId ?? null;
+    this.inventorPendingHexId = options.inventorPendingHexId ?? null;
+    const nextNumberTokenSwap = options.numberTokenSwap ?? null;
+    if (nextNumberTokenSwap?.join('|') !== this.numberTokenSwap?.join('|')) {
+      this.numberTokenSwapStartedAt =
+        nextNumberTokenSwap === null ? null : globalThis.performance.now();
+    }
+    this.numberTokenSwap = nextNumberTokenSwap;
+    this.madnessHighlightedHexIds = new Set(options.madnessHighlightedHexIds ?? []);
+    this.terrainChange = options.terrainChange ?? null;
+    this.merchantPlacementActive = options.merchantPlacementActive ?? false;
+    this.animatedTargetKey =
+      options.animatedTarget === null ? null : targetKey(options.animatedTarget);
+    this.robberMove = options.robberMove;
+    this.playerColors = options.playerColors;
+    this.showTargetPulses = options.showTargetPulses ?? true;
+    this.robberSelectionActive = options.showRobberAttention ?? false;
+    this.reducedMotion = options.reducedMotion ?? false;
+
+    const oldLayers = this.world.removeChildren();
+    for (const layer of oldLayers) {
+      if (layer === this.debugLayer) {
+        const debugChildren = this.debugLayer.removeChildren();
+        for (const child of debugChildren) child.destroy({ children: true });
+      } else {
+        layer.destroy({ children: true });
+      }
+    }
+    this.drawBoard();
+    if (previousHexIds !== nextHexIds) this.fitBoard();
   }
 
   fitBoard(): void {
@@ -1132,7 +1229,7 @@ export class TerritoryBoard {
     const viewportWidth = this.application.screen.width;
     const viewportHeight = this.application.screen.height;
     const fitScale = Math.min(viewportWidth / boardWidth, viewportHeight / boardHeight) * 0.94;
-    const scale = Math.max(0.35, Math.min(1.35, fitScale));
+    const scale = Math.max(0.08, Math.min(1.35, fitScale));
     const centerX = (minimumX + maximumX) / 2;
     const centerY = (minimumY + maximumY) / 2;
 
@@ -1155,8 +1252,17 @@ export class TerritoryBoard {
     this.destroyed = true;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.intersectionObserver?.disconnect();
+    this.intersectionObserver = null;
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
     if (this.mounted) {
       this.application.ticker.remove(this.animateTargetPulse);
+      for (const callback of this.transientTickerCallbacks) {
+        this.application.ticker.remove(callback);
+      }
+      this.transientTickerCallbacks.clear();
       this.application.canvas.removeEventListener('wheel', this.handleWheel);
       this.application.destroy({ removeView: true }, { children: true });
       this.mounted = false;
@@ -1176,6 +1282,10 @@ export class TerritoryBoard {
     const pieceLayer = new Container();
     const cueLayer = new Container();
     const hexInteractionLayer = new Container();
+    for (const layer of [coastLayer, numberTokenLayer, pieceLayer, cueLayer, this.debugLayer]) {
+      layer.eventMode = 'none';
+      layer.interactiveChildren = false;
+    }
     this.world.addChild(
       coastLayer,
       hexLayer,
@@ -1251,6 +1361,7 @@ export class TerritoryBoard {
       this.targets.set(targetKey(hex.target), terrain);
       const terrainDetails = createTerrainDetails(hex);
       hexLayer.addChild(shadow, terrain, terrainDetails);
+      this.animateTerrainChange(hex, polygon, hexLayer);
 
       if (selectable) {
         // Robber movement treats the whole tile as one control. Keeping this hit area above tokens,
@@ -1280,14 +1391,16 @@ export class TerritoryBoard {
         hex,
         this.inventorSelectedHexId === hex.target.id,
         this.inventorPendingHexId === hex.target.id,
+        this.madnessHighlightedHexIds.has(hex.target.id),
       );
       if (numberToken !== null) {
         numberTokenLayer.addChild(numberToken);
         if (
-          this.inventorSelectionActive &&
-          (selectable ||
-            this.inventorSelectedHexId === hex.target.id ||
-            this.inventorPendingHexId === hex.target.id)
+          (this.inventorSelectionActive &&
+            (selectable ||
+              this.inventorSelectedHexId === hex.target.id ||
+              this.inventorPendingHexId === hex.target.id)) ||
+          this.madnessHighlightedHexIds.has(hex.target.id)
         ) {
           this.registerPulsingTarget(numberToken, 8);
         }
@@ -1505,6 +1618,20 @@ export class TerritoryBoard {
     this.startTargetPulse();
   }
 
+  private readonly handleVisibilityChange = (): void => {
+    this.pageVisible = !document.hidden;
+    this.syncRenderActivity();
+  };
+
+  private syncRenderActivity(): void {
+    if (!this.mounted || this.destroyed) return;
+    if (this.pageVisible && this.viewportVisible) {
+      this.application.start();
+    } else {
+      this.application.stop();
+    }
+  }
+
   private registerPulsingTarget(display: Container, bobDistance = 0): void {
     this.pulsingTargets.push({
       display,
@@ -1549,7 +1676,7 @@ export class TerritoryBoard {
     const endX = destination.center.x;
     const endY = destination.center.y + 20;
     const direction = destinationHexId === swap[0] ? -1 : 1;
-    const startedAt = globalThis.performance.now();
+    const startedAt = this.numberTokenSwapStartedAt ?? globalThis.performance.now();
     token.position.set(startX, startY);
     const animate = () => {
       const progress = Math.min(1, (globalThis.performance.now() - startedAt) / 1_850);
@@ -1565,8 +1692,39 @@ export class TerritoryBoard {
       token.rotation = 0;
       token.scale.set(1);
       this.application.ticker.remove(animate);
+      this.transientTickerCallbacks.delete(animate);
     };
+    animate();
+    if (globalThis.performance.now() - startedAt >= 1_850) return;
+    this.transientTickerCallbacks.add(animate);
     this.application.ticker.add(animate);
+  }
+
+  private animateTerrainChange(hex: RenderHex, polygon: number[], layer: Container): void {
+    const change = this.terrainChange;
+    if (change === null || change === undefined || change.hexId !== hex.target.id) return;
+    const previousTerrain = TERRAINS.find(
+      (terrain) => terrain.resourceId === change.fromResourceId,
+    );
+    if (previousTerrain === undefined) return;
+    const overlay = new Graphics().poly(polygon).fill({ color: previousTerrain.color });
+    overlay.eventMode = 'none';
+    layer.addChild(overlay);
+    if (this.reducedMotion || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      overlay.alpha = 0;
+      return;
+    }
+    const startedAt = globalThis.performance.now();
+    const tick = () => {
+      const progress = Math.min(1, (globalThis.performance.now() - startedAt) / 2_200);
+      overlay.alpha = 1 - (0.5 - Math.cos(progress * Math.PI) / 2);
+      if (progress < 1) return;
+      overlay.visible = false;
+      this.application.ticker.remove(tick);
+      this.transientTickerCallbacks.delete(tick);
+    };
+    this.transientTickerCallbacks.add(tick);
+    this.application.ticker.add(tick);
   }
 
   private animateRobberMove(destinationHexId: HexId, robber: Container): void {
@@ -1600,7 +1758,9 @@ export class TerritoryBoard {
       robber.position.set(0, 0);
       robber.alpha = 1;
       this.application.ticker.remove(tick);
+      this.transientTickerCallbacks.delete(tick);
     };
+    this.transientTickerCallbacks.add(tick);
     this.application.ticker.add(tick);
   }
 
@@ -1619,8 +1779,12 @@ export class TerritoryBoard {
       const progress = Math.min((globalThis.performance.now() - startedAt) / 260, 1);
       const eased = 1 - (1 - progress) ** 3;
       for (const piece of pieces) piece.alpha = eased;
-      if (progress >= 1) this.application.ticker.remove(tick);
+      if (progress >= 1) {
+        this.application.ticker.remove(tick);
+        this.transientTickerCallbacks.delete(tick);
+      }
     };
+    this.transientTickerCallbacks.add(tick);
     this.application.ticker.add(tick);
   }
 
@@ -1658,7 +1822,7 @@ export class TerritoryBoard {
   private readonly handleWheel = (event: WheelEvent) => {
     event.preventDefault();
     const oldScale = this.world.scale.x;
-    const nextScale = Math.max(0.35, Math.min(1.8, oldScale * (event.deltaY < 0 ? 1.1 : 0.9)));
+    const nextScale = Math.max(0.08, Math.min(1.8, oldScale * (event.deltaY < 0 ? 1.1 : 0.9)));
     const localX = (event.offsetX - this.world.x) / oldScale;
     const localY = (event.offsetY - this.world.y) / oldScale;
     this.world.scale.set(nextScale);

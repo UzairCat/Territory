@@ -145,6 +145,14 @@ export function CityActionIcon() {
   );
 }
 
+export function KnightActionIcon() {
+  return (
+    <span className="action-art action-art--knight" aria-hidden="true">
+      <span className="knight-shield-art" />
+    </span>
+  );
+}
+
 export function WallActionIcon() {
   return (
     <span className="action-art action-art--wall" aria-hidden="true">

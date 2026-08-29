@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
+import { RANDOM_MAP_ID } from '../../src/app/lobby/lobby-model';
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 import { COMMODITY_IDS } from '../../src/engine/content/commodities';
@@ -21,6 +22,7 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
     showKeyboardTargetControls,
     showRobberAttention,
     showTargetPulses,
+    progressCardFlyovers = [],
     onSelect,
   }: BoardViewportProps) => {
     const firstVertex = selectableTargets.find((target) => target.kind === 'VERTEX');
@@ -36,6 +38,12 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
         data-robber-attention={String(showRobberAttention)}
         data-target-pulses={String(showTargetPulses)}
       >
+        <output data-testid="app-progress-card-flyovers">
+          {progressCardFlyovers.map(
+            (flyover) =>
+              `${flyover.source.kind === 'DECK' ? flyover.source.family : 'PLAYER'}:${flyover.targetPlayerId}|`,
+          )}
+        </output>
         {selectableTargets[0] === undefined ? null : (
           <button type="button" onClick={() => onSelect(selectableTargets[0]!)}>
             Place first legal target
@@ -200,13 +208,47 @@ describe('application flow', () => {
     const user = userEvent.setup();
     renderApp('/lobby');
 
+    expect(screen.getAllByRole('button', { name: /^Select .+$/ })).toHaveLength(6);
+    const randomMap = screen.getByRole('button', { name: 'Select Random map' });
+    expect(within(randomMap).getByText('?')).toBeInTheDocument();
+    expect(randomMap).toHaveTextContent('Picks one existing map when the match starts');
+    await user.click(randomMap);
+    expect(useAppStore.getState().lobby.mapId).toBe(RANDOM_MAP_ID);
+    expect(screen.getByText('19 tiles · 9 ports')).toBeInTheDocument();
+    expect(screen.getByText('30 tiles · 11 ports')).toBeInTheDocument();
+    expect(screen.getByText('37 tiles · 12 ports')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next maps' }));
+    expect(screen.getByText('81 tiles · 27 ports · 7 islands')).toBeInTheDocument();
+    expect(screen.getByText('144 tiles · 25 ports')).toBeInTheDocument();
+    expect(screen.getByText('63 tiles · 20 ports · 3 islands')).toBeInTheDocument();
+    expect(screen.getByText('24 tiles · 9 ports · 1 lake')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next maps' }));
+    expect(screen.getByText('43 tiles · 14 ports · 4 lakes')).toBeInTheDocument();
+    expect(screen.getByText('39 tiles · 9 ports · 4 lakes')).toBeInTheDocument();
+    expect(screen.getByText('24 tiles · 8 ports · 1 lake')).toBeInTheDocument();
+    expect(screen.getByText('42 tiles · 12 ports · 1 lake')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Previous maps' }));
+    await user.click(screen.getByRole('button', { name: 'Select USA' }));
+    expect(useAppStore.getState().lobby.mapId).toBe('usa');
+
     expect(screen.getByRole('slider', { name: 'Points to win' })).toHaveValue('10');
     expect(screen.getByRole('slider', { name: 'Card discard limit' })).toHaveValue('7');
-    for (const label of ['Hide Bank Cards', 'Friendly Robber', 'Balanced Dice']) {
+    for (const label of [
+      'Hide Bank Cards',
+      'Friendly Robber',
+      'Balanced Dice',
+      "Inventor's Madness",
+    ]) {
       const toggle = screen.getByRole('button', { name: label });
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      const tooltip = within(toggle).getByRole('tooltip');
+      expect(toggle).toHaveAttribute('aria-describedby', tooltip.id);
+      expect(tooltip).toHaveTextContent('Click to turn this room rule on.');
       await user.click(toggle);
       expect(toggle).toHaveAttribute('aria-pressed', 'true');
+      expect(within(toggle).getByRole('tooltip')).toHaveTextContent(
+        'Click to turn this room rule off.',
+      );
     }
     await user.click(screen.getByRole('button', { name: 'Increase Points to win' }));
     await user.click(screen.getByRole('button', { name: 'Increase Card discard limit' }));
@@ -217,6 +259,7 @@ describe('application flow', () => {
       hideBankCards: true,
       friendlyRobber: true,
       balancedDice: true,
+      inventorsMadness: true,
     });
   });
 
@@ -346,6 +389,21 @@ describe('application flow', () => {
 
     expect(within(dialog).getByText('That name is already in the lobby.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Add player' })).toBeDisabled();
+  });
+
+  it('uses simple game-piece scenes for the mode choices', () => {
+    renderApp('/lobby');
+
+    const classic = screen.getByRole('button', { name: 'Select Classic mode' });
+    expect(classic.querySelectorAll('.lobby-room-mode-piece--house-rear')).toHaveLength(1);
+    expect(classic.querySelectorAll('.lobby-room-mode-piece--house-front')).toHaveLength(1);
+    expect(classic.querySelector('.lobby-room-mode-robber')).not.toBeNull();
+
+    const kn = screen.getByRole('button', { name: 'Select K+N mode' });
+    expect(kn.querySelector('.lobby-room-mode-piece--city')).not.toBeNull();
+    expect(kn.querySelector('.lobby-room-mode-piece--wall')).not.toBeNull();
+    expect(kn.querySelectorAll('.lobby-room-mode-knight')).toHaveLength(2);
+    expect(kn.querySelector('.lobby-room-mode-art__board')).toBeNull();
   });
 
   it('keeps K+N turns moving without device handoffs or automatic card explanations', async () => {
@@ -769,6 +827,7 @@ describe('application flow', () => {
 
     expect(screen.queryByRole('dialog', { name: /Pass to / })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Your Progress Card' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('app-progress-card-flyovers')).toBeEmptyDOMElement();
   });
 
   it('opens a fresh lobby each time Local game is selected from the menu', async () => {

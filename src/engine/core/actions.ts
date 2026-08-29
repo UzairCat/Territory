@@ -46,16 +46,19 @@ export type GameAction =
   | (ActionBase<'BUILD_WALL'> & { readonly vertexId: VertexId })
   | (ActionBase<'BUY_IMPROVEMENT'> & { readonly track: KNProgressFamily })
   | (ActionBase<'BANK_TRADE'> & {
-      readonly giveResourceId: ResourceId;
-      readonly receiveResourceId: ResourceId;
+      readonly offered: ResourceBundle;
+      readonly requested: ResourceBundle;
     })
   | (ActionBase<'CREATE_TRADE'> & {
       readonly tradeId: TradeId;
-      readonly recipientId: PlayerId;
+      readonly recipientIds: readonly PlayerId[];
       readonly offered: ResourceBundle;
       readonly requested: ResourceBundle;
     })
   | (ActionBase<'RESPOND_TO_TRADE'> & { readonly tradeId: TradeId; readonly accepted: boolean })
+  | (ActionBase<'CONFIRM_TRADE'> & { readonly tradeId: TradeId; readonly recipientId: PlayerId })
+  | (ActionBase<'CANCEL_TRADE'> & { readonly tradeId: TradeId })
+  | (ActionBase<'EXPIRE_TRADE'> & { readonly tradeId: TradeId })
   | ActionBase<'BUY_PROGRESS_CARD'>
   | (ActionBase<'PLAY_PROGRESS_CARD'> & { readonly cardInstanceId: CardInstanceId })
   | (ActionBase<'PLAY_KN_PROGRESS_CARD'> & { readonly cardInstanceId: CardInstanceId })

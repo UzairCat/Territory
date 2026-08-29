@@ -2,9 +2,17 @@ import type { GameState } from '../../engine/core/game-state';
 
 interface BarbarianTrackerProps {
   readonly state: GameState;
+  readonly selectablePositions?: readonly number[];
+  readonly selectedPosition?: number | null;
+  readonly onSelectPosition?: (position: number) => void;
 }
 
-export function BarbarianTracker({ state }: BarbarianTrackerProps) {
+export function BarbarianTracker({
+  state,
+  selectablePositions = [],
+  selectedPosition = null,
+  onSelectPosition,
+}: BarbarianTrackerProps) {
   const kn = state.kn;
   if (kn === null) return null;
 
@@ -53,14 +61,22 @@ export function BarbarianTracker({ state }: BarbarianTrackerProps) {
           <strong>×{defenderStrength}</strong>
         </span>
       </header>
-      <div className="board-barbarian-tracker__route" aria-hidden="true">
-        {Array.from({ length: kn.barbarianTrackLength }, (_, index) => {
-          const space = kn.barbarianTrackLength - index - 1;
-          return (
-            <i
+      <div className="board-barbarian-tracker__route" aria-label="Barbarian fleet track">
+        {Array.from({ length: kn.barbarianTrackLength + 1 }, (_, index) => {
+          const space = kn.barbarianTrackLength - index;
+          const selectable = selectablePositions.includes(space);
+          const className = `${space < kn.barbarianPosition ? 'is-crossed' : ''} ${space === kn.barbarianPosition ? 'is-current' : ''} ${selectable ? 'is-selectable' : ''} ${space === selectedPosition ? 'is-selected' : ''}`;
+          return selectable ? (
+            <button
               key={space}
-              className={`${space < kn.barbarianPosition ? 'is-crossed' : ''} ${space === kn.barbarianPosition ? 'is-current' : ''}`}
+              type="button"
+              className={className}
+              aria-label={`Move the barbarian fleet to position ${space}`}
+              aria-pressed={space === selectedPosition}
+              onClick={() => onSelectPosition?.(space)}
             />
+          ) : (
+            <i key={space} className={className} aria-hidden="true" />
           );
         })}
       </div>

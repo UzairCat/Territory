@@ -405,6 +405,79 @@ describe('K+N Science Progress Cards', () => {
 });
 
 describe('K+N Trade Progress Cards', () => {
+  it('permanently reclaims an eligible tile and allows changing the tile before choosing', () => {
+    const granted = ownCard(actionState(), 'RECLAMATION');
+    const firstHex = Object.values(granted.state.board.hexes).find(
+      (hex) =>
+        hex.resourceId !== null &&
+        hex.id !== granted.state.board.robberHexId &&
+        hex.numberToken !== 6 &&
+        hex.numberToken !== 8,
+    )!;
+    const secondHex = Object.values(granted.state.board.hexes).find(
+      (hex) =>
+        hex.resourceId !== null &&
+        hex.id !== granted.state.board.robberHexId &&
+        hex.numberToken !== 6 &&
+        hex.numberToken !== 8 &&
+        hex.id !== firstHex.id,
+    )!;
+    const protectedHexes = Object.values(granted.state.board.hexes).filter(
+      (hex) => hex.numberToken === 6 || hex.numberToken === 8,
+    );
+    const played = play(granted.state, granted.cardId);
+    expect(played.ok).toBe(true);
+    if (!played.ok) return;
+    expect(played.state.pendingInteraction).toMatchObject({
+      purpose: 'RECLAMATION_HEX',
+      canCancel: true,
+      context: { committed: false },
+    });
+    if (played.state.pendingInteraction?.type === 'KN_SELECTION') {
+      for (const protectedHex of protectedHexes) {
+        expect(played.state.pendingInteraction.eligibleIds).not.toContain(protectedHex.id);
+      }
+    }
+    const rejectedProtectedHex = protectedHexes[0];
+    if (rejectedProtectedHex !== undefined) {
+      const rejected = choose(played.state, ACTIVE, [rejectedProtectedHex.id]);
+      expect(rejected.ok).toBe(false);
+      if (!rejected.ok) expect(rejected.error.code).toBe('INVALID_TARGET');
+    }
+
+    const firstSelected = choose(played.state, ACTIVE, [firstHex.id]);
+    expect(firstSelected.ok).toBe(true);
+    if (!firstSelected.ok) return;
+    expect(firstSelected.state.pendingInteraction).toMatchObject({
+      purpose: 'RECLAMATION_RESOURCE',
+      context: { selectedHexId: firstHex.id, committed: false },
+    });
+    const changedTile = choose(firstSelected.state, ACTIVE, [secondHex.id]);
+    expect(changedTile.ok).toBe(true);
+    if (!changedTile.ok) return;
+    expect(changedTile.state.pendingInteraction).toMatchObject({
+      purpose: 'RECLAMATION_RESOURCE',
+      context: { selectedHexId: secondHex.id },
+    });
+
+    const replacement =
+      secondHex.resourceId === RESOURCE_IDS.brick ? RESOURCE_IDS.wood : RESOURCE_IDS.brick;
+    const resolved = choose(changedTile.state, ACTIVE, [replacement]);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.state.board.hexes[secondHex.id]).toMatchObject({
+      resourceId: replacement,
+      terrainId: replacement === RESOURCE_IDS.brick ? TERRAIN_IDS.hills : TERRAIN_IDS.forest,
+    });
+    expect(resolved.events).toContainEqual({
+      type: 'TERRAIN_RECLAIMED',
+      playerId: ACTIVE,
+      hexId: secondHex.id,
+      fromResourceId: secondHex.resourceId,
+      toResourceId: replacement,
+    });
+  });
+
   it('resolves both Monopoly cards with their per-opponent caps and animation metadata', () => {
     for (const [effect, goodId, cap] of [
       ['RESOURCE_MONOPOLY', RESOURCE_IDS.wood, 2],
@@ -560,6 +633,44 @@ describe('K+N Trade Progress Cards', () => {
 });
 
 describe('K+N Politics Progress Cards', () => {
+  it('moves War Drums backward or triggers and fully resolves an immediate attack', () => {
+    const retreat = ownCard(actionState(), 'WAR_DRUMS');
+    const retreatState: GameState = {
+      ...retreat.state,
+      kn: { ...retreat.state.kn!, barbarianPosition: 2 },
+    };
+    const retreatPlayed = play(retreatState, retreat.cardId);
+    expect(retreatPlayed.ok).toBe(true);
+    if (!retreatPlayed.ok) return;
+    expect(retreatPlayed.state.pendingInteraction).toMatchObject({
+      purpose: 'WAR_DRUMS_POSITION',
+      eligibleIds: ['3', '1', '0'],
+    });
+    const retreated = choose(retreatPlayed.state, ACTIVE, ['0']);
+    expect(retreated.ok).toBe(true);
+    if (!retreated.ok) return;
+    expect(retreated.state.kn?.barbarianPosition).toBe(0);
+
+    const advance = ownCard(actionState(), 'WAR_DRUMS');
+    const cityVertexId = Object.values(advance.state.board.vertices)[0]!.id;
+    const attackState = withBuilding(
+      { ...advance.state, kn: { ...advance.state.kn!, barbarianPosition: 6 } },
+      ACTIVE,
+      cityVertexId,
+      'MANSION',
+    );
+    const advancePlayed = play(attackState, advance.cardId);
+    expect(advancePlayed.ok).toBe(true);
+    if (!advancePlayed.ok) return;
+    const attacked = choose(advancePlayed.state, ACTIVE, ['7']);
+    expect(attacked.ok).toBe(true);
+    if (!attacked.ok) return;
+    expect(attacked.state.kn?.barbarianPosition).toBe(0);
+    expect(attacked.state.board.vertices[cityVertexId]?.building?.type).toBe('HOUSE');
+    expect(attacked.state.turn.phase).toBe('ACTION_PHASE');
+    expect(attacked.events.some((event) => event.type === 'BARBARIAN_ATTACK_RESOLVED')).toBe(true);
+  });
+
   it('uses Bishop to steal from every eligible opponent on the destination tile', () => {
     const granted = ownCard(actionState(3), 'BISHOP');
     const targetHex = Object.values(granted.state.board.hexes).find(

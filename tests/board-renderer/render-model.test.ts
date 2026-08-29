@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { createBoardRenderModel } from '../../src/board-renderer/render-model';
-import { generateBaseBoard } from '../../src/engine/board/generate-board';
+import { generateBaseBoard, generateBoard } from '../../src/engine/board/generate-board';
 import type { BoardState } from '../../src/engine/core/game-state';
 import { playerId } from '../../src/engine/core/ids';
 import { createRandomState } from '../../src/engine/core/random';
+import { MAPS } from '../../src/engine/maps/maps';
 
 function modelFor(seed: string) {
   const { board } = generateBaseBoard(createRandomState(seed));
@@ -114,5 +115,47 @@ describe('board render model', () => {
       type: 'HOUSE',
     });
     expect(model.edges.find((target) => target.target.id === edge.id)?.roadOwnerId).toBe(ownerId);
+  });
+
+  it.each(MAPS)('points every $displayName port away from its own shoreline', (map) => {
+    const { board } = generateBoard(map, createRandomState(`render-${map.id}`));
+    const model = createBoardRenderModel(board);
+
+    for (const port of model.ports) {
+      const source = board.ports[port.target.id];
+      const edge = source === undefined ? undefined : board.edges[source.edgeId];
+      const shoreHexId = edge?.adjacentHexIds[0];
+      const shoreHex = model.hexes.find((hex) => hex.target.id === shoreHexId);
+      const [first, second] = port.shoreConnections;
+      if (shoreHex === undefined || first === undefined || second === undefined) {
+        throw new Error(`${port.target.id} is missing its shoreline geometry.`);
+      }
+      const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+      const shoreDistance = Math.hypot(
+        midpoint.x - shoreHex.center.x,
+        midpoint.y - shoreHex.center.y,
+      );
+      const portDistance = Math.hypot(
+        port.position.x - shoreHex.center.x,
+        port.position.y - shoreHex.center.y,
+      );
+      expect(portDistance).toBeGreaterThan(shoreDistance);
+    }
+  });
+
+  it.each(MAPS)('keeps every $displayName port ship visually separated', (map) => {
+    const hexSize = 70;
+    const { board } = generateBoard(map, createRandomState(`render-${map.id}`));
+    const ports = createBoardRenderModel(board, hexSize).ports;
+
+    for (const [index, first] of ports.entries()) {
+      for (const second of ports.slice(index + 1)) {
+        const distance = Math.hypot(
+          first.position.x - second.position.x,
+          first.position.y - second.position.y,
+        );
+        expect(distance).toBeGreaterThanOrEqual(hexSize * 1.7);
+      }
+    }
   });
 });
