@@ -1,6 +1,7 @@
 import { BUILDING_DEFINITIONS } from '../content/buildings';
 import { RESOURCES } from '../content/resources';
 import { COMMODITIES } from '../content/commodities';
+import { DEFAULT_PLAYER_AVATAR_ID } from '../content/avatars';
 import { resourceBundle } from '../content/types';
 import { validateClassicContent } from '../content/validate-content';
 import { generateBoard } from '../board/generate-board';
@@ -99,6 +100,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
         id: player.id,
         name: player.name.trim(),
         colorId: player.colorId,
+        avatarId: player.avatarId ?? DEFAULT_PLAYER_AVATAR_ID,
         resources: resourceBundle([]),
         commodities: resourceBundle([]),
         progressCardIds: [],

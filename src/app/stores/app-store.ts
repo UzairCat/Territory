@@ -9,6 +9,7 @@ import type { GameEvent } from '../../engine/core/events';
 import { gameId, playerId } from '../../engine/core/ids';
 import type { ColorId, MapId, ModeId, PlayerId } from '../../engine/core/ids';
 import type { PlayerCount } from '../../engine/content/types';
+import { DEFAULT_PLAYER_AVATAR_ID, type PlayerAvatarId } from '../../engine/content/avatars';
 import {
   grantDeveloperLoadout,
   grantDeveloperProgressCards,
@@ -61,6 +62,11 @@ interface AppStoreState {
   readonly confirmLobbyResize: (size: PlayerCount) => void;
   readonly addLobbyPlayer: (name: string, colorId: ColorId) => void;
   readonly editLobbyPlayer: (id: PlayerId, name: string, colorId: ColorId) => void;
+  readonly setLobbyPlayerProfile: (
+    id: PlayerId,
+    avatarId: PlayerAvatarId,
+    colorId: ColorId,
+  ) => void;
   readonly removeLobbyPlayer: (id: PlayerId) => void;
   readonly beginGame: () => BeginGameResult;
   readonly rematch: () => BeginGameResult;
@@ -154,6 +160,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         id: playerId(createRandomToken('player')),
         name: name.trim(),
         colorId,
+        avatarId: DEFAULT_PLAYER_AVATAR_ID,
       };
       return { lobby: { ...state.lobby, players: [...state.lobby.players, player] } };
     }),
@@ -163,6 +170,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         ...state.lobby,
         players: state.lobby.players.map((player) =>
           player.id === id ? { ...player, name: name.trim(), colorId } : player,
+        ),
+      },
+    })),
+  setLobbyPlayerProfile: (id, avatarId, colorId) =>
+    set((state) => ({
+      lobby: {
+        ...state.lobby,
+        players: state.lobby.players.map((player) =>
+          player.id === id ? { ...player, avatarId, colorId } : player,
         ),
       },
     })),

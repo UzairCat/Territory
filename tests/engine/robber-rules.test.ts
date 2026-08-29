@@ -158,7 +158,7 @@ describe('robber rules', () => {
     );
   });
 
-  it('validates exact private discards and advances a deterministic queue', () => {
+  it('validates exact private discards while every queued player may resolve immediately', () => {
     const original = robberState('DISCARD_RESOURCES');
     const state: GameState = {
       ...original,
@@ -184,10 +184,10 @@ describe('robber rules', () => {
     };
 
     const wrongPlayer = dispatch(state, {
-      id: actionId('discard-out-of-order'),
+      id: actionId('discard-not-required'),
       type: 'DISCARD_RESOURCES',
-      actorId: TEST_PLAYER_IDS[2],
-      resources: resourceBundle([[RESOURCE_IDS.grain, 4]]),
+      actorId: TEST_PLAYER_IDS[0],
+      resources: resourceBundle([[RESOURCE_IDS.wood, 4]]),
     });
     expect(wrongPlayer.ok).toBe(false);
     if (!wrongPlayer.ok) expect(wrongPlayer.error.code).toBe('NOT_YOUR_TURN');
@@ -211,8 +211,26 @@ describe('robber rules', () => {
     expect(unownedCards.ok).toBe(false);
     if (!unownedCards.ok) expect(unownedCards.error.code).toBe('INVALID_DISCARD');
 
-    const first = dispatch(state, {
-      id: actionId('discard-first'),
+    const secondPlayerFirst = dispatch(state, {
+      id: actionId('discard-second-player-first'),
+      type: 'DISCARD_RESOURCES',
+      actorId: TEST_PLAYER_IDS[2],
+      resources: resourceBundle([[RESOURCE_IDS.grain, 4]]),
+    });
+    expect(secondPlayerFirst.ok).toBe(true);
+    if (!secondPlayerFirst.ok) return;
+    expect(secondPlayerFirst.state.turn.phase).toBe('DISCARD_RESOURCES');
+    expect(secondPlayerFirst.state.pendingInteraction).toEqual({
+      type: 'DISCARD_RESOURCES',
+      queue: [TEST_PLAYER_IDS[1]],
+      requiredCounts: { [TEST_PLAYER_IDS[1]]: 4 },
+    });
+    expect(secondPlayerFirst.state.players[TEST_PLAYER_IDS[2]]?.resources).toMatchObject({
+      grain: 5,
+    });
+
+    const firstPlayerSecond = dispatch(secondPlayerFirst.state, {
+      id: actionId('discard-first-player-second'),
       type: 'DISCARD_RESOURCES',
       actorId: TEST_PLAYER_IDS[1],
       resources: resourceBundle([
@@ -220,33 +238,20 @@ describe('robber rules', () => {
         [RESOURCE_IDS.brick, 2],
       ]),
     });
-    expect(first.ok).toBe(true);
-    if (!first.ok) return;
-    expect(first.state.turn.phase).toBe('DISCARD_RESOURCES');
-    expect(first.state.pendingInteraction).toEqual({
-      type: 'DISCARD_RESOURCES',
-      queue: [TEST_PLAYER_IDS[2]],
-      requiredCounts: { [TEST_PLAYER_IDS[2]]: 4 },
-    });
-    expect(first.state.players[TEST_PLAYER_IDS[1]]?.resources).toMatchObject({ wood: 3, brick: 1 });
-    expect(first.state.bank).toMatchObject({ wood: 21, brick: 21 });
-
-    const second = dispatch(first.state, {
-      id: actionId('discard-second'),
-      type: 'DISCARD_RESOURCES',
-      actorId: TEST_PLAYER_IDS[2],
-      resources: resourceBundle([[RESOURCE_IDS.grain, 4]]),
-    });
-    expect(second.ok).toBe(true);
-    if (!second.ok) return;
-    expect(second.state.turn.phase).toBe('MOVE_ROBBER');
-    expect(second.state.pendingInteraction).toEqual({
+    expect(firstPlayerSecond.ok).toBe(true);
+    if (!firstPlayerSecond.ok) return;
+    expect(firstPlayerSecond.state.turn.phase).toBe('MOVE_ROBBER');
+    expect(firstPlayerSecond.state.pendingInteraction).toEqual({
       type: 'MOVE_ROBBER',
       playerId: TEST_PLAYER_IDS[0],
     });
-    expect(second.state.players[TEST_PLAYER_IDS[2]]?.resources).toMatchObject({ grain: 5 });
-    expect(second.events[0]).toMatchObject({ type: 'RESOURCES_DISCARDED' });
-    expect(isJsonSerializable(second.state)).toBe(true);
+    expect(firstPlayerSecond.state.players[TEST_PLAYER_IDS[1]]?.resources).toMatchObject({
+      wood: 3,
+      brick: 1,
+    });
+    expect(firstPlayerSecond.state.bank).toMatchObject({ wood: 21, brick: 21, grain: 23 });
+    expect(firstPlayerSecond.events[0]).toMatchObject({ type: 'RESOURCES_DISCARDED' });
+    expect(isJsonSerializable(firstPlayerSecond.state)).toBe(true);
   });
 
   it('rejects missing and unchanged robber destinations without mutation', () => {

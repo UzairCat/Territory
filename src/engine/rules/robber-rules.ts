@@ -89,9 +89,8 @@ export function discardResources(
       'The discard queue is not available.',
     );
   }
-  const expectedPlayerId = interaction.queue[0];
-  if (expectedPlayerId !== action.actorId) {
-    return rejectAction(state, 'NOT_YOUR_TURN', 'Only the next player in the queue can discard.');
+  if (!interaction.queue.includes(action.actorId)) {
+    return rejectAction(state, 'NOT_YOUR_TURN', 'This player is not waiting to discard.');
   }
   const player = state.players[action.actorId];
   const requiredCount = interaction.requiredCounts[action.actorId];
@@ -116,7 +115,7 @@ export function discardResources(
     );
   }
 
-  const remainingQueue = interaction.queue.slice(1);
+  const remainingQueue = interaction.queue.filter((playerId) => playerId !== action.actorId);
   const remainingRequiredCounts = Object.fromEntries(
     Object.entries(interaction.requiredCounts).filter(([playerId]) => playerId !== action.actorId),
   );

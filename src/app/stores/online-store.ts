@@ -7,6 +7,7 @@ import type {
   OnlineConnectionState,
   OnlineError,
   OnlineLobbySettings,
+  PlayerProfileSelection,
   OnlineRoomView,
   OnlineSessionCredentials,
   SessionAck,
@@ -31,6 +32,7 @@ interface OnlineStoreState {
   readonly createRoom: (displayName: string) => Promise<boolean>;
   readonly joinRoom: (roomCode: string, displayName: string) => Promise<boolean>;
   readonly updateSettings: (settings: OnlineLobbySettings) => Promise<boolean>;
+  readonly updateProfile: (profile: PlayerProfileSelection) => Promise<boolean>;
   readonly startMatch: () => Promise<boolean>;
   readonly rematch: () => Promise<boolean>;
   readonly returnToLobby: () => Promise<boolean>;
@@ -377,6 +379,16 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     set({ commandPending: true, error: null });
     const ack = await emitWithAck((acknowledge) =>
       getOnlineSocket().emit('room:update-settings', { credentials, settings }, acknowledge),
+    );
+    set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
+    return ack.ok;
+  },
+  updateProfile: async (profile) => {
+    const credentials = get().credentials;
+    if (credentials === null) return false;
+    set({ commandPending: true, error: null });
+    const ack = await emitWithAck((acknowledge) =>
+      getOnlineSocket().emit('room:update-profile', { credentials, profile }, acknowledge),
     );
     set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
     return ack.ok;

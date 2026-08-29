@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RoomManager } from '../../server/room-manager';
+import { PLAYER_AVATARS } from '../../src/engine/content/avatars';
+import { PLAYER_COLORS } from '../../src/engine/content/colors';
 import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
 import { PROGRESS_CARDS } from '../../src/engine/content/progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
@@ -42,6 +44,41 @@ afterEach(() => {
 });
 
 describe('authoritative online rooms', () => {
+  it('lets each guest choose a validated preset avatar and an unused lobby color', () => {
+    const manager = new RoomManager({ onRoomChanged: () => undefined });
+    managers.push(manager);
+    const host = manager.create('Host', 'host-profile-socket');
+    expect(host.ok).toBe(true);
+    if (!host.ok) throw new Error(host.error.message);
+    const guest = manager.join(host.credentials.roomCode, 'Guest', 'guest-profile-socket');
+    expect(guest.ok).toBe(true);
+    if (!guest.ok) throw new Error(guest.error.message);
+    const avatar = PLAYER_AVATARS.find((candidate) => candidate.id === 'navigator')!;
+    const color = PLAYER_COLORS.find((candidate) => candidate.id === 'emerald')!;
+
+    expect(manager.updateProfile(guest.credentials, avatar.id, color.id)).toEqual({ ok: true });
+    expect(
+      manager
+        .view(manager.rooms.get(host.credentials.roomCode)!, host.credentials.playerId)
+        .players.find((player) => player.id === guest.credentials.playerId),
+    ).toMatchObject({ avatarId: avatar.id, colorId: color.id });
+    expect(manager.updateProfile(host.credentials, avatar.id, color.id)).toMatchObject({
+      ok: false,
+      error: { code: 'COLOR_TAKEN' },
+    });
+
+    expect(manager.start(host.credentials)).toEqual({ ok: true });
+    const room = manager.rooms.get(host.credentials.roomCode)!;
+    expect(room.state?.players[guest.credentials.playerId]).toMatchObject({
+      avatarId: avatar.id,
+      colorId: color.id,
+    });
+    expect(manager.updateProfile(guest.credentials, avatar.id, color.id)).toMatchObject({
+      ok: false,
+      error: { code: 'MATCH_ALREADY_STARTED' },
+    });
+  });
+
   it('creates private seats, starts only when full, and gives each socket its own view', () => {
     const manager = new RoomManager({ onRoomChanged: () => undefined });
     managers.push(manager);
@@ -269,6 +306,71 @@ describe('authoritative online rooms', () => {
     expect(room.state.players[host.playerId]?.resources[RESOURCE_IDS.wood]).toBe(1);
     expect(room.state.players[guest.playerId]?.resources[RESOURCE_IDS.ore]).toBe(1);
     expect(room.state.pendingInteraction).toBeNull();
+  });
+
+  it('accepts simultaneous seven discards from one shared revision and deadline', () => {
+    const { manager, room, host, guest } = createStartedRoom();
+    if (room.state === null) throw new Error('Concurrent discard room did not start.');
+    room.state = {
+      ...room.state,
+      players: {
+        ...room.state.players,
+        [host.playerId]: {
+          ...room.state.players[host.playerId]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 8]]),
+        },
+        [guest.playerId]: {
+          ...room.state.players[guest.playerId]!,
+          resources: resourceBundle([[RESOURCE_IDS.brick, 8]]),
+        },
+      },
+      turn: {
+        ...room.state.turn,
+        activePlayerId: host.playerId,
+        phase: 'DISCARD_RESOURCES',
+        dice: [3, 4],
+        setupPlacementIndex: null,
+        setupPlacementVertexId: null,
+      },
+      pendingInteraction: {
+        type: 'DISCARD_RESOURCES',
+        queue: [host.playerId, guest.playerId],
+        requiredCounts: { [host.playerId]: 4, [guest.playerId]: 4 },
+      },
+    };
+    const sharedRevision = room.revision;
+    const sharedDeadline = Date.now() + 12_000;
+    room.timerKey = `discard-${room.state.turn.turnNumber}-simultaneous`;
+    room.deadlineAt = sharedDeadline;
+
+    expect(
+      manager.submit(host, sharedRevision, {
+        id: actionId('concurrent-discard-host'),
+        type: 'DISCARD_RESOURCES',
+        actorId: host.playerId,
+        resources: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(room.deadlineAt).toBe(sharedDeadline);
+    expect(room.state.pendingInteraction).toEqual({
+      type: 'DISCARD_RESOURCES',
+      queue: [guest.playerId],
+      requiredCounts: { [guest.playerId]: 4 },
+    });
+
+    expect(
+      manager.submit(guest, sharedRevision, {
+        id: actionId('concurrent-discard-guest-stale-revision'),
+        type: 'DISCARD_RESOURCES',
+        actorId: guest.playerId,
+        resources: resourceBundle([[RESOURCE_IDS.brick, 4]]),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(room.state.turn.phase).toBe('MOVE_ROBBER');
+    expect(room.state.pendingInteraction).toEqual({
+      type: 'MOVE_ROBBER',
+      playerId: host.playerId,
+    });
   });
 
   it('gives each online developer their own authoritative test loadout', () => {

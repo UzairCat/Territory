@@ -251,12 +251,7 @@ function pendingPlayerActivities(state: GameState): Readonly<Record<string, stri
   const interaction = state.pendingInteraction;
   if (interaction === null) return {};
   if (interaction.type === 'DISCARD_RESOURCES') {
-    return Object.fromEntries(
-      interaction.queue.map((playerId, index) => [
-        playerId,
-        index === 0 ? 'Discarding cards' : 'Waiting to discard',
-      ]),
-    );
+    return Object.fromEntries(interaction.queue.map((playerId) => [playerId, 'Discarding cards']));
   }
   if (interaction.type === 'KN_SELECTION') {
     const players = interaction.simultaneous === true ? interaction.queue : [interaction.playerId];
@@ -1574,11 +1569,16 @@ export function GameScreen() {
     gameState.pendingInteraction?.type === 'DISCARD_RESOURCES'
       ? gameState.pendingInteraction
       : null;
-  const discardPlayerId = discardInteraction?.queue[0];
+  const firstDiscardPlayerId = discardInteraction?.queue[0];
+  const discardPlayerId = isOnlineMatch
+    ? onlineViewerPlayerId !== null && discardInteraction?.queue.includes(onlineViewerPlayerId)
+      ? onlineViewerPlayerId
+      : undefined
+    : firstDiscardPlayerId;
   const discardPlayer =
-    discardPlayerId === undefined ? undefined : gameState.players[discardPlayerId];
+    firstDiscardPlayerId === undefined ? undefined : gameState.players[firstDiscardPlayerId];
   const controlledDiscardPlayer =
-    isOnlineMatch && discardPlayerId !== onlineViewerPlayerId ? undefined : discardPlayer;
+    discardPlayerId === undefined ? undefined : gameState.players[discardPlayerId];
   const requiredDiscardCount =
     discardPlayerId === undefined ? undefined : discardInteraction?.requiredCounts[discardPlayerId];
   const selectedDiscardResources =
@@ -2396,14 +2396,14 @@ export function GameScreen() {
   const selectResourceForDiscard = (resourceId: ResourceId) => {
     if (
       discardPlayerId === undefined ||
-      discardPlayer === undefined ||
+      controlledDiscardPlayer === undefined ||
       requiredDiscardCount === undefined
     ) {
       return;
     }
     const owned = isCommodityId(resourceId)
-      ? (discardPlayer.commodities[resourceId] ?? 0)
-      : (discardPlayer.resources[resourceId] ?? 0);
+      ? (controlledDiscardPlayer.commodities[resourceId] ?? 0)
+      : (controlledDiscardPlayer.resources[resourceId] ?? 0);
     setDiscardSelection((current) => {
       const resources =
         current?.playerId === discardPlayerId && current.turnNumber === gameState.turn.turnNumber
@@ -2902,12 +2902,16 @@ export function GameScreen() {
             prompt: `${activePlayerName} is placing a Road`,
             actorId: gameState.turn.activePlayerId,
           }
-        : gameState.turn.phase === 'DISCARD_RESOURCES' && discardPlayerId !== undefined
+        : gameState.turn.phase === 'DISCARD_RESOURCES' && firstDiscardPlayerId !== undefined
           ? {
               duration: 30,
-              key: `discard-${gameState.turn.turnNumber}-${discardPlayerId}`,
-              prompt: activitySentence(gameState, [discardPlayerId], 'Discarding cards'),
-              actorId: discardPlayerId,
+              key: `discard-${gameState.turn.turnNumber}-simultaneous`,
+              prompt: activitySentence(
+                gameState,
+                discardInteraction?.queue ?? [firstDiscardPlayerId],
+                'Discarding cards',
+              ),
+              actorId: discardPlayerId ?? firstDiscardPlayerId,
             }
           : gameState.turn.phase === 'MOVE_ROBBER' || gameState.turn.phase === 'CHOOSE_STEAL_TARGET'
             ? {

@@ -46,7 +46,7 @@ The v0.1 roadmap is implemented as independently verified phases.
   handling, public gain feedback, rolled-tile highlights, and repeatable end-turn advancement.
 - Phase 6 added engine-authoritative normal construction for Roads, Houses, and Cities, including
   costs, bank returns, piece limits, network/distance validation, legal-target queries, and build mode.
-- Phase 7 added the complete seven-roll robber sequence: deterministic discard queues, mandatory
+- Phase 7 added the complete seven-roll robber sequence: simultaneous mandatory discards,
   discard selection, robber movement, eligible-victim selection, and seeded random stealing.
 - Phase 8 added bank and port trading plus atomic player-to-player offers, including immediate local
   accept/reject decisions, stale-offer validation, cancellation, and detailed trade feedback.

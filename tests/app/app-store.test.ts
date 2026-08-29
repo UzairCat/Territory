@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import { PLAYER_COLORS } from '../../src/engine/content/colors';
+import { PLAYER_AVATARS } from '../../src/engine/content/avatars';
 import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
 import { actionId } from '../../src/engine/core/ids';
 import { KN_MODE } from '../../src/engine/modes/kn';
@@ -38,6 +39,20 @@ describe('application session store', () => {
     const initializedNames =
       useAppStore.getState().gameState?.config.players.map((player) => player.name) ?? [];
     expect([...initializedNames].sort()).toEqual(['Alex', 'Sam']);
+  });
+
+  it('carries a local guest profile from the lobby into the match', () => {
+    const actions = useAppStore.getState();
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+    const alex = useAppStore.getState().lobby.players[0]!;
+    actions.setLobbyPlayerProfile(alex.id, PLAYER_AVATARS[7].id, PLAYER_COLORS[4]!.id);
+
+    expect(actions.beginGame().ok).toBe(true);
+    expect(useAppStore.getState().gameState?.players[alex.id]).toMatchObject({
+      avatarId: PLAYER_AVATARS[7].id,
+      colorId: PLAYER_COLORS[4]!.id,
+    });
   });
 
   it('applies mode defaults and carries custom lobby rules into the match', () => {

@@ -1,4 +1,5 @@
 import type { BuildingType, KNProgressFamily, ResourceBundle } from '../content/types';
+import type { PlayerAvatarId } from '../content/avatars';
 import type {
   CardDefinitionId,
   CardInstanceId,
@@ -68,6 +69,7 @@ export interface PlayerState {
   readonly id: PlayerId;
   readonly name: string;
   readonly colorId: ColorId;
+  readonly avatarId?: PlayerAvatarId;
   readonly resources: ResourceBundle;
   readonly commodities: ResourceBundle;
   readonly progressCardIds: readonly CardInstanceId[];

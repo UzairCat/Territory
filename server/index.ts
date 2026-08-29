@@ -11,6 +11,7 @@ import {
   normalizeRoomCode,
   parseGameAction,
   parseLobbySettings,
+  parsePlayerProfile,
   type ClientToServerEvents,
   type InterServerEvents,
   type OnlineAck,
@@ -225,6 +226,16 @@ io.on('connection', (socket) => {
       credentials === null || settings === null
         ? invalidPayload()
         : manager.updateSettings(credentials, settings),
+    );
+  });
+
+  socket.on('room:update-profile', (payload, acknowledge) => {
+    const credentials = parsedCredentials(payload?.credentials);
+    const profile = parsePlayerProfile(payload?.profile);
+    acknowledge(
+      credentials === null || profile === null
+        ? invalidPayload()
+        : manager.updateProfile(credentials, profile.avatarId, profile.colorId),
     );
   });
 

@@ -1,4 +1,5 @@
 import type { ClassicRules, PlayerCount } from '../content/types';
+import { isPlayerAvatarId, type PlayerAvatarId } from '../content/avatars';
 import type { ColorId, GameId, MapId, ModeId, PlayerId } from './ids';
 
 export const GAME_CONFIG_VERSION = 1;
@@ -7,6 +8,7 @@ export interface PlayerConfig {
   readonly id: PlayerId;
   readonly name: string;
   readonly colorId: ColorId;
+  readonly avatarId?: PlayerAvatarId;
   readonly order: number;
 }
 
@@ -33,6 +35,7 @@ export type GameConfigIssueCode =
   | 'DUPLICATE_PLAYER_ID'
   | 'DUPLICATE_PLAYER_NAME'
   | 'DUPLICATE_PLAYER_COLOR'
+  | 'INVALID_PLAYER_AVATAR'
   | 'INVALID_PLAYER_NAME'
   | 'INVALID_PLAYER_ORDER'
   | 'INVALID_SEED'
@@ -85,6 +88,14 @@ export function validateGameConfig(config: GameConfig): readonly GameConfigIssue
 
   if (playerColors.size !== config.players.length) {
     issues.push({ code: 'DUPLICATE_PLAYER_COLOR', message: 'Player colors must be unique.' });
+  }
+
+  if (
+    config.players.some(
+      (player) => player.avatarId !== undefined && !isPlayerAvatarId(player.avatarId),
+    )
+  ) {
+    issues.push({ code: 'INVALID_PLAYER_AVATAR', message: 'Every avatar must be a valid preset.' });
   }
 
   if (

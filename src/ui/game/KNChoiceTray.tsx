@@ -423,7 +423,7 @@ export function KNChoiceTray({
                             ? 'Permanent terrain change'
                             : choosingHarborCommodity
                               ? 'In hand'
-                              : `Take from ${targetPlayer?.name ?? 'player'}`;
+                              : null;
                   const actionLabel = choosingAqueduct
                     ? `Choose ${resourceLabel(good.id)} from the bank`
                     : choosingResourceMonopoly
@@ -452,7 +452,7 @@ export function KNChoiceTray({
                         <ResourceArtwork resourceId={good.id} />
                       </span>
                       <strong>{resourceLabel(good.id)}</strong>
-                      <small>{detail}</small>
+                      {detail === null ? null : <small>{detail}</small>}
                     </button>
                   );
                 })

@@ -9,6 +9,7 @@ import {
   type LobbyConfig,
 } from '../../src/app/lobby/lobby-model';
 import { PLAYER_COLORS } from '../../src/engine/content/colors';
+import { PLAYER_AVATARS } from '../../src/engine/content/avatars';
 import { gameId, playerId } from '../../src/engine/core/ids';
 import { MAPS } from '../../src/engine/maps/maps';
 import { KN_MODE } from '../../src/engine/modes/kn';
@@ -24,6 +25,13 @@ function completeLobby(): LobbyConfig {
 }
 
 describe('local lobby model', () => {
+  it('offers fourteen player colors and eight original preset avatars', () => {
+    expect(PLAYER_COLORS).toHaveLength(14);
+    expect(PLAYER_AVATARS).toHaveLength(8);
+    expect(new Set(PLAYER_COLORS.map((color) => color.id)).size).toBe(14);
+    expect(new Set(PLAYER_AVATARS.map((avatar) => avatar.id)).size).toBe(8);
+  });
+
   it('explains why an incomplete lobby cannot start', () => {
     expect(validateLobby(createDefaultLobby('seed'))).toContainEqual({
       code: 'PLAYER_COUNT_INCOMPLETE',

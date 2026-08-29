@@ -579,6 +579,7 @@ describe('K+N compact choice flows', () => {
         name: 'Take Brick with Master Merchant',
       }),
     ).toHaveLength(2);
+    expect(within(tray).queryByText('Take from Sam')).not.toBeInTheDocument();
     await user.click(
       within(tray).getAllByRole('button', {
         name: 'Take Brick with Master Merchant',

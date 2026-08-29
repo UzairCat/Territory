@@ -8,7 +8,9 @@ import type { MapId } from '../../engine/core/ids';
 import { getMapPortPlacements } from '../../engine/maps/map-utils';
 import { Button } from '../../ui/components/Button';
 import { Panel } from '../../ui/components/Panel';
+import { PlayerAvatar } from '../../ui/components/PlayerAvatar';
 import { CityActionIcon, HouseActionIcon, WallActionIcon } from '../../ui/game/ActionArtwork';
+import { ProfileGalleryModal } from '../../ui/lobby/ProfileGalleryModal';
 import {
   AVAILABLE_MAPS,
   AVAILABLE_MODES,
@@ -215,10 +217,12 @@ export function OnlineLobbyScreen() {
   const commandPending = useOnlineStore((state) => state.commandPending);
   const initialize = useOnlineStore((state) => state.initialize);
   const updateSettings = useOnlineStore((state) => state.updateSettings);
+  const updateProfile = useOnlineStore((state) => state.updateProfile);
   const startMatch = useOnlineStore((state) => state.startMatch);
   const leaveRoom = useOnlineStore((state) => state.leaveRoom);
   const openSettings = useAppStore((state) => state.openSettings);
   const [mapPageOverride, setMapPage] = useState<number | null>(null);
+  const [profileGalleryOpen, setProfileGalleryOpen] = useState(false);
 
   useEffect(() => {
     if (room === null) void initialize();
@@ -252,6 +256,7 @@ export function OnlineLobbyScreen() {
   const connectedPlayers = room.players.filter((player) => player.connected).length;
   const allConnected = room.players.every((player) => player.connected);
   const hostPlayer = room.players.find((player) => player.id === room.hostPlayerId);
+  const viewerPlayer = room.players.find((player) => player.id === room.viewerPlayerId);
   const selectedMode = AVAILABLE_MODES.find((mode) => mode.id === settings.modeId);
   const selectedMapOption = MAP_OPTIONS.find((option) => option.id === settings.mapId);
   const turnTimeIndex = Math.max(
@@ -395,10 +400,12 @@ export function OnlineLobbyScreen() {
                   style={{ '--seat-color': color?.hex ?? '#ffffff' } as CSSProperties}
                 >
                   <span className="player-slot__number">{index + 1}</span>
-                  <span
-                    className={`player-marker player-marker--${color?.marker.toLocaleLowerCase() ?? 'circle'}`}
-                    style={{ backgroundColor: color?.hex ?? '#ffffff' }}
-                    aria-hidden="true"
+                  <PlayerAvatar
+                    className="lobby-slot-avatar"
+                    playerName={player.name}
+                    avatarId={player.avatarId}
+                    editable={isViewer}
+                    {...(isViewer ? { onOpenGallery: () => setProfileGalleryOpen(true) } : {})}
                   />
                   <span className="player-slot__identity">
                     <strong>
@@ -925,6 +932,25 @@ export function OnlineLobbyScreen() {
           </footer>
         </Panel>
       </div>
+      {viewerPlayer === undefined ? null : (
+        <ProfileGalleryModal
+          open={profileGalleryOpen}
+          playerName={viewerPlayer.name}
+          avatarId={viewerPlayer.avatarId}
+          colorId={viewerPlayer.colorId}
+          unavailableColorIds={room.players
+            .filter((player) => player.id !== viewerPlayer.id)
+            .map((player) => player.colorId)}
+          saving={commandPending}
+          errorMessage={error?.message ?? null}
+          onClose={() => setProfileGalleryOpen(false)}
+          onSave={(avatarId, colorId) => {
+            void updateProfile({ avatarId, colorId }).then((saved) => {
+              if (saved) setProfileGalleryOpen(false);
+            });
+          }}
+        />
+      )}
       {credentials === null ? null : <span className="visually-hidden">Online seat active</span>}
     </main>
   );

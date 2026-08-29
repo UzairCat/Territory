@@ -204,6 +204,36 @@ describe('application flow', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens the avatar gallery from a local guest portrait and saves the profile', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByRole('button', { name: 'Local game' }));
+    await addPlayer('Alex');
+    await addPlayer('Sam');
+
+    await user.click(screen.getByRole('button', { name: 'Open profile gallery for Alex' }));
+    const gallery = screen.getByRole('dialog', { name: 'Alex’s profile' });
+    expect(
+      within(gallery).getByRole('button', { name: 'Choose Cartographer profile picture' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    expect(within(gallery).getAllByRole('button', { name: /profile picture$/ })).toHaveLength(8);
+    expect(within(gallery).getAllByRole('button', { name: /^Choose / })).toHaveLength(22);
+
+    await user.click(
+      within(gallery).getByRole('button', { name: 'Choose Courier profile picture' }),
+    );
+    await user.click(within(gallery).getByRole('button', { name: 'Choose Emerald' }));
+    await user.click(within(gallery).getByRole('button', { name: 'Use this profile' }));
+
+    expect(useAppStore.getState().lobby.players[0]).toMatchObject({
+      name: 'Alex',
+      avatarId: 'courier',
+      colorId: 'emerald',
+    });
+    expect(screen.queryByRole('dialog', { name: 'Alex’s profile' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Alex profile picture: Courier')).toBeInTheDocument();
+  });
+
   it('configures functional room rules and advanced match limits from the lobby', async () => {
     const user = userEvent.setup();
     renderApp('/lobby');

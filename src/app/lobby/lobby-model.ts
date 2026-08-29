@@ -1,4 +1,9 @@
 import { PLAYER_COLORS } from '../../engine/content/colors';
+import {
+  DEFAULT_PLAYER_AVATAR_ID,
+  isPlayerAvatarId,
+  type PlayerAvatarId,
+} from '../../engine/content/avatars';
 import type { PlayerCount } from '../../engine/content/types';
 import type { GameConfig } from '../../engine/core/game-config';
 import { mapId } from '../../engine/core/ids';
@@ -18,6 +23,7 @@ export interface LocalLobbyPlayer {
   readonly id: PlayerId;
   readonly name: string;
   readonly colorId: ColorId;
+  readonly avatarId?: PlayerAvatarId;
 }
 
 export interface LobbyConfig {
@@ -44,6 +50,7 @@ export type LobbyIssueCode =
   | 'DUPLICATE_PLAYER_NAME'
   | 'DUPLICATE_PLAYER_COLOR'
   | 'INVALID_PLAYER_COLOR'
+  | 'INVALID_PLAYER_AVATAR'
   | 'INVALID_SEED'
   | 'INVALID_MAP'
   | 'INVALID_MODE'
@@ -175,6 +182,14 @@ export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
     issues.push({ code: 'INVALID_PLAYER_COLOR', message: 'A player has an unavailable color.' });
   }
 
+  if (
+    lobby.players.some(
+      (player) => player.avatarId !== undefined && !isPlayerAvatarId(player.avatarId),
+    )
+  ) {
+    issues.push({ code: 'INVALID_PLAYER_AVATAR', message: 'A player has an unavailable avatar.' });
+  }
+
   if (lobby.seed.trim().length === 0) {
     issues.push({ code: 'INVALID_SEED', message: 'Enter or generate a match seed.' });
   }
@@ -256,6 +271,7 @@ export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfig
         id: player.id,
         name: player.name.trim(),
         colorId: player.colorId,
+        avatarId: player.avatarId ?? DEFAULT_PLAYER_AVATAR_ID,
         order,
       })),
       rules: {

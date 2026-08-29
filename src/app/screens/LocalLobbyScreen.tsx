@@ -11,6 +11,7 @@ import { Panel } from '../../ui/components/Panel';
 import { CityActionIcon, HouseActionIcon, WallActionIcon } from '../../ui/game/ActionArtwork';
 import { PlayerEditorModal } from '../../ui/lobby/PlayerEditorModal';
 import { PlayerSlot } from '../../ui/lobby/PlayerSlot';
+import { ProfileGalleryModal } from '../../ui/lobby/ProfileGalleryModal';
 import {
   AVAILABLE_MAPS,
   AVAILABLE_MODES,
@@ -212,12 +213,14 @@ export function LocalLobbyScreen() {
   const confirmLobbyResize = useAppStore((state) => state.confirmLobbyResize);
   const addLobbyPlayer = useAppStore((state) => state.addLobbyPlayer);
   const editLobbyPlayer = useAppStore((state) => state.editLobbyPlayer);
+  const setLobbyPlayerProfile = useAppStore((state) => state.setLobbyPlayerProfile);
   const removeLobbyPlayer = useAppStore((state) => state.removeLobbyPlayer);
   const beginGame = useAppStore((state) => state.beginGame);
   const clearGame = useAppStore((state) => state.clearGame);
   const openSettings = useAppStore((state) => state.openSettings);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<PlayerId | null>(null);
+  const [profilePlayerId, setProfilePlayerId] = useState<PlayerId | null>(null);
   const [pendingSize, setPendingSize] = useState<PlayerCount | null>(null);
   const [startFailure, setStartFailure] = useState<readonly string[]>([]);
   const [mapPage, setMapPage] = useState(() =>
@@ -233,6 +236,7 @@ export function LocalLobbyScreen() {
   );
   const lobbyIssues = useMemo(() => validateLobby(lobby), [lobby]);
   const editingPlayer = lobby.players.find((player) => player.id === editingPlayerId) ?? null;
+  const profilePlayer = lobby.players.find((player) => player.id === profilePlayerId) ?? null;
   const selectedMode = AVAILABLE_MODES.find((mode) => mode.id === lobby.modeId);
   const selectedMapOption = MAP_OPTIONS.find((option) => option.id === lobby.mapId);
   const turnTimeIndex = Math.max(
@@ -336,6 +340,7 @@ export function LocalLobbyScreen() {
                   canAdd={player === null && index === lobby.players.length}
                   onAdd={openAddPlayer}
                   onEdit={openEditPlayer}
+                  onOpenProfile={(entry) => setProfilePlayerId(entry.id)}
                   onRemove={(entry) => removeLobbyPlayer(entry.id)}
                 />
               );
@@ -795,6 +800,23 @@ export function LocalLobbyScreen() {
           closePlayerEditor();
         }}
       />
+
+      {profilePlayer === null ? null : (
+        <ProfileGalleryModal
+          open
+          playerName={profilePlayer.name}
+          avatarId={profilePlayer.avatarId}
+          colorId={profilePlayer.colorId}
+          unavailableColorIds={lobby.players
+            .filter((player) => player.id !== profilePlayer.id)
+            .map((player) => player.colorId)}
+          onClose={() => setProfilePlayerId(null)}
+          onSave={(avatarId, colorId) => {
+            setLobbyPlayerProfile(profilePlayer.id, avatarId, colorId);
+            setProfilePlayerId(null);
+          }}
+        />
+      )}
 
       <Modal
         open={pendingSize !== null}

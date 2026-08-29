@@ -1,6 +1,9 @@
+import type { CSSProperties } from 'react';
+
 import { PLAYER_COLORS } from '../../engine/content/colors';
 import type { LocalLobbyPlayer } from '../../app/lobby/lobby-model';
 import { Button } from '../components/Button';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 
 interface PlayerSlotProps {
   readonly index: number;
@@ -8,10 +11,19 @@ interface PlayerSlotProps {
   readonly canAdd: boolean;
   readonly onAdd: () => void;
   readonly onEdit: (player: LocalLobbyPlayer) => void;
+  readonly onOpenProfile: (player: LocalLobbyPlayer) => void;
   readonly onRemove: (player: LocalLobbyPlayer) => void;
 }
 
-export function PlayerSlot({ index, player, canAdd, onAdd, onEdit, onRemove }: PlayerSlotProps) {
+export function PlayerSlot({
+  index,
+  player,
+  canAdd,
+  onAdd,
+  onEdit,
+  onOpenProfile,
+  onRemove,
+}: PlayerSlotProps) {
   if (player === null) {
     return (
       <li className="player-slot player-slot--empty">
@@ -30,12 +42,17 @@ export function PlayerSlot({ index, player, canAdd, onAdd, onEdit, onRemove }: P
   const color = PLAYER_COLORS.find((entry) => entry.id === player.colorId);
 
   return (
-    <li className="player-slot">
+    <li
+      className="player-slot"
+      style={{ '--seat-color': color?.hex ?? '#ffffff' } as CSSProperties}
+    >
       <span className="player-slot__number">{index + 1}</span>
-      <span
-        className={`player-marker player-marker--${color?.marker.toLocaleLowerCase() ?? 'circle'}`}
-        style={{ backgroundColor: color?.hex ?? '#ffffff' }}
-        aria-hidden="true"
+      <PlayerAvatar
+        className="lobby-slot-avatar"
+        playerName={player.name}
+        avatarId={player.avatarId}
+        editable
+        onOpenGallery={() => onOpenProfile(player)}
       />
       <span className="player-slot__identity">
         <strong>{player.name}</strong>

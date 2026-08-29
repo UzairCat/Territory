@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -99,10 +99,12 @@ describe('online entry and lobby presentation', () => {
     const { players: _players, ...lobbySettings } = settings;
     expect(_players).toEqual([]);
     const updateSettings = vi.fn(() => Promise.resolve(true));
+    const updateProfile = vi.fn(() => Promise.resolve(true));
     useOnlineStore.setState({
       connection: 'CONNECTED',
       credentials: { roomCode: 'ABC234', playerId: hostId, resumeToken: 'x'.repeat(32) },
       updateSettings,
+      updateProfile,
       room: {
         protocolVersion: 1,
         code: 'ABC234',
@@ -133,6 +135,17 @@ describe('online entry and lobby presentation', () => {
     expect(screen.getByRole('combobox', { name: 'Map' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Classic mode' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Base - Small' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Open profile gallery for Alex' }));
+    const gallery = screen.getByRole('dialog', { name: 'Alex’s profile' });
+    expect(within(gallery).getAllByRole('button', { name: /profile picture$/ })).toHaveLength(8);
+    expect(within(gallery).getByRole('button', { name: 'Choose Onyx' })).toBeEnabled();
+    await user.click(
+      within(gallery).getByRole('button', { name: 'Choose Navigator profile picture' }),
+    );
+    await user.click(within(gallery).getByRole('button', { name: 'Choose Onyx' }));
+    await user.click(within(gallery).getByRole('button', { name: 'Use this profile' }));
+    expect(updateProfile).toHaveBeenCalledWith({ avatarId: 'navigator', colorId: 'onyx' });
 
     await user.click(screen.getByRole('button', { name: 'Select K+N mode' }));
     expect(updateSettings).toHaveBeenCalledWith(

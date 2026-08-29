@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
+import { resetOnlineStoreForTests, useOnlineStore } from '../../src/app/stores/online-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
@@ -14,6 +15,7 @@ import { createGame } from '../../src/engine/core/create-game';
 import type { GameEvent } from '../../src/engine/core/events';
 import type { GameState } from '../../src/engine/core/game-state';
 import { createRandomState, randomInteger } from '../../src/engine/core/random';
+import { createOnlineGameView } from '../../src/multiplayer/projection';
 import { createTestConfig, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 vi.mock('../../src/board-renderer/BoardViewport', () => ({
@@ -65,8 +67,14 @@ function renderGame(state: GameState, recentGameEvents: readonly GameEvent[] = [
 }
 
 describe('robber application flow', () => {
-  beforeEach(() => resetAppStoreForTests());
-  afterEach(cleanup);
+  beforeEach(() => {
+    resetAppStoreForTests();
+    resetOnlineStoreForTests();
+  });
+  afterEach(() => {
+    cleanup();
+    resetOnlineStoreForTests();
+  });
 
   it('rolls a seven, requires an exact discard, and moves the robber without deadlock', async () => {
     const user = userEvent.setup();
@@ -150,6 +158,82 @@ describe('robber application flow', () => {
     expect(useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[1]]?.resources).toMatchObject({
       wood: 4,
     });
+  });
+
+  it('lets every affected online player choose their discard without waiting for queue order', async () => {
+    const user = userEvent.setup();
+    const original = createdGame();
+    const viewerId = TEST_PLAYER_IDS[2];
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [TEST_PLAYER_IDS[1]]: {
+          ...original.players[TEST_PLAYER_IDS[1]]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 8]]),
+        },
+        [viewerId]: {
+          ...original.players[viewerId]!,
+          resources: resourceBundle([[RESOURCE_IDS.grain, 8]]),
+        },
+      },
+      turn: {
+        ...original.turn,
+        activePlayerId: TEST_PLAYER_IDS[0],
+        phase: 'DISCARD_RESOURCES',
+        dice: [3, 4],
+        setupPlacementIndex: null,
+        setupPlacementVertexId: null,
+      },
+      pendingInteraction: {
+        type: 'DISCARD_RESOURCES',
+        queue: [TEST_PLAYER_IDS[1], viewerId],
+        requiredCounts: { [TEST_PLAYER_IDS[1]]: 4, [viewerId]: 4 },
+      },
+    };
+    const deadlineAt = Date.now() + 30_000;
+    const game = createOnlineGameView(state, viewerId, 4, [], [], false, false, deadlineAt, null);
+    useOnlineStore.setState({
+      connection: 'CONNECTED',
+      credentials: { roomCode: 'DISC34', playerId: viewerId, resumeToken: 'd'.repeat(32) },
+      room: {
+        protocolVersion: 1,
+        code: 'DISC34',
+        phase: 'PLAYING',
+        viewerPlayerId: viewerId,
+        hostPlayerId: TEST_PLAYER_IDS[0],
+        players: state.config.players.map((player) => ({
+          id: player.id,
+          name: player.name,
+          colorId: player.colorId,
+          connected: true,
+          host: player.id === TEST_PLAYER_IDS[0],
+        })),
+        settings: {
+          mapId: state.config.mapId,
+          modeId: state.config.modeId,
+          size: 3,
+          seed: state.config.seed,
+          turnTimeSeconds: state.config.turnTimeSeconds ?? 60,
+          victoryTarget: state.config.victoryTarget,
+          discardThreshold: state.config.rules.discardThreshold,
+          hideBankCards: state.config.hideBankCards ?? false,
+          friendlyRobber: state.config.friendlyRobber ?? false,
+          balancedDice: state.config.balancedDice ?? false,
+          inventorsMadness: state.config.inventorsMadness ?? false,
+        },
+        game,
+      },
+    });
+    renderGame(game.state);
+
+    expect(screen.getByRole('dialog', { name: 'Discard Cards (0/4)' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Jordan resource hand for discarding' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Sam and Jordan are discarding cards')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Select Grain for discard/ }));
+    expect(screen.getByRole('dialog', { name: 'Discard Cards (1/4)' })).toBeInTheDocument();
   });
 
   it('ignores the entire robber sequence while developer mode is enabled', async () => {

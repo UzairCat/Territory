@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { isPlayerAvatarId, type PlayerAvatarId } from '../engine/content/avatars';
+import { PLAYER_COLORS } from '../engine/content/colors';
 import type { LobbyConfig } from '../app/lobby/lobby-model';
 import type { KNProgressFamily } from '../engine/content/types';
 import type { GameAction } from '../engine/core/actions';
@@ -24,6 +26,7 @@ export interface OnlineRoomPlayer {
   readonly id: PlayerId;
   readonly name: string;
   readonly colorId: ColorId;
+  readonly avatarId?: PlayerAvatarId;
   readonly connected: boolean;
   readonly host: boolean;
 }
@@ -90,6 +93,15 @@ export interface UpdateRoomSettingsPayload {
   readonly settings: OnlineLobbySettings;
 }
 
+export interface PlayerProfileSelection {
+  readonly avatarId: PlayerAvatarId;
+  readonly colorId: ColorId;
+}
+
+export interface UpdatePlayerProfilePayload extends RoomCommandPayload {
+  readonly profile: PlayerProfileSelection;
+}
+
 export interface RoomCommandPayload {
   readonly credentials: OnlineSessionCredentials;
 }
@@ -134,6 +146,10 @@ export interface ClientToServerEvents {
   ) => void;
   'room:update-settings': (
     payload: UpdateRoomSettingsPayload,
+    acknowledge: (ack: OnlineAck) => void,
+  ) => void;
+  'room:update-profile': (
+    payload: UpdatePlayerProfilePayload,
     acknowledge: (ack: OnlineAck) => void,
   ) => void;
   'room:start': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
@@ -198,6 +214,16 @@ const lobbySettingsSchema = z
     inventorsMadness: z.boolean(),
   })
   .strict();
+
+const playerProfileSchema = z
+  .object({ avatarId: boundedText, colorId: boundedText })
+  .strict()
+  .refine(
+    (profile) =>
+      isPlayerAvatarId(profile.avatarId) &&
+      PLAYER_COLORS.some((color) => color.id === profile.colorId),
+    'The selected guest profile is unavailable.',
+  );
 
 const resourceBundleSchema = z
   .record(z.string().min(1).max(40), z.number().int().min(0).max(1_000))
@@ -345,6 +371,11 @@ export function parseGameAction(value: unknown): GameAction | null {
 export function parseLobbySettings(value: unknown): OnlineLobbySettings | null {
   const result = lobbySettingsSchema.safeParse(value);
   return result.success ? (result.data as OnlineLobbySettings) : null;
+}
+
+export function parsePlayerProfile(value: unknown): PlayerProfileSelection | null {
+  const result = playerProfileSchema.safeParse(value);
+  return result.success ? (result.data as PlayerProfileSelection) : null;
 }
 
 export function normalizeRoomCode(value: string): string {

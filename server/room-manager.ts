@@ -1,6 +1,11 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import { PLAYER_COLORS } from '../src/engine/content/colors';
+import {
+  DEFAULT_PLAYER_AVATAR_ID,
+  isPlayerAvatarId,
+  type PlayerAvatarId,
+} from '../src/engine/content/avatars';
 import { createGame } from '../src/engine/core/create-game';
 import { dispatch } from '../src/engine/core/game-engine';
 import type { GameAction } from '../src/engine/core/actions';
@@ -44,6 +49,7 @@ interface RoomMember {
   readonly createdAt: number;
   name: string;
   colorId: ColorId;
+  avatarId: PlayerAvatarId;
   socketIds: Set<string>;
   disconnectedAt: number | null;
   removalTimer: ReturnType<typeof setTimeout> | null;
@@ -159,7 +165,7 @@ function timedStep(state: GameState): TimedStep | null {
     return actorId === undefined
       ? null
       : {
-          key: `discard-${state.turn.turnNumber}-${actorId}`,
+          key: `discard-${state.turn.turnNumber}-simultaneous`,
           durationMs: 30_000,
           actorId,
           kind: 'AUTO_TIMEOUT',
@@ -267,6 +273,7 @@ export class RoomManager {
       id,
       name: displayName.trim(),
       colorId: PLAYER_COLORS[0]!.id,
+      avatarId: DEFAULT_PLAYER_AVATAR_ID,
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
@@ -337,6 +344,7 @@ export class RoomManager {
       id,
       name: displayName.trim(),
       colorId: color.id,
+      avatarId: DEFAULT_PLAYER_AVATAR_ID,
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
@@ -404,6 +412,41 @@ export class RoomManager {
       return { ok: false, error: error('INVALID_SETTINGS', issues[0]!.message) };
     }
     room.settings = settings;
+    this.hooks.onRoomChanged(room.code);
+    return { ok: true };
+  }
+
+  updateProfile(
+    credentials: OnlineSessionCredentials,
+    avatarId: PlayerAvatarId,
+    colorId: ColorId,
+  ): OnlineAck {
+    const authenticated = this.authenticate(credentials);
+    if (authenticated === null) {
+      return { ok: false, error: error('UNAUTHORIZED', 'Session expired.') };
+    }
+    const { room, member } = authenticated;
+    if (room.phase !== 'LOBBY') {
+      return {
+        ok: false,
+        error: error('MATCH_ALREADY_STARTED', 'Profiles are locked after the match starts.'),
+      };
+    }
+    if (!isPlayerAvatarId(avatarId)) {
+      return { ok: false, error: error('INVALID_AVATAR', 'That preset avatar is unavailable.') };
+    }
+    if (!PLAYER_COLORS.some((color) => color.id === colorId)) {
+      return { ok: false, error: error('INVALID_COLOR', 'That player color is unavailable.') };
+    }
+    if (
+      [...room.members.values()].some(
+        (candidate) => candidate.id !== member.id && candidate.colorId === colorId,
+      )
+    ) {
+      return { ok: false, error: error('COLOR_TAKEN', 'Another player is using that color.') };
+    }
+    member.avatarId = avatarId;
+    member.colorId = colorId;
     this.hooks.onRoomChanged(room.code);
     return { ok: true };
   }
@@ -571,13 +614,16 @@ export class RoomManager {
     if (duplicateRevision !== undefined) {
       return { ok: true, revision: duplicateRevision, duplicate: true };
     }
-    const remainsEligibleForConcurrentChoice =
+    const remainsEligibleForConcurrentResolution =
       expectedRevision < room.revision &&
-      action.type === 'RESOLVE_PROGRESS_SELECTION' &&
-      room.state.pendingInteraction?.type === 'KN_SELECTION' &&
-      room.state.pendingInteraction.simultaneous === true &&
-      room.state.pendingInteraction.queue.includes(member.id);
-    if (expectedRevision !== room.revision && !remainsEligibleForConcurrentChoice) {
+      ((action.type === 'RESOLVE_PROGRESS_SELECTION' &&
+        room.state.pendingInteraction?.type === 'KN_SELECTION' &&
+        room.state.pendingInteraction.simultaneous === true &&
+        room.state.pendingInteraction.queue.includes(member.id)) ||
+        (action.type === 'DISCARD_RESOURCES' &&
+          room.state.pendingInteraction?.type === 'DISCARD_RESOURCES' &&
+          room.state.pendingInteraction.queue.includes(member.id)));
+    if (expectedRevision !== room.revision && !remainsEligibleForConcurrentResolution) {
       return {
         ok: false,
         error: error(
@@ -736,6 +782,7 @@ export class RoomManager {
         id: member.id,
         name: member.name,
         colorId: member.colorId,
+        avatarId: member.avatarId,
         connected: member.socketIds.size > 0,
         host: member.id === room.hostPlayerId,
       })),
@@ -785,7 +832,12 @@ export class RoomManager {
   private lobby(room: RoomRecord, settings = room.settings): LobbyConfig {
     const players: readonly LocalLobbyPlayer[] = [...room.members.values()]
       .sort((first, second) => first.createdAt - second.createdAt)
-      .map((member) => ({ id: member.id, name: member.name, colorId: member.colorId }));
+      .map((member) => ({
+        id: member.id,
+        name: member.name,
+        colorId: member.colorId,
+        avatarId: member.avatarId,
+      }));
     return { ...settings, players };
   }
 

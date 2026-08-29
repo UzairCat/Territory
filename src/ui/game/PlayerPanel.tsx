@@ -5,6 +5,7 @@ import { PLAYER_COLORS } from '../../engine/content/colors';
 import { getKNProgressCardDefinition } from '../../engine/content/kn-progress-cards';
 import type { KNProgressFamily } from '../../engine/content/types';
 import type { GameState, PlayerState } from '../../engine/core/game-state';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 
 interface PlayerPanelProps {
   readonly player: PlayerState;
@@ -135,8 +136,11 @@ export function PlayerPanel({
                 <i />
               </span>
             )}
-            <span className="game-player__avatar-head" />
-            <span className="game-player__avatar-body" />
+            <PlayerAvatar
+              className="game-player__preset-avatar"
+              playerName={player.name}
+              avatarId={player.avatarId}
+            />
             <span className="game-player__score-ribbon" title="Victory points">
               <strong>{score}</strong>
             </span>
@@ -282,8 +286,11 @@ export function PlayerPanel({
               <i />
             </span>
           )}
-          <span className="game-player__avatar-head" />
-          <span className="game-player__avatar-body" />
+          <PlayerAvatar
+            className="game-player__preset-avatar"
+            playerName={player.name}
+            avatarId={player.avatarId}
+          />
           <span className="game-player__score-ribbon" title="Victory points">
             <strong>{score}</strong>
           </span>

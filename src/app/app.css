@@ -3391,6 +3391,14 @@ input[type='checkbox'] {
   background: #fff;
 }
 
+.game-player__portrait > .game-player__preset-avatar {
+  z-index: 1;
+  width: calc(100% - 0.34rem);
+  height: calc(100% - 0.34rem);
+  border: 0;
+  box-shadow: none;
+}
+
 .game-player__score-ribbon {
   position: absolute;
   z-index: 4;
@@ -12679,6 +12687,281 @@ input[type='checkbox'] {
 
 .online-player-slot.is-disconnected {
   opacity: 0.68;
+}
+
+.preset-player-avatar {
+  position: relative;
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  overflow: hidden;
+  border: 2px solid color-mix(in srgb, var(--seat-color, #d8b65d) 72%, white);
+  border-radius: 50%;
+  place-items: center;
+  background: #12303a;
+  box-shadow:
+    0 0.2rem 0.55rem rgb(0 20 27 / 38%),
+    0 0 0 0.14rem color-mix(in srgb, var(--seat-color, #d8b65d) 18%, transparent);
+}
+
+.preset-player-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preset-player-avatar__gallery {
+  position: absolute;
+  display: grid;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  opacity: 0;
+  place-content: center;
+  place-items: center;
+  inset: 0;
+  color: white;
+  background: rgb(3 24 31 / 79%);
+  cursor: pointer;
+  transition:
+    opacity 130ms ease,
+    background 130ms ease;
+}
+
+.preset-player-avatar__gallery > span {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.preset-player-avatar__gallery > small {
+  font-size: 0.38rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.preset-player-avatar.is-editable:hover .preset-player-avatar__gallery,
+.preset-player-avatar.is-editable:focus-within .preset-player-avatar__gallery {
+  opacity: 1;
+}
+
+.preset-player-avatar__gallery:hover {
+  background: rgb(8 40 49 / 88%);
+}
+
+.lobby-room-players .player-slot {
+  grid-template-columns: 1.5rem 2.65rem minmax(5.5rem, 1fr) auto;
+}
+
+.profile-gallery-modal {
+  border-color: rgb(231 205 128 / 38%);
+  background:
+    radial-gradient(circle at 50% 0, rgb(85 154 151 / 12%), transparent 22rem),
+    linear-gradient(150deg, #173943, #0b2832 72%);
+}
+
+.profile-gallery {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-gallery > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.profile-gallery > header > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.profile-gallery > header strong,
+.profile-gallery__colors legend {
+  color: #f1ece0;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.profile-gallery > header small,
+.profile-gallery > header > span {
+  color: #9ebabe;
+  font-size: 0.65rem;
+}
+
+.profile-gallery__portraits {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.62rem;
+}
+
+.profile-gallery__portraits > button {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgb(190 221 222 / 18%);
+  border-radius: 0.72rem;
+  color: #eaf1ef;
+  background: #0b2530;
+  cursor: pointer;
+  transition:
+    border-color 130ms ease,
+    translate 130ms ease,
+    box-shadow 130ms ease;
+}
+
+.profile-gallery__portraits > button:hover {
+  border-color: rgb(238 210 123 / 54%);
+  translate: 0 -0.12rem;
+}
+
+.profile-gallery__portraits > button.is-selected {
+  border-color: #f0d173;
+  box-shadow:
+    inset 0 0 0 2px rgb(240 209 115 / 34%),
+    0 0.42rem 1rem rgb(0 18 24 / 35%);
+}
+
+.profile-gallery__portraits img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.profile-gallery__portraits button > span {
+  display: flex;
+  min-height: 2.35rem;
+  padding: 0.42rem 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.profile-gallery__portraits button > span strong {
+  overflow: hidden;
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-gallery__portraits button > span small {
+  padding: 0.12rem 0.25rem;
+  border-radius: 999px;
+  color: #f2d577;
+  background: rgb(160 118 35 / 25%);
+  font-size: 0.46rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.profile-gallery__portraits button > i {
+  position: absolute;
+  top: 0.42rem;
+  right: 0.42rem;
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 1px solid rgb(255 255 255 / 65%);
+  border-radius: 50%;
+  opacity: 0;
+  place-items: center;
+  color: #17362f;
+  background: #efd174;
+  box-shadow: 0 0.2rem 0.5rem rgb(0 0 0 / 32%);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.profile-gallery__portraits button.is-selected > i {
+  opacity: 1;
+}
+
+.profile-gallery__colors {
+  margin: 1rem 0 0;
+  padding: 0.85rem;
+  border: 1px solid rgb(190 221 222 / 16%);
+  border-radius: 0.7rem;
+  background: rgb(4 27 35 / 38%);
+}
+
+.profile-gallery__colors legend {
+  padding: 0 0.35rem;
+}
+
+.profile-gallery__colors > div {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.profile-gallery__colors button {
+  display: grid;
+  min-width: 0;
+  min-height: 3.15rem;
+  padding: 0.35rem 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  place-items: center;
+  gap: 0.2rem;
+  color: #b8cbcd;
+  background: rgb(12 49 59 / 58%);
+  cursor: pointer;
+}
+
+.profile-gallery__colors button[aria-pressed='true'] {
+  border-color: #efd174;
+  color: white;
+  background: rgb(45 83 88 / 74%);
+  box-shadow: inset 0 0 0 1px rgb(239 209 116 / 22%);
+}
+
+.profile-gallery__colors button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.profile-gallery__colors button > span {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 2px solid rgb(255 255 255 / 72%);
+  border-radius: 50%;
+  box-shadow: 0 0.18rem 0.4rem rgb(0 0 0 / 35%);
+}
+
+.profile-gallery__colors button > small {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.48rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-gallery__error {
+  margin: 0.7rem 0 0;
+  padding: 0.55rem 0.68rem;
+  border: 1px solid rgb(239 126 112 / 32%);
+  border-radius: 0.5rem;
+  color: #ffd0c9;
+  background: rgb(126 40 40 / 22%);
+  font-size: 0.68rem;
+}
+
+@media (max-width: 42rem) {
+  .profile-gallery__portraits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-gallery__colors > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .online-player-presence {
