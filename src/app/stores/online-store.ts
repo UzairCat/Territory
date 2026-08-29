@@ -16,6 +16,7 @@ import { useAppStore } from './app-store';
 
 const SESSION_STORAGE_KEY = 'territory.online-session.v1';
 const ACK_TIMEOUT_MS = 8_000;
+let volatileCredentials: OnlineSessionCredentials | null = null;
 
 interface OnlineStoreState {
   readonly connection: OnlineConnectionState;
@@ -40,11 +41,26 @@ interface OnlineStoreState {
   readonly clearError: () => void;
 }
 
-function storedCredentials(): OnlineSessionCredentials | null {
-  if (typeof globalThis.localStorage === 'undefined') return null;
+function credentialStores(): readonly Storage[] {
+  const stores: Storage[] = [];
   try {
-    const raw = globalThis.localStorage.getItem(SESSION_STORAGE_KEY);
-    if (raw === null) return null;
+    const local = globalThis.localStorage as Storage | undefined;
+    if (local !== undefined) stores.push(local);
+  } catch {
+    // Some privacy modes expose the Storage API but throw as soon as it is accessed.
+  }
+  try {
+    const session = globalThis.sessionStorage as Storage | undefined;
+    if (session !== undefined && !stores.includes(session)) stores.push(session);
+  } catch {
+    // The active session can still continue with the in-memory credential fallback.
+  }
+  return stores;
+}
+
+function parseStoredCredentials(raw: string | null): OnlineSessionCredentials | null {
+  if (raw === null) return null;
+  try {
     const parsed = JSON.parse(raw) as Partial<OnlineSessionCredentials>;
     return typeof parsed.roomCode === 'string' &&
       typeof parsed.playerId === 'string' &&
@@ -56,10 +72,31 @@ function storedCredentials(): OnlineSessionCredentials | null {
   }
 }
 
+function storedCredentials(): OnlineSessionCredentials | null {
+  for (const storage of credentialStores()) {
+    try {
+      const credentials = parseStoredCredentials(storage.getItem(SESSION_STORAGE_KEY));
+      if (credentials !== null) {
+        volatileCredentials = credentials;
+        return credentials;
+      }
+    } catch {
+      // Try the next storage mechanism before falling back to this page's memory.
+    }
+  }
+  return volatileCredentials;
+}
+
 function persistCredentials(credentials: OnlineSessionCredentials | null): void {
-  if (typeof globalThis.localStorage === 'undefined') return;
-  if (credentials === null) globalThis.localStorage.removeItem(SESSION_STORAGE_KEY);
-  else globalThis.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(credentials));
+  volatileCredentials = credentials;
+  for (const storage of credentialStores()) {
+    try {
+      if (credentials === null) storage.removeItem(SESSION_STORAGE_KEY);
+      else storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(credentials));
+    } catch {
+      // A blocked or full browser store must never prevent room creation or joining.
+    }
+  }
 }
 
 function syncRoomToApp(room: OnlineRoomView | null): void {
@@ -181,12 +218,16 @@ function installListeners(): void {
   if (listenersInstalled) return;
   listenersInstalled = true;
   const socket = getOnlineSocket();
+  socket.on('session:accepted', (session) => {
+    acceptSession({ ok: true, credentials: session.credentials, room: session.room });
+  });
   socket.on('room:snapshot', (room) => {
     const current = useOnlineStore.getState();
     useOnlineStore.setState({
       room,
       ...nextClockState(room, current),
       error: null,
+      commandPending: false,
       actionPending: false,
     });
     syncRoomToApp(room);
@@ -266,46 +307,62 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     return acceptSession(ack);
   },
   createRoom: async (displayName) => {
-    installListeners();
-    persistCredentials(null);
-    set({
-      credentials: null,
-      room: null,
-      clockOffsetMs: 0,
-      clockOffsetReady: false,
-      commandPending: true,
-      error: null,
-    });
-    if (!(await ensureConnected())) {
-      set({ commandPending: false });
+    try {
+      installListeners();
+      persistCredentials(null);
+      set({
+        credentials: null,
+        room: null,
+        clockOffsetMs: 0,
+        clockOffsetReady: false,
+        commandPending: true,
+        error: null,
+      });
+      if (!(await ensureConnected())) {
+        set({ commandPending: false });
+        return false;
+      }
+      return acceptSession(
+        await emitWithAck<SessionAck>((acknowledge) =>
+          getOnlineSocket().emit('room:create', { displayName }, acknowledge),
+        ),
+      );
+    } catch {
+      set({
+        commandPending: false,
+        error: connectionError('The room could not be created. Please try again.'),
+      });
       return false;
     }
-    return acceptSession(
-      await emitWithAck<SessionAck>((acknowledge) =>
-        getOnlineSocket().emit('room:create', { displayName }, acknowledge),
-      ),
-    );
   },
   joinRoom: async (roomCode, displayName) => {
-    installListeners();
-    persistCredentials(null);
-    set({
-      credentials: null,
-      room: null,
-      clockOffsetMs: 0,
-      clockOffsetReady: false,
-      commandPending: true,
-      error: null,
-    });
-    if (!(await ensureConnected())) {
-      set({ commandPending: false });
+    try {
+      installListeners();
+      persistCredentials(null);
+      set({
+        credentials: null,
+        room: null,
+        clockOffsetMs: 0,
+        clockOffsetReady: false,
+        commandPending: true,
+        error: null,
+      });
+      if (!(await ensureConnected())) {
+        set({ commandPending: false });
+        return false;
+      }
+      return acceptSession(
+        await emitWithAck<SessionAck>((acknowledge) =>
+          getOnlineSocket().emit('room:join', { roomCode, displayName }, acknowledge),
+        ),
+      );
+    } catch {
+      set({
+        commandPending: false,
+        error: connectionError('The room could not be joined. Check the code and try again.'),
+      });
       return false;
     }
-    return acceptSession(
-      await emitWithAck<SessionAck>((acknowledge) =>
-        getOnlineSocket().emit('room:join', { roomCode, displayName }, acknowledge),
-      ),
-    );
   },
   updateSettings: async (settings) => {
     const credentials = get().credentials;

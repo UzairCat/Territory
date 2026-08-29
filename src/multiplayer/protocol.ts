@@ -114,6 +114,7 @@ export interface ActionAck {
 }
 
 export interface ServerToClientEvents {
+  'session:accepted': (session: SessionAck) => void;
   'room:snapshot': (room: OnlineRoomView) => void;
   'room:error': (error: OnlineError) => void;
 }

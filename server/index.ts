@@ -174,6 +174,7 @@ io.on('connection', (socket) => {
       socket.data.roomCode = result.credentials.roomCode;
       socket.data.playerId = result.credentials.playerId;
       void socket.join(result.credentials.roomCode);
+      socket.emit('session:accepted', { credentials: result.credentials, room: result.room });
     }
     acknowledge(result);
   });
@@ -194,6 +195,7 @@ io.on('connection', (socket) => {
       socket.data.roomCode = result.credentials.roomCode;
       socket.data.playerId = result.credentials.playerId;
       void socket.join(result.credentials.roomCode);
+      socket.emit('session:accepted', { credentials: result.credentials, room: result.room });
     }
     acknowledge(result);
   });
@@ -209,6 +211,7 @@ io.on('connection', (socket) => {
       socket.data.roomCode = credentials.roomCode;
       socket.data.playerId = credentials.playerId;
       void socket.join(credentials.roomCode);
+      socket.emit('session:accepted', { credentials: result.credentials, room: result.room });
     }
     acknowledge(result);
   });
