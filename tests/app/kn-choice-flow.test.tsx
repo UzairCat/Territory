@@ -70,7 +70,11 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
           {resourceFlyovers.map((flyover) => `${flyover.source.kind}:${flyover.resourceId}|`)}
         </output>
         <output data-testid="resource-flyover-targets">
-          {resourceFlyovers.map((flyover) => `${flyover.targetPlayerId ?? 'visible'}|`)}
+          {resourceFlyovers.map((flyover) =>
+            flyover.target?.kind === 'PLAYER'
+              ? `${flyover.target.playerId}|`
+              : `${flyover.targetPlayerId ?? (flyover.target?.kind === 'BANK' ? 'BANK' : 'visible')}|`,
+          )}
         </output>
         <output data-testid="progress-card-flyovers">
           {progressCardFlyovers.map(
@@ -176,6 +180,10 @@ describe('K+N compact choice flows', () => {
     renderGame(state);
 
     const tray = screen.getByRole('dialog', { name: 'Choose an Aqueduct card' });
+    expect(screen.getByLabelText('Sam, player 2')).toHaveTextContent('Choosing an Aqueduct card');
+    expect(
+      screen.getByLabelText('Sam, player 2').querySelector('.game-player__busy-dots'),
+    ).not.toBeNull();
     const confirm = within(tray).getByRole('button', { name: 'Confirm' });
     expect(confirm).toBeDisabled();
     await user.click(within(tray).getByRole('button', { name: 'Choose Ore from the bank' }));
@@ -213,7 +221,7 @@ describe('K+N compact choice flows', () => {
 
     const tray = screen.getByRole('dialog', { name: 'Choose your defender reward' });
     expect(
-      screen.getByLabelText('Choose Defender Reward: 15 seconds remaining'),
+      screen.getByLabelText('Alex is choosing a defender reward: 15 seconds remaining'),
     ).toBeInTheDocument();
     const confirm = within(tray).getByRole('button', { name: 'Confirm' });
     expect(confirm).toBeDisabled();
@@ -311,6 +319,12 @@ describe('K+N compact choice flows', () => {
     expect(
       useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[0]]?.resources[RESOURCE_IDS.brick],
     ).toBe(2);
+    expect(screen.getByTestId('resource-flyovers')).toHaveTextContent(
+      `PLAYER:${RESOURCE_IDS.brick}|PLAYER:${RESOURCE_IDS.brick}|`,
+    );
+    expect(screen.getByTestId('resource-flyover-targets')).toHaveTextContent(
+      `${TEST_PLAYER_IDS[0]}|${TEST_PLAYER_IDS[0]}|`,
+    );
     expect(
       useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[1]]?.resources[RESOURCE_IDS.brick],
     ).toBe(1);
@@ -578,6 +592,12 @@ describe('K+N compact choice flows', () => {
     expect(
       useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[0]]?.resources[RESOURCE_IDS.brick],
     ).toBe(2);
+    expect(screen.getByTestId('resource-flyovers')).toHaveTextContent(
+      `PLAYER:${RESOURCE_IDS.brick}|PLAYER:${RESOURCE_IDS.brick}|`,
+    );
+    expect(screen.getByTestId('resource-flyover-targets')).toHaveTextContent(
+      `${TEST_PLAYER_IDS[0]}|${TEST_PLAYER_IDS[0]}|`,
+    );
   });
 
   it('shows Merchant Fleet as a resource-and-commodity choice shelf', async () => {
@@ -689,7 +709,7 @@ describe('K+N compact choice flows', () => {
     );
 
     expect(screen.getByText('00:55')).toBeInTheDocument();
-    expect(screen.getByText('Take Actions')).toBeInTheDocument();
+    expect(screen.getByText('Alex is placing the Merchant')).toBeInTheDocument();
     expect(screen.getByTestId('merchant-placement')).toHaveTextContent('active');
   });
 
@@ -906,6 +926,10 @@ describe('K+N compact choice flows', () => {
     expect(
       useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[1]]?.resources[RESOURCE_IDS.brick],
     ).toBe(1);
+    expect(screen.getByTestId('resource-flyovers')).toHaveTextContent(
+      `PLAYER:${RESOURCE_IDS.brick}|`,
+    );
+    expect(screen.getByTestId('resource-flyover-targets')).toHaveTextContent('BANK|');
   });
 
   it('confirms Alchemist activation before showing two rows of dice and rolling', async () => {
@@ -1609,7 +1633,9 @@ describe('K+N compact choice flows', () => {
       },
     ]);
 
-    expect(screen.getByLabelText('Take Actions: 20 seconds remaining')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Alex is taking actions: 20 seconds remaining'),
+    ).toBeInTheDocument();
   });
 
   it('plays urgent online timer beeps only for the player responsible for the timer', async () => {

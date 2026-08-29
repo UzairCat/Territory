@@ -21,6 +21,8 @@ interface OnlineStoreState {
   readonly connection: OnlineConnectionState;
   readonly credentials: OnlineSessionCredentials | null;
   readonly room: OnlineRoomView | null;
+  readonly clockOffsetMs: number;
+  readonly clockOffsetReady: boolean;
   readonly error: OnlineError | null;
   readonly commandPending: boolean;
   readonly actionPending: boolean;
@@ -81,6 +83,29 @@ function syncRoomToApp(room: OnlineRoomView | null): void {
     gamePaused: game.paused,
     adminMode: game.debugMode,
   });
+}
+
+function clockOffsetForRoom(room: OnlineRoomView | null): number | null {
+  const serverTimeMs = room?.game?.serverTimeMs;
+  return serverTimeMs === undefined || !Number.isFinite(serverTimeMs)
+    ? null
+    : serverTimeMs - Date.now();
+}
+
+function nextClockState(
+  room: OnlineRoomView | null,
+  current: Pick<OnlineStoreState, 'clockOffsetMs' | 'clockOffsetReady'>,
+): Pick<OnlineStoreState, 'clockOffsetMs' | 'clockOffsetReady'> {
+  const candidate = clockOffsetForRoom(room);
+  if (candidate === null) return current;
+  return {
+    // Snapshot transit time can only make this sample too low. Keeping the highest sample
+    // prevents a delayed packet from making the visible clock finish several seconds early.
+    clockOffsetMs: current.clockOffsetReady
+      ? Math.max(current.clockOffsetMs, candidate)
+      : candidate,
+    clockOffsetReady: true,
+  };
 }
 
 function connectionError(message: string): OnlineError {
@@ -157,7 +182,13 @@ function installListeners(): void {
   listenersInstalled = true;
   const socket = getOnlineSocket();
   socket.on('room:snapshot', (room) => {
-    useOnlineStore.setState({ room, error: null, actionPending: false });
+    const current = useOnlineStore.getState();
+    useOnlineStore.setState({
+      room,
+      ...nextClockState(room, current),
+      error: null,
+      actionPending: false,
+    });
     syncRoomToApp(room);
   });
   socket.on('room:error', (error) => useOnlineStore.setState({ error }));
@@ -166,6 +197,7 @@ function installListeners(): void {
     useOnlineStore.setState((state) => ({
       connection: state.credentials === null ? 'DISCONNECTED' : 'RECONNECTING',
       actionPending: false,
+      clockOffsetReady: false,
     })),
   );
   socket.io.on('reconnect', () => {
@@ -178,7 +210,12 @@ function installListeners(): void {
         useOnlineStore.setState({ error: ack.error, connection: 'DISCONNECTED' });
         return;
       }
-      useOnlineStore.setState({ room: ack.room, connection: 'CONNECTED', error: null });
+      useOnlineStore.setState({
+        room: ack.room,
+        ...nextClockState(ack.room, useOnlineStore.getState()),
+        connection: 'CONNECTED',
+        error: null,
+      });
       syncRoomToApp(ack.room);
     });
   });
@@ -193,6 +230,7 @@ function acceptSession(ack: OnlineAck<SessionAck>): boolean {
   useOnlineStore.setState({
     credentials: ack.credentials,
     room: ack.room,
+    ...nextClockState(ack.room, useOnlineStore.getState()),
     error: null,
     commandPending: false,
   });
@@ -204,6 +242,8 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
   connection: 'DISCONNECTED',
   credentials: storedCredentials(),
   room: null,
+  clockOffsetMs: 0,
+  clockOffsetReady: false,
   error: null,
   commandPending: false,
   actionPending: false,
@@ -228,7 +268,14 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
   createRoom: async (displayName) => {
     installListeners();
     persistCredentials(null);
-    set({ credentials: null, room: null, commandPending: true, error: null });
+    set({
+      credentials: null,
+      room: null,
+      clockOffsetMs: 0,
+      clockOffsetReady: false,
+      commandPending: true,
+      error: null,
+    });
     if (!(await ensureConnected())) {
       set({ commandPending: false });
       return false;
@@ -242,7 +289,14 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
   joinRoom: async (roomCode, displayName) => {
     installListeners();
     persistCredentials(null);
-    set({ credentials: null, room: null, commandPending: true, error: null });
+    set({
+      credentials: null,
+      room: null,
+      clockOffsetMs: 0,
+      clockOffsetReady: false,
+      commandPending: true,
+      error: null,
+    });
     if (!(await ensureConnected())) {
       set({ commandPending: false });
       return false;
@@ -347,6 +401,8 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     set({
       credentials: null,
       room: null,
+      clockOffsetMs: 0,
+      clockOffsetReady: false,
       error: null,
       commandPending: false,
       actionPending: false,
@@ -362,6 +418,8 @@ export function resetOnlineStoreForTests(): void {
     connection: 'DISCONNECTED',
     credentials: null,
     room: null,
+    clockOffsetMs: 0,
+    clockOffsetReady: false,
     error: null,
     commandPending: false,
     actionPending: false,

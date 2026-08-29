@@ -16,6 +16,7 @@ interface PlayerPanelProps {
   readonly holdsLongestRoad: boolean;
   readonly holdsLargestForce: boolean;
   readonly winner: boolean;
+  readonly activityLabel?: string | null;
   readonly kNMode?: boolean;
   readonly wallCount?: number;
   readonly cityCount?: number;
@@ -53,6 +54,7 @@ export function PlayerPanel({
   holdsLongestRoad,
   holdsLargestForce,
   winner,
+  activityLabel = null,
   kNMode = false,
   wallCount = 0,
   cityCount = 0,
@@ -107,16 +109,24 @@ export function PlayerPanel({
   if (kNMode) {
     return (
       <article
-        className={`game-player game-player--kn ${active ? 'game-player--active' : ''} ${winner ? 'game-player--winner' : ''}`}
+        className={`game-player game-player--kn ${active ? 'game-player--active' : ''} ${activityLabel === null ? '' : 'game-player--busy'} ${winner ? 'game-player--winner' : ''}`}
         data-player-panel={player.id}
         style={{ '--player-color': color?.hex ?? '#ffffff' } as CSSProperties}
         aria-label={`${player.name}, player ${position}`}
       >
         <header className="game-player-kn__heading">
           <strong>{player.name}</strong>
-          <small>
-            <span className="game-player__status-dot" aria-hidden="true" />
-            {active ? 'Taking their turn' : color?.displayName}
+          <small title={activityLabel ?? undefined}>
+            {activityLabel === null ? (
+              <span className="game-player__status-dot" aria-hidden="true" />
+            ) : (
+              <span className="game-player__busy-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
+            {activityLabel ?? (active ? 'Taking their turn' : color?.displayName)}
           </small>
         </header>
         <div className="game-player-kn__body">
@@ -241,7 +251,7 @@ export function PlayerPanel({
 
   return (
     <article
-      className={`game-player ${active ? 'game-player--active' : ''} ${winner ? 'game-player--winner' : ''}`}
+      className={`game-player ${active ? 'game-player--active' : ''} ${activityLabel === null ? '' : 'game-player--busy'} ${winner ? 'game-player--winner' : ''}`}
       data-player-panel={player.id}
       style={{ '--player-color': color?.hex ?? '#ffffff' } as CSSProperties}
       aria-label={`${player.name}, player ${position}`}
@@ -249,9 +259,17 @@ export function PlayerPanel({
       <header className="game-player__heading">
         <div className="game-player__identity">
           <strong>{player.name}</strong>
-          <small>
-            <span className="game-player__status-dot" aria-hidden="true" />
-            {active ? 'Taking their turn' : color?.displayName}
+          <small title={activityLabel ?? undefined}>
+            {activityLabel === null ? (
+              <span className="game-player__status-dot" aria-hidden="true" />
+            ) : (
+              <span className="game-player__busy-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
+            {activityLabel ?? (active ? 'Taking their turn' : color?.displayName)}
           </small>
         </div>
         {winner ? <span className="game-player__winner-label">Winner</span> : null}

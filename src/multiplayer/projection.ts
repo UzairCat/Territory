@@ -65,6 +65,7 @@ function visibleClassicCards(
 function visibleKNCards(
   state: GameState,
   viewerPlayerId: PlayerId,
+  recentEvents: readonly GameEvent[],
 ): Readonly<Record<string, KNProgressCardInstance>> {
   if (state.kn === null) return {};
   const privatelyRevealedIds = new Set(
@@ -74,6 +75,16 @@ function visibleKNCards(
       ? state.pendingInteraction.eligibleIds
       : [],
   );
+  for (const event of recentEvents) {
+    if (event.type !== 'KN_PROGRESS_CARD_RESOLVED' || event.targetIds?.[0] !== viewerPlayerId) {
+      continue;
+    }
+    const definition = getKNProgressCardDefinition(event.cardDefinitionId);
+    const transferredCardId = event.targetIds[1];
+    if (definition?.effect === 'SPY' && transferredCardId !== undefined) {
+      privatelyRevealedIds.add(transferredCardId);
+    }
+  }
   return Object.fromEntries(
     Object.values(state.kn.progressCards)
       .filter(
@@ -131,6 +142,21 @@ function projectEvents(
         cardInstanceId: cardInstanceId(`hidden-kn-discard-${event.playerId}-${event.family}`),
       };
     }
+    if (event.type === 'KN_PROGRESS_CARD_RESOLVED') {
+      const definition = getKNProgressCardDefinition(event.cardDefinitionId);
+      if (definition?.effect === 'MASTER_MERCHANT') {
+        const targetPlayerId = event.targetIds?.[0];
+        return event.playerId === viewerPlayerId || targetPlayerId === viewerPlayerId
+          ? event
+          : { ...event, resources: resourceBundle([]), targetIds: [] };
+      }
+      if (definition?.effect === 'SPY' && event.playerId !== viewerPlayerId) {
+        const targetPlayerId = event.targetIds?.[0];
+        return targetPlayerId === viewerPlayerId
+          ? event
+          : { ...event, targetIds: targetPlayerId === undefined ? [] : [targetPlayerId] };
+      }
+    }
     if (
       event.type === 'KN_PROGRESS_CARD_RESOLVED' &&
       event.playerId !== viewerPlayerId &&
@@ -146,30 +172,47 @@ function projectEvents(
  * Builds a structurally compatible client snapshot without shipping hidden deck order,
  * opponent hands, deterministic RNG state, or the seed that could recreate them.
  */
-export function projectGameState(state: GameState, viewerPlayerId: PlayerId): GameState {
+export function projectGameState(
+  state: GameState,
+  viewerPlayerId: PlayerId,
+  recentEvents: readonly GameEvent[] = [],
+): GameState {
+  const masterMerchantTargetId =
+    state.pendingInteraction?.type === 'KN_SELECTION' &&
+    state.pendingInteraction.playerId === viewerPlayerId &&
+    state.pendingInteraction.purpose === 'MASTER_MERCHANT_CARDS'
+      ? (state.pendingInteraction.context.targetPlayerId as PlayerId | undefined)
+      : undefined;
   const players = Object.fromEntries(
     Object.values(state.players).map((player) => [
       player.id,
       player.id === viewerPlayerId
         ? player
-        : {
-            ...player,
-            resources: resourceBundle([]),
-            commodities: resourceBundle([]),
-            progressCardIds: [],
-            knProgressCardIds: [],
-          },
+        : player.id === masterMerchantTargetId
+          ? {
+              ...player,
+              progressCardIds: [],
+              knProgressCardIds: [],
+            }
+          : {
+              ...player,
+              resources: resourceBundle([]),
+              commodities: resourceBundle([]),
+              progressCardIds: [],
+              knProgressCardIds: [],
+            },
     ]),
   );
-  const pendingInteraction =
-    state.pendingInteraction?.type === 'KN_SELECTION' &&
-    state.pendingInteraction.playerId !== viewerPlayerId
-      ? {
-          ...state.pendingInteraction,
-          eligibleIds: [],
-          context: {},
-        }
-      : state.pendingInteraction;
+  const pendingInteraction = (() => {
+    const interaction = state.pendingInteraction;
+    if (interaction?.type !== 'KN_SELECTION') return interaction;
+    if (interaction.simultaneous === true && interaction.queue.includes(viewerPlayerId)) {
+      return { ...interaction, playerId: viewerPlayerId, context: {} };
+    }
+    return interaction.playerId === viewerPlayerId
+      ? interaction
+      : { ...interaction, eligibleIds: [], context: {} };
+  })();
   const hideBank = state.config.hideBankCards === true;
 
   return {
@@ -221,7 +264,7 @@ export function projectGameState(state: GameState, viewerPlayerId: PlayerId): Ga
               TRADE: hiddenIds('hidden-trade-deck', state.kn.progressDecks.TRADE.length),
               POLITICS: hiddenIds('hidden-politics-deck', state.kn.progressDecks.POLITICS.length),
             },
-            progressCards: visibleKNCards(state, viewerPlayerId),
+            progressCards: visibleKNCards(state, viewerPlayerId, recentEvents),
           },
   };
 }
@@ -239,13 +282,14 @@ export function createOnlineGameView(
 ): OnlineGameView {
   return {
     revision,
-    state: projectGameState(state, viewerPlayerId),
+    state: projectGameState(state, viewerPlayerId, recentEvents),
     recentEvents: projectEvents(recentEvents, viewerPlayerId),
     eventHistory: projectEvents(eventHistory, viewerPlayerId),
     paused,
     debugMode,
     deadlineAt,
     tradeDeadlineAt,
+    serverTimeMs: Date.now(),
     playerCards: summarizePlayerCards(state),
   };
 }

@@ -569,35 +569,38 @@ describe('K+N Knights, improvements, and attacks', () => {
       playerId: firstPlayerId,
       purpose: 'DEFENDER_TIE_DECK',
       queue: [firstPlayerId, secondPlayerId],
+      simultaneous: true,
     });
     expect(rolled.state.players[firstPlayerId]?.defenderPoints).toBe(0);
     expect(rolled.state.players[secondPlayerId]?.defenderPoints).toBe(0);
 
-    const firstChoice = dispatch(rolled.state, {
-      id: actionId('tie-first-deck'),
-      type: 'RESOLVE_PROGRESS_SELECTION',
-      actorId: firstPlayerId,
-      selections: ['SCIENCE'],
-    });
-    expect(firstChoice.ok).toBe(true);
-    if (!firstChoice.ok) return;
-    expect(firstChoice.state.pendingInteraction).toMatchObject({
-      playerId: secondPlayerId,
-      purpose: 'DEFENDER_TIE_DECK',
-    });
-    const secondChoice = dispatch(firstChoice.state, {
-      id: actionId('tie-second-deck'),
+    const secondChoice = dispatch(rolled.state, {
+      id: actionId('tie-second-deck-first-response'),
       type: 'RESOLVE_PROGRESS_SELECTION',
       actorId: secondPlayerId,
       selections: ['TRADE'],
     });
     expect(secondChoice.ok).toBe(true);
     if (!secondChoice.ok) return;
+    expect(secondChoice.state.pendingInteraction).toMatchObject({
+      playerId: firstPlayerId,
+      purpose: 'DEFENDER_TIE_DECK',
+      queue: [firstPlayerId],
+      simultaneous: true,
+    });
+    const firstChoice = dispatch(secondChoice.state, {
+      id: actionId('tie-first-deck-second-response'),
+      type: 'RESOLVE_PROGRESS_SELECTION',
+      actorId: firstPlayerId,
+      selections: ['SCIENCE'],
+    });
+    expect(firstChoice.ok).toBe(true);
+    if (!firstChoice.ok) return;
     for (const playerId of [firstPlayerId, secondPlayerId]) {
-      const player = secondChoice.state.players[playerId]!;
+      const player = firstChoice.state.players[playerId]!;
       expect(player.knProgressCardIds.length + player.revealedKNProgressCardIds.length).toBe(1);
     }
-    expect(secondChoice.state.turn.phase).toBe('ACTION_PHASE');
+    expect(firstChoice.state.turn.phase).toBe('ACTION_PHASE');
   });
 
   it('protects a Metropolis while destroying a Wall on the vulnerable loser', () => {
@@ -823,15 +826,20 @@ describe('K+N Knights, improvements, and attacks', () => {
     expect(discarded.events.some((event) => event.type === 'RESOURCES_PRODUCED')).toBe(true);
   });
 
-  it('queues Aqueduct only after a player receives nothing from a non-seven roll', () => {
+  it('lets every eligible Aqueduct player choose concurrently after receiving nothing', () => {
     let state = createKNState();
     const playerId = TEST_PLAYER_IDS[0];
+    const otherPlayerId = TEST_PLAYER_IDS[1];
     state = {
       ...state,
       players: {
         ...state.players,
         [playerId]: {
           ...state.players[playerId]!,
+          cityImprovements: { SCIENCE: 3, TRADE: 0, POLITICS: 0 },
+        },
+        [otherPlayerId]: {
+          ...state.players[otherPlayerId]!,
           cityImprovements: { SCIENCE: 3, TRADE: 0, POLITICS: 0 },
         },
       },
@@ -860,17 +868,33 @@ describe('K+N Knights, improvements, and attacks', () => {
     expect(resolved.state.pendingInteraction).toMatchObject({
       playerId,
       purpose: 'AQUEDUCT_RESOURCE',
+      queue: [playerId, otherPlayerId],
+      simultaneous: true,
     });
-    const chosen = dispatch(resolved.state, {
-      id: actionId('aqueduct-wood'),
+    const otherChosen = dispatch(resolved.state, {
+      id: actionId('aqueduct-other-ore-first'),
+      type: 'RESOLVE_PROGRESS_SELECTION',
+      actorId: otherPlayerId,
+      selections: [RESOURCE_IDS.ore],
+    });
+    expect(otherChosen.ok).toBe(true);
+    if (!otherChosen.ok) return;
+    expect(otherChosen.state.pendingInteraction).toMatchObject({
+      playerId,
+      queue: [playerId],
+      simultaneous: true,
+    });
+    const activeChosen = dispatch(otherChosen.state, {
+      id: actionId('aqueduct-active-wood-second'),
       type: 'RESOLVE_PROGRESS_SELECTION',
       actorId: playerId,
       selections: [RESOURCE_IDS.wood],
     });
-    expect(chosen.ok).toBe(true);
-    if (!chosen.ok) return;
-    expect(chosen.state.players[playerId]?.resources[RESOURCE_IDS.wood]).toBe(1);
-    expect(chosen.state.turn.phase).toBe('ACTION_PHASE');
+    expect(activeChosen.ok).toBe(true);
+    if (!activeChosen.ok) return;
+    expect(activeChosen.state.players[playerId]?.resources[RESOURCE_IDS.wood]).toBe(1);
+    expect(activeChosen.state.players[otherPlayerId]?.resources[RESOURCE_IDS.ore]).toBe(1);
+    expect(activeChosen.state.turn.phase).toBe('ACTION_PHASE');
   });
 
   it('transfers a level-five Metropolis from the level-four controller', () => {

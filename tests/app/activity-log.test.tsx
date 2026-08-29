@@ -269,4 +269,38 @@ describe('game activity log', () => {
     expect(screen.queryByText('Alex played Reclamation.')).not.toBeInTheDocument();
     expect(screen.queryByText('Alex resolved Reclamation.')).not.toBeInTheDocument();
   });
+
+  it('announces Spy only after the target is chosen and names that player', () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const definition = KN_PROGRESS_CARDS.find((card) => card.effect === 'SPY');
+    if (definition === undefined) throw new Error('Spy definition is missing.');
+    const spyCardId = cardInstanceId('activity-spy');
+
+    render(
+      <ActivityLog
+        state={state}
+        events={[
+          {
+            type: 'KN_PROGRESS_CARD_PLAYED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: spyCardId,
+            cardDefinitionId: definition.id,
+          },
+          {
+            type: 'KN_PROGRESS_CARD_RESOLVED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: spyCardId,
+            cardDefinitionId: definition.id,
+            targetIds: [TEST_PLAYER_IDS[1], cardInstanceId('stolen-progress-card')],
+          },
+        ]}
+      />,
+    );
+
+    const finalEntry = screen.getByText('Alex played Spy on Sam.').closest('li');
+    expect(finalEntry).toBeInTheDocument();
+    expect(finalEntry?.querySelector('.activity-kn-progress--politics')).toBeInTheDocument();
+    expect(screen.queryByText('Alex played Spy.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alex resolved Spy.')).not.toBeInTheDocument();
+  });
 });

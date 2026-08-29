@@ -748,7 +748,13 @@ describe('application flow', () => {
         },
       }),
     );
-    expect(screen.getByText('Place Metropolis').closest('.turn-timer-wrap')).toBeInTheDocument();
+    expect(
+      screen
+        .getByText(
+          `${initial.players[activePlayerId]?.name ?? 'A player'} is choosing a Metropolis City`,
+        )
+        .closest('.turn-timer-wrap'),
+    ).toBeInTheDocument();
 
     act(() =>
       useAppStore.setState({

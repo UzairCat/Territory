@@ -1536,7 +1536,11 @@ export function resolveKNProgressCardSelection(
     const transferred = transferBundle(state, targetId, activePlayerId, bundle);
     if (transferred === null)
       return rejectAction(state, 'INVALID_TARGET', 'Those cards are no longer available.');
-    nextState = transferred;
+    const finished = finishCard(transferred, activePlayerId, cardInstanceId, {
+      resources: bundle,
+      targetIds: [targetId],
+    });
+    return { ok: true, state: finished.state, events: [...events, ...finished.events] };
   } else if (interaction.purpose === 'DESERTER_PLAYER') {
     const targetId = selected as PlayerId;
     const target = state.players[targetId];

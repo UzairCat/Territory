@@ -93,11 +93,15 @@ describe('robber application flow', () => {
     const originalRobberHexId = state.board.robberHexId;
     renderGame(state);
 
-    expect(screen.getByLabelText('Roll Dice: 10 seconds remaining')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Alex is rolling the dice: 10 seconds remaining'),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Roll dice' }));
     expect(screen.getByText('Discard resources')).toBeInTheDocument();
-    expect(screen.getByLabelText('Discard Cards: 30 seconds remaining')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Sam is discarding cards: 30 seconds remaining'),
+    ).toBeInTheDocument();
     const discardDialog = screen.getByRole('dialog', { name: 'Discard Cards (0/4)' });
     expect(
       screen.getByRole('region', { name: 'Sam resource hand for discarding' }),
@@ -124,7 +128,9 @@ describe('robber application flow', () => {
     await user.click(confirm);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Move Robber: 20 seconds remaining')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Alex is moving the robber: 20 seconds remaining'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Territory board' })).toHaveAttribute(
       'data-keyboard-target-controls',
       'false',
@@ -182,7 +188,9 @@ describe('robber application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Roll dice' }));
 
     expect(screen.queryByRole('dialog', { name: /discard resources/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Move Robber: 20 seconds remaining')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Alex is moving the robber: 20 seconds remaining'),
+    ).not.toBeInTheDocument();
     const adminState = useAppStore.getState().gameState;
     expect(adminState?.turn.phase).toBe('ACTION_PHASE');
     expect(adminState?.pendingInteraction).toBeNull();

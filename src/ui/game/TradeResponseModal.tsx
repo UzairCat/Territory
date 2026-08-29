@@ -25,6 +25,7 @@ interface TradeResponsePanelProps {
   readonly includeCommodities?: boolean;
   readonly viewerPlayerId?: PlayerId | null;
   readonly deadlineAt?: number | null;
+  readonly clockOffsetMs?: number;
   readonly serverAuthoritative?: boolean;
 }
 
@@ -53,8 +54,10 @@ function BundleCards({
   );
 }
 
-function remainingForDeadline(deadlineAt: number | null): number {
-  return deadlineAt === null ? 15 : Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1_000));
+function remainingForDeadline(deadlineAt: number | null, clockOffsetMs: number): number {
+  return deadlineAt === null
+    ? 15
+    : Math.max(0, Math.ceil((deadlineAt - (Date.now() + clockOffsetMs)) / 1_000));
 }
 
 export function TradeResponsePanel({
@@ -72,21 +75,29 @@ export function TradeResponsePanel({
   includeCommodities = false,
   viewerPlayerId = null,
   deadlineAt = null,
+  clockOffsetMs = 0,
   serverAuthoritative = false,
 }: TradeResponsePanelProps) {
   const goods = includeCommodities ? HAND_GOODS : RESOURCES;
-  const [remainingSeconds, setRemainingSeconds] = useState(() => remainingForDeadline(deadlineAt));
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    remainingForDeadline(deadlineAt, clockOffsetMs),
+  );
   const expiredRef = useRef(false);
 
   useEffect(() => {
     if (paused || remainingSeconds === 0) return undefined;
-    const timer = globalThis.setInterval(() => {
-      setRemainingSeconds((current) =>
-        deadlineAt === null ? Math.max(0, current - 1) : remainingForDeadline(deadlineAt),
-      );
-    }, 1_000);
+    const timer = globalThis.setInterval(
+      () => {
+        setRemainingSeconds((current) =>
+          deadlineAt === null
+            ? Math.max(0, current - 1)
+            : remainingForDeadline(deadlineAt, clockOffsetMs),
+        );
+      },
+      deadlineAt === null ? 1_000 : 250,
+    );
     return () => globalThis.clearInterval(timer);
-  }, [deadlineAt, paused, remainingSeconds]);
+  }, [clockOffsetMs, deadlineAt, paused, remainingSeconds]);
 
   useEffect(() => {
     if (serverAuthoritative || remainingSeconds !== 0 || expiredRef.current) return;

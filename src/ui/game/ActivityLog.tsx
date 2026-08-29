@@ -519,7 +519,12 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
       ];
     case 'KN_PROGRESS_CARD_PLAYED': {
       const definition = getKNProgressCardDefinition(event.cardDefinitionId);
-      if (definition?.effect === 'WAR_DRUMS' || definition?.effect === 'RECLAMATION') return [];
+      if (
+        definition?.effect === 'WAR_DRUMS' ||
+        definition?.effect === 'RECLAMATION' ||
+        definition?.effect === 'SPY'
+      )
+        return [];
       return [
         {
           icon: '✦',
@@ -534,6 +539,17 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
     case 'KN_PROGRESS_CARD_RESOLVED': {
       const definition = getKNProgressCardDefinition(event.cardDefinitionId);
       if (definition?.effect === 'WAR_DRUMS' || definition?.effect === 'RECLAMATION') return [];
+      if (definition?.effect === 'SPY') {
+        const targetPlayerId = event.targetIds?.[0] as PlayerState['id'] | undefined;
+        return [
+          {
+            icon: '⌕',
+            message: `${playerName(event.playerId)} played Spy${targetPlayerId === undefined ? '' : ` on ${playerName(targetPlayerId)}`}.`,
+            tone: 'accent',
+            progressFamily: definition.family,
+          },
+        ];
+      }
       const transferTotal = Object.values(event.transfers ?? {}).reduce(
         (total, amount) => total + amount,
         0,

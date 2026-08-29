@@ -7,10 +7,11 @@ import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
 import { getLegalSetupHouseVertexIds } from '../../src/engine/rules/setup-rules';
 import { actionId, tradeId } from '../../src/engine/core/ids';
+import { KN_MODE } from '../../src/engine/modes/kn';
 
 const managers: RoomManager[] = [];
 
-function createStartedRoom() {
+function createStartedRoom(kNMode = false) {
   const manager = new RoomManager({ onRoomChanged: () => undefined });
   managers.push(manager);
   const host = manager.create('Host', 'host-socket');
@@ -19,6 +20,15 @@ function createStartedRoom() {
   const guest = manager.join(host.credentials.roomCode, 'Guest', 'guest-socket');
   expect(guest.ok).toBe(true);
   if (!guest.ok) throw new Error(guest.error.message);
+  if (kNMode) {
+    expect(
+      manager.updateSettings(host.credentials, {
+        ...host.room.settings,
+        modeId: KN_MODE.id,
+        victoryTarget: KN_MODE.rules.victoryTarget,
+      }),
+    ).toEqual({ ok: true });
+  }
   const started = manager.start(host.credentials);
   expect(started).toEqual({ ok: true });
   const room = manager.rooms.get(host.credentials.roomCode);
@@ -198,6 +208,66 @@ describe('authoritative online rooms', () => {
     const remaining = (room.deadlineAt ?? 0) - Date.now();
     expect(remaining).toBeGreaterThan(19_000);
     expect(remaining).toBeLessThanOrEqual(20_000);
+  });
+
+  it('accepts concurrent reward choices from one shared revision and deadline', () => {
+    const { manager, room, host, guest } = createStartedRoom(true);
+    if (room.state?.kn === null || room.state === null) {
+      throw new Error('Concurrent reward room did not start in K+N mode.');
+    }
+    room.state = {
+      ...room.state,
+      turn: {
+        ...room.state.turn,
+        activePlayerId: host.playerId,
+        phase: 'CARD_RESOLUTION',
+        setupPlacementIndex: null,
+        setupPlacementVertexId: null,
+      },
+      pendingInteraction: {
+        type: 'KN_SELECTION',
+        playerId: host.playerId,
+        purpose: 'AQUEDUCT_RESOURCE',
+        eligibleIds: [RESOURCE_IDS.wood, RESOURCE_IDS.ore],
+        minimumSelections: 1,
+        maximumSelections: 1,
+        queue: [host.playerId, guest.playerId],
+        simultaneous: true,
+        canCancel: false,
+        context: {},
+      },
+    };
+    const sharedRevision = room.revision;
+    const sharedDeadline = Date.now() + 12_000;
+    room.timerKey = `choice-${room.state.turn.turnNumber}-AQUEDUCT_RESOURCE-simultaneous`;
+    room.deadlineAt = sharedDeadline;
+
+    expect(
+      manager.submit(host, sharedRevision, {
+        id: actionId('concurrent-aqueduct-host'),
+        type: 'RESOLVE_PROGRESS_SELECTION',
+        actorId: host.playerId,
+        selections: [RESOURCE_IDS.wood],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(room.deadlineAt).toBe(sharedDeadline);
+    expect(room.state.pendingInteraction).toMatchObject({
+      playerId: guest.playerId,
+      queue: [guest.playerId],
+      simultaneous: true,
+    });
+
+    expect(
+      manager.submit(guest, sharedRevision, {
+        id: actionId('concurrent-aqueduct-guest-stale-revision'),
+        type: 'RESOLVE_PROGRESS_SELECTION',
+        actorId: guest.playerId,
+        selections: [RESOURCE_IDS.ore],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(room.state.players[host.playerId]?.resources[RESOURCE_IDS.wood]).toBe(1);
+    expect(room.state.players[guest.playerId]?.resources[RESOURCE_IDS.ore]).toBe(1);
+    expect(room.state.pendingInteraction).toBeNull();
   });
 
   it('gives each online developer their own authoritative test loadout', () => {

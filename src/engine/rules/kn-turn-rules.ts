@@ -207,6 +207,7 @@ export function resolveBarbarianAttack(state: GameState): KNResolution {
           minimumSelections: 1,
           maximumSelections: 1,
           queue,
+          simultaneous: true,
           canCancel: false,
           context: {},
         };
@@ -462,6 +463,7 @@ export function resolveKNNumber(state: GameState): KNResolution {
         minimumSelections: 1,
         maximumSelections: 1,
         queue: aqueductQueue,
+        simultaneous: true,
         canCancel: false,
         context: {},
       },

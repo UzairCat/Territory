@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
+import { COMMODITY_IDS } from '../../src/engine/content/commodities';
+import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
+import { createGame } from '../../src/engine/core/create-game';
 import type { GameEvent } from '../../src/engine/core/events';
+import type { GameState } from '../../src/engine/core/game-state';
 import { cardDefinitionId, cardInstanceId } from '../../src/engine/core/ids';
 import { createOnlineGameView, projectGameState } from '../../src/multiplayer/projection';
-import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
+import { createTestGameState, createTestKNConfig, TEST_PLAYER_IDS } from '../helpers/game-state';
+
+function createKNState(playerCount: 2 | 3 = 2): GameState {
+  const created = createGame(createTestKNConfig(playerCount));
+  if (!created.ok) throw new Error('K+N projection fixture did not initialize.');
+  return created.state;
+}
 
 describe('online player projection', () => {
   it('keeps the viewer hand while removing opponent hands, deck order, RNG, and seed', () => {
@@ -104,5 +114,196 @@ describe('online player projection', () => {
     expect(bought).toMatchObject({ cardDefinitionId: 'hidden-progress-card' });
     const stolen = view.recentEvents.find((event) => event.type === 'RESOURCE_STOLEN');
     expect(stolen).toMatchObject({ resourceId: RESOURCE_IDS.ore });
+    expect(view.serverTimeMs).toEqual(expect.any(Number));
+  });
+
+  it('reveals a Master Merchant target hand only to the player making the selection', () => {
+    const original = createKNState(3);
+    const actorId = TEST_PLAYER_IDS[0];
+    const targetId = TEST_PLAYER_IDS[1];
+    const observerId = TEST_PLAYER_IDS[2];
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [targetId]: {
+          ...original.players[targetId]!,
+          resources: resourceBundle([[RESOURCE_IDS.brick, 2]]),
+          commodities: resourceBundle([[COMMODITY_IDS.paper, 1]]),
+        },
+      },
+      turn: { ...original.turn, phase: 'CARD_RESOLUTION', activePlayerId: actorId },
+      pendingInteraction: {
+        type: 'KN_SELECTION',
+        playerId: actorId,
+        purpose: 'MASTER_MERCHANT_CARDS',
+        eligibleIds: [RESOURCE_IDS.brick, COMMODITY_IDS.paper],
+        minimumSelections: 2,
+        maximumSelections: 2,
+        queue: [actorId],
+        canCancel: false,
+        context: { targetPlayerId: targetId, activePlayerId: actorId },
+      },
+    };
+
+    const actorView = projectGameState(state, actorId);
+    expect(actorView.players[targetId]).toMatchObject({
+      resources: { [RESOURCE_IDS.brick]: 2 },
+      commodities: { [COMMODITY_IDS.paper]: 1 },
+      progressCardIds: [],
+      knProgressCardIds: [],
+    });
+    const observerView = projectGameState(state, observerId);
+    expect(observerView.players[targetId]?.resources).toEqual({});
+    expect(observerView.players[targetId]?.commodities).toEqual({});
+    expect(observerView.pendingInteraction).toMatchObject({ eligibleIds: [], context: {} });
+
+    const definition = KN_PROGRESS_CARDS.find((card) => card.effect === 'MASTER_MERCHANT');
+    if (definition === undefined) throw new Error('Master Merchant definition is missing.');
+    const resolvedEvent: GameEvent = {
+      type: 'KN_PROGRESS_CARD_RESOLVED',
+      playerId: actorId,
+      cardInstanceId: cardInstanceId('resolved-master-merchant'),
+      cardDefinitionId: definition.id,
+      resources: resourceBundle([[RESOURCE_IDS.brick, 2]]),
+      targetIds: [targetId],
+    };
+    const targetView = createOnlineGameView(
+      state,
+      targetId,
+      3,
+      [resolvedEvent],
+      [resolvedEvent],
+      false,
+      false,
+      null,
+      null,
+    );
+    expect(targetView.recentEvents[0]).toMatchObject({
+      resources: { [RESOURCE_IDS.brick]: 2 },
+      targetIds: [targetId],
+    });
+    const hiddenObserverView = createOnlineGameView(
+      state,
+      observerId,
+      3,
+      [resolvedEvent],
+      [resolvedEvent],
+      false,
+      false,
+      null,
+      null,
+    );
+    expect(hiddenObserverView.recentEvents[0]).toMatchObject({ resources: {}, targetIds: [] });
+  });
+
+  it('projects a simultaneous reward as each queued viewer’s own private choice', () => {
+    const original = createKNState(3);
+    const firstId = TEST_PLAYER_IDS[0];
+    const secondId = TEST_PLAYER_IDS[1];
+    const observerId = TEST_PLAYER_IDS[2];
+    const state: GameState = {
+      ...original,
+      turn: { ...original.turn, phase: 'CARD_RESOLUTION', activePlayerId: firstId },
+      pendingInteraction: {
+        type: 'KN_SELECTION',
+        playerId: firstId,
+        purpose: 'AQUEDUCT_RESOURCE',
+        eligibleIds: [RESOURCE_IDS.wood, RESOURCE_IDS.ore],
+        minimumSelections: 1,
+        maximumSelections: 1,
+        queue: [firstId, secondId],
+        simultaneous: true,
+        canCancel: false,
+        context: { pendingProgressDiscardIds: [firstId] },
+      },
+    };
+
+    expect(projectGameState(state, firstId).pendingInteraction).toMatchObject({
+      playerId: firstId,
+      eligibleIds: [RESOURCE_IDS.wood, RESOURCE_IDS.ore],
+      context: {},
+    });
+    expect(projectGameState(state, secondId).pendingInteraction).toMatchObject({
+      playerId: secondId,
+      eligibleIds: [RESOURCE_IDS.wood, RESOURCE_IDS.ore],
+      context: {},
+    });
+    expect(projectGameState(state, observerId).pendingInteraction).toMatchObject({
+      playerId: firstId,
+      eligibleIds: [],
+      context: {},
+    });
+  });
+
+  it('lets a Spy victim see the stolen card movement without revealing it to observers', () => {
+    const original = createKNState(3);
+    if (original.kn === null) throw new Error('Spy projection fixture has no K+N state.');
+    const actorId = TEST_PLAYER_IDS[0];
+    const victimId = TEST_PLAYER_IDS[1];
+    const observerId = TEST_PLAYER_IDS[2];
+    const spyDefinition = KN_PROGRESS_CARDS.find((card) => card.effect === 'SPY');
+    const stolenCard = Object.values(original.kn.progressCards).find(
+      (card) => card.definitionId !== spyDefinition?.id,
+    );
+    if (spyDefinition === undefined || stolenCard === undefined) {
+      throw new Error('Spy projection cards are missing.');
+    }
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [actorId]: {
+          ...original.players[actorId]!,
+          knProgressCardIds: [stolenCard.instanceId],
+        },
+      },
+      kn: {
+        ...original.kn,
+        progressCards: {
+          ...original.kn.progressCards,
+          [stolenCard.instanceId]: { ...stolenCard, ownerId: actorId },
+        },
+      },
+    };
+    const event: GameEvent = {
+      type: 'KN_PROGRESS_CARD_RESOLVED',
+      playerId: actorId,
+      cardInstanceId: cardInstanceId('resolved-spy'),
+      cardDefinitionId: spyDefinition.id,
+      targetIds: [victimId, stolenCard.instanceId],
+    };
+
+    const victimView = createOnlineGameView(
+      state,
+      victimId,
+      2,
+      [event],
+      [event],
+      false,
+      false,
+      null,
+      null,
+    );
+    expect(victimView.recentEvents[0]).toMatchObject({
+      targetIds: [victimId, stolenCard.instanceId],
+    });
+    expect(victimView.state.kn?.progressCards[stolenCard.instanceId]?.definitionId).toBe(
+      stolenCard.definitionId,
+    );
+
+    const observerView = createOnlineGameView(
+      state,
+      observerId,
+      2,
+      [event],
+      [event],
+      false,
+      false,
+      null,
+      null,
+    );
+    expect(observerView.recentEvents[0]).toMatchObject({ targetIds: [victimId] });
+    expect(observerView.state.kn?.progressCards[stolenCard.instanceId]).toBeUndefined();
   });
 });

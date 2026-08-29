@@ -99,4 +99,31 @@ describe('turn timer', () => {
     void act(() => vi.advanceTimersByTime(1_000));
     expect(screen.getByText('00:09')).toBeInTheDocument();
   });
+
+  it('uses the server clock sample so a skewed browser reaches zero with the server', () => {
+    vi.setSystemTime(new Date('2026-08-29T12:00:00.000Z'));
+    const browserNow = Date.now();
+    const serverClockOffsetMs = 5_000;
+    const onExpire = vi.fn();
+
+    render(
+      <TurnTimer
+        durationSeconds={60}
+        prompt="Server Turn"
+        boostSignal="none"
+        deadlineAt={browserNow + serverClockOffsetMs + 10_000}
+        clockOffsetMs={serverClockOffsetMs}
+        onExpire={onExpire}
+        onUrgentTick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('00:10')).toBeInTheDocument();
+    void act(() => vi.advanceTimersByTime(5_000));
+    expect(screen.getByText('00:05')).toBeInTheDocument();
+    expect(onExpire).not.toHaveBeenCalled();
+    void act(() => vi.advanceTimersByTime(5_000));
+    expect(screen.getByText('00:00')).toBeInTheDocument();
+    expect(onExpire).toHaveBeenCalledTimes(1);
+  });
 });

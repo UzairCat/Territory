@@ -137,7 +137,10 @@ export function resolveKNSelection(
       'No K+N selection is currently pending.',
     );
   }
-  if (interaction.playerId !== action.actorId) {
+  const actorCanResolve =
+    interaction.playerId === action.actorId ||
+    (interaction.simultaneous === true && interaction.queue.includes(action.actorId));
+  if (!actorCanResolve) {
     return rejectAction(
       state,
       'NOT_YOUR_TURN',
@@ -196,13 +199,25 @@ export function resolveKNSelection(
       ),
     };
     events.push({ type: 'AQUEDUCT_RESOURCE_CHOSEN', playerId: action.actorId, resourceId });
-    const queued = nextQueueInteraction(nextState, interaction.queue, interaction.purpose, () =>
-      RESOURCES.filter((resource) => (nextState.bank[resource.id] ?? 0) > 0).map(
-        (resource) => resource.id,
-      ),
-    );
-    if (queued !== null) nextState = queued;
-    else {
+    const remainingQueue = interaction.simultaneous
+      ? interaction.queue.filter((playerId) => playerId !== action.actorId)
+      : interaction.queue.slice(1);
+    const availableResourceIds = RESOURCES.filter(
+      (resource) => (nextState.bank[resource.id] ?? 0) > 0,
+    ).map((resource) => resource.id);
+    const nextPlayerId = remainingQueue[0];
+    if (nextPlayerId !== undefined && availableResourceIds.length > 0) {
+      nextState = {
+        ...nextState,
+        turn: { ...nextState.turn, phase: 'CARD_RESOLUTION' },
+        pendingInteraction: {
+          ...interaction,
+          playerId: nextPlayerId,
+          eligibleIds: availableResourceIds,
+          queue: remainingQueue,
+        },
+      };
+    } else {
       nextState = {
         ...nextState,
         pendingInteraction: null,
@@ -242,24 +257,45 @@ export function resolveKNSelection(
     const drawn = drawKNProgressCard(state, action.actorId, family);
     nextState = drawn.state;
     events.push(...drawn.events);
-    const remainingDefenderQueue = interaction.queue.slice(1);
-    if (
-      action.actorId !== state.turn.activePlayerId &&
+    const remainingDefenderQueue = interaction.simultaneous
+      ? interaction.queue.filter((playerId) => playerId !== action.actorId)
+      : interaction.queue.slice(1);
+    const pendingDiscardIds = [
+      ...((interaction.context.pendingProgressDiscardIds as readonly PlayerId[] | undefined) ?? []),
+      ...(action.actorId !== state.turn.activePlayerId &&
       (nextState.players[action.actorId]?.knProgressCardIds.length ?? 0) > 4
-    ) {
+        ? [action.actorId]
+        : []),
+    ];
+    if (interaction.simultaneous === true && remainingDefenderQueue[0] !== undefined) {
+      nextState = {
+        ...nextState,
+        turn: { ...nextState.turn, phase: 'CARD_RESOLUTION' },
+        pendingInteraction: {
+          ...interaction,
+          playerId: remainingDefenderQueue[0],
+          queue: remainingDefenderQueue,
+          context: { ...interaction.context, pendingProgressDiscardIds: pendingDiscardIds },
+        },
+      };
+    } else if (pendingDiscardIds[0] !== undefined) {
+      const firstDiscardPlayerId = pendingDiscardIds[0];
       nextState = {
         ...nextState,
         turn: { ...nextState.turn, phase: 'CARD_RESOLUTION' },
         pendingInteraction: {
           type: 'KN_SELECTION',
-          playerId: action.actorId,
+          playerId: firstDiscardPlayerId,
           purpose: 'PROGRESS_DISCARD',
-          eligibleIds: nextState.players[action.actorId]?.knProgressCardIds ?? [],
+          eligibleIds: nextState.players[firstDiscardPlayerId]?.knProgressCardIds ?? [],
           minimumSelections: 1,
           maximumSelections: 1,
-          queue: [action.actorId],
+          queue: pendingDiscardIds,
           canCancel: false,
-          context: { resumeDefenderTieQueue: remainingDefenderQueue },
+          context:
+            interaction.simultaneous === true
+              ? {}
+              : { resumeDefenderTieQueue: remainingDefenderQueue },
         },
       };
     } else if (remainingDefenderQueue[0] !== undefined) {

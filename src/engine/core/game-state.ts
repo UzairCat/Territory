@@ -265,6 +265,8 @@ export type PendingInteraction =
       readonly minimumSelections: number;
       readonly maximumSelections: number;
       readonly queue: readonly PlayerId[];
+      /** Online viewers in this queue may resolve their own independent choice in parallel. */
+      readonly simultaneous?: boolean;
       readonly canCancel: boolean;
       readonly context: Readonly<Record<string, KNSelectionContextValue>>;
     }

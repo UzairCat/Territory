@@ -44,6 +44,8 @@ export interface OnlineGameView {
   readonly debugMode: boolean;
   readonly deadlineAt: number | null;
   readonly tradeDeadlineAt: number | null;
+  /** Server wall-clock sample used to render authoritative deadlines without client clock skew. */
+  readonly serverTimeMs?: number;
   readonly playerCards: Readonly<Record<string, PublicPlayerCardInfo>>;
 }
 

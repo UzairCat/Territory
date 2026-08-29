@@ -163,17 +163,21 @@ function playProgressCardFlyover(
   flyover: ProgressCardFlyover,
   activeElements: Set<HTMLElement>,
 ): void {
+  const visibleHand = document.querySelector<HTMLElement>('.hand-tray');
   const source =
     flyover.source.kind === 'PLAYER'
-      ? document.querySelector<HTMLElement>(`[data-player-panel="${flyover.source.playerId}"]`)
+      ? visibleHand?.dataset.handPlayer === flyover.source.playerId
+        ? (visibleHand.querySelector<HTMLElement>('.progress-tray__cards') ?? visibleHand)
+        : document.querySelector<HTMLElement>(`[data-player-panel="${flyover.source.playerId}"]`)
       : (document.querySelector<HTMLElement>(
           flyover.source.family === undefined
             ? '[data-progress-deck="BASE"]'
             : `[data-progress-deck="${flyover.source.family}"]`,
         ) ?? document.querySelector<HTMLElement>('.bank-panel'));
-  const visibleHand = document.querySelector<HTMLElement>('.hand-tray');
-  if (visibleHand?.dataset.handPlayer !== flyover.targetPlayerId) return;
-  const target = visibleHand.querySelector<HTMLElement>('.progress-tray__cards');
+  const target =
+    visibleHand?.dataset.handPlayer === flyover.targetPlayerId
+      ? visibleHand.querySelector<HTMLElement>('.progress-tray__cards')
+      : document.querySelector<HTMLElement>(`[data-player-panel="${flyover.targetPlayerId}"]`);
   const knDefinition = getKNProgressCardDefinition(flyover.cardDefinitionId);
   const baseDefinition = PROGRESS_CARDS.find(
     (definition) => definition.id === flyover.cardDefinitionId,

@@ -158,6 +158,130 @@ function accessiblePhaseLabel(phase: GameState['turn']['phase']): string {
   return labels[phase];
 }
 
+type KNSelectionInteraction = Extract<
+  NonNullable<GameState['pendingInteraction']>,
+  { readonly type: 'KN_SELECTION' }
+>;
+
+function knSelectionActivityLabel(purpose: KNSelectionInteraction['purpose']): string {
+  switch (purpose) {
+    case 'AQUEDUCT_RESOURCE':
+      return 'Choosing an Aqueduct card';
+    case 'DEFENDER_TIE_DECK':
+      return 'Choosing a defender reward';
+    case 'BARBARIAN_CITY_LOSS':
+      return 'Choosing a City to lose';
+    case 'PROGRESS_DISCARD':
+      return 'Returning a Progress Card';
+    case 'RELOCATE_DISPLACED_KNIGHT':
+      return 'Moving a displaced Knight';
+    case 'SMITH_KNIGHT':
+      return 'Upgrading a Knight';
+    case 'DESERTER_KNIGHT':
+      return 'Choosing a Knight for Deserter';
+    case 'DESERTER_PLACE_KNIGHT':
+      return 'Placing a Knight';
+    case 'SABOTEUR_DISCARD':
+      return 'Discarding cards for Saboteur';
+    case 'WEDDING_CARDS':
+      return 'Choosing cards for Wedding';
+    case 'SPY_PLAYER':
+      return 'Choosing a player for Spy';
+    case 'SPY_CARD':
+      return 'Choosing a Progress Card for Spy';
+    case 'MASTER_MERCHANT_PLAYER':
+    case 'MASTER_MERCHANT_CARDS':
+      return 'Resolving Master Merchant';
+    case 'MERCHANT_HEX':
+      return 'Placing the Merchant';
+    case 'BISHOP_HEX':
+      return 'Moving the robber with Bishop';
+    case 'INVENTOR_FIRST_TOKEN':
+    case 'INVENTOR_SECOND_TOKEN':
+      return 'Choosing number tokens for Inventor';
+    case 'RECLAMATION_HEX':
+    case 'RECLAMATION_RESOURCE':
+      return 'Choosing a tile for Reclamation';
+    case 'COMMERCIAL_HARBOR_PLAYER':
+    case 'COMMERCIAL_HARBOR_RESOURCE':
+    case 'COMMERCIAL_HARBOR_COMMODITY':
+      return 'Resolving Commercial Harbor';
+    case 'METROPOLIS_CITY':
+      return 'Choosing a Metropolis City';
+    case 'ALCHEMIST_DICE':
+      return 'Choosing Alchemist dice';
+    case 'ENGINEER_WALL':
+      return 'Choosing a City for a Wall';
+    case 'MEDICINE_CITY':
+      return 'Choosing a City for Medicine';
+    case 'ROAD_BUILDING':
+      return 'Placing free Roads';
+    case 'MERCHANT_FLEET_GOOD':
+      return 'Choosing a Merchant Fleet card';
+    case 'RESOURCE_MONOPOLY':
+    case 'COMMODITY_MONOPOLY':
+      return 'Choosing a card for Monopoly';
+    case 'DESERTER_PLAYER':
+      return 'Choosing a player for Deserter';
+    case 'DIPLOMAT_ROAD':
+    case 'DIPLOMAT_RELOCATE_ROAD':
+      return 'Moving a Road with Diplomat';
+    case 'WAR_DRUMS_POSITION':
+      return 'Choosing the Barbarian position';
+  }
+}
+
+function activitySentence(
+  state: GameState,
+  playerIds: readonly PlayerState['id'][],
+  activityLabel: string,
+): string {
+  const names = playerIds.map((playerId) => state.players[playerId]?.name ?? 'A player');
+  const subject =
+    names.length === 1
+      ? names[0]!
+      : names.length === 2
+        ? `${names[0]} and ${names[1]}`
+        : `${names.length} players`;
+  return `${subject} ${names.length === 1 ? 'is' : 'are'} ${activityLabel[0]?.toLocaleLowerCase() ?? ''}${activityLabel.slice(1)}`;
+}
+
+function pendingPlayerActivities(state: GameState): Readonly<Record<string, string>> {
+  const interaction = state.pendingInteraction;
+  if (interaction === null) return {};
+  if (interaction.type === 'DISCARD_RESOURCES') {
+    return Object.fromEntries(
+      interaction.queue.map((playerId, index) => [
+        playerId,
+        index === 0 ? 'Discarding cards' : 'Waiting to discard',
+      ]),
+    );
+  }
+  if (interaction.type === 'KN_SELECTION') {
+    const players = interaction.simultaneous === true ? interaction.queue : [interaction.playerId];
+    const label = knSelectionActivityLabel(interaction.purpose);
+    return Object.fromEntries(players.map((playerId) => [playerId, label]));
+  }
+  if (interaction.type === 'TRADE_RESPONSES') {
+    const trade = state.tradeOffers[interaction.tradeId];
+    return Object.fromEntries(
+      (trade?.recipientIds ?? [])
+        .filter((playerId) => (trade?.responses[playerId] ?? 'PENDING') === 'PENDING')
+        .map((playerId) => [playerId, 'Considering a trade']),
+    );
+  }
+  const playerId = interaction.playerId;
+  const label =
+    interaction.type === 'MOVE_ROBBER'
+      ? 'Moving the robber'
+      : interaction.type === 'CHOOSE_STEAL_TARGET'
+        ? 'Choosing a player to rob'
+        : interaction.type === 'PLACE_FREE_ROADS'
+          ? 'Placing free Roads'
+          : 'Choosing Progress Card resources';
+  return { [playerId]: label };
+}
+
 function describeTarget(state: GameState, target: BoardTarget | null): string {
   if (target === null) return 'Hover a tile, road edge, corner, or port to inspect its stable ID.';
 
@@ -292,16 +416,35 @@ function productionFlyovers(
       { readonly type: 'PROGRESS_CARD_RESOLVED' | 'KN_PROGRESS_CARD_RESOLVED' }
     > => event.type === 'PROGRESS_CARD_RESOLVED' || event.type === 'KN_PROGRESS_CARD_RESOLVED',
   );
+  const knProgressDefinition =
+    progress?.type === 'KN_PROGRESS_CARD_RESOLVED'
+      ? getKNProgressCardDefinition(progress.cardDefinitionId)
+      : undefined;
+  const progressTargetIds =
+    progress?.type === 'KN_PROGRESS_CARD_RESOLVED' ? progress.targetIds : undefined;
   if (
     progress?.resources !== undefined &&
-    (!restrictToViewer || progress.playerId === visiblePlayerId)
+    (!restrictToViewer ||
+      progress.playerId === visiblePlayerId ||
+      (knProgressDefinition?.effect === 'MASTER_MERCHANT' &&
+        progressTargetIds?.[0] === visiblePlayerId))
   ) {
+    const masterMerchantSourceId =
+      knProgressDefinition?.effect === 'MASTER_MERCHANT'
+        ? (progressTargetIds?.[0] as PlayerState['id'] | undefined)
+        : undefined;
     for (const resource of HAND_GOODS) {
       const amount = progress.resources[resource.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
           id: `${state.config.gameId}-${state.actionHistory.length}-bank-${progress.cardInstanceId}-${resource.id}-${index}`,
-          source: { kind: 'BANK' },
+          source:
+            masterMerchantSourceId === undefined
+              ? { kind: 'BANK' }
+              : { kind: 'PLAYER', playerId: masterMerchantSourceId },
+          ...(masterMerchantSourceId === undefined
+            ? {}
+            : { target: { kind: 'PLAYER' as const, playerId: progress.playerId } }),
           resourceId: resource.id,
           delayMs: sequence * 140,
         });
@@ -312,13 +455,16 @@ function productionFlyovers(
   if (
     progress?.resourceId !== undefined &&
     progress.transfers !== undefined &&
-    (!restrictToViewer || progress.playerId === visiblePlayerId)
+    (!restrictToViewer ||
+      progress.playerId === visiblePlayerId ||
+      Object.hasOwn(progress.transfers, visiblePlayerId))
   ) {
     for (const [playerId, amount] of Object.entries(progress.transfers)) {
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
           id: `${state.config.gameId}-${state.actionHistory.length}-monopoly-${progress.cardInstanceId}-${playerId}-${index}`,
           source: { kind: 'PLAYER', playerId: playerId as PlayerState['id'] },
+          target: { kind: 'PLAYER', playerId: progress.playerId },
           resourceId: progress.resourceId,
           delayMs: sequence * 140,
         });
@@ -351,13 +497,29 @@ function productionFlyovers(
       exchange.targetPlayerId !== visiblePlayerId
     )
       continue;
-    flyovers.push({
-      id: `${state.config.gameId}-${state.actionHistory.length}-harbor-${exchange.targetPlayerId}-${exchange.receivedCommodityId}-${sequence}`,
-      source: { kind: 'PLAYER', playerId: exchange.targetPlayerId },
-      resourceId: exchange.receivedCommodityId,
-      delayMs: sequence * 140,
-    });
-    sequence += 1;
+    for (const movement of [
+      {
+        id: `offered-${exchange.offeredResourceId}`,
+        sourcePlayerId: exchange.playerId,
+        targetPlayerId: exchange.targetPlayerId,
+        resourceId: exchange.offeredResourceId,
+      },
+      {
+        id: `received-${exchange.receivedCommodityId}`,
+        sourcePlayerId: exchange.targetPlayerId,
+        targetPlayerId: exchange.playerId,
+        resourceId: exchange.receivedCommodityId,
+      },
+    ] as const) {
+      flyovers.push({
+        id: `${state.config.gameId}-${state.actionHistory.length}-harbor-${movement.id}-${sequence}`,
+        source: { kind: 'PLAYER', playerId: movement.sourcePlayerId },
+        target: { kind: 'PLAYER', playerId: movement.targetPlayerId },
+        resourceId: movement.resourceId,
+        delayMs: sequence * 140,
+      });
+      sequence += 1;
+    }
   }
   for (const aqueduct of events.filter(
     (event): event is Extract<GameEvent, { readonly type: 'AQUEDUCT_RESOURCE_CHOSEN' }> =>
@@ -376,14 +538,39 @@ function productionFlyovers(
     (event): event is Extract<GameEvent, { readonly type: 'WEDDING_CARDS_TRANSFERRED' }> =>
       event.type === 'WEDDING_CARDS_TRANSFERRED',
   )) {
-    if (restrictToViewer && wedding.playerId !== visiblePlayerId) continue;
+    if (
+      restrictToViewer &&
+      wedding.playerId !== visiblePlayerId &&
+      wedding.targetPlayerId !== visiblePlayerId
+    )
+      continue;
     for (const good of HAND_GOODS) {
       const amount = wedding.resources[good.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
           id: `${state.config.gameId}-${state.actionHistory.length}-wedding-${wedding.targetPlayerId}-${good.id}-${index}`,
           source: { kind: 'PLAYER', playerId: wedding.targetPlayerId },
+          target: { kind: 'PLAYER', playerId: wedding.playerId },
           targetPlayerId: wedding.playerId,
+          resourceId: good.id,
+          delayMs: sequence * 140,
+        });
+        sequence += 1;
+      }
+    }
+  }
+  for (const discarded of events.filter(
+    (event): event is Extract<GameEvent, { readonly type: 'RESOURCES_DISCARDED' }> =>
+      event.type === 'RESOURCES_DISCARDED',
+  )) {
+    if (restrictToViewer && discarded.playerId !== visiblePlayerId) continue;
+    for (const good of HAND_GOODS) {
+      const amount = discarded.resources[good.id] ?? 0;
+      for (let index = 0; index < amount; index += 1) {
+        flyovers.push({
+          id: `${state.config.gameId}-${state.actionHistory.length}-discard-${discarded.playerId}-${good.id}-${index}`,
+          source: { kind: 'PLAYER', playerId: discarded.playerId },
+          target: { kind: 'BANK' },
           resourceId: good.id,
           delayMs: sequence * 140,
         });
@@ -470,11 +657,11 @@ function progressCardMovementFlyovers(
       ];
     }
     if (event.type !== 'KN_PROGRESS_CARD_RESOLVED' || event.targetIds?.length !== 2) return [];
-    if (event.playerId !== visiblePlayerId) return [];
     const sourceDefinition = getKNProgressCardDefinition(event.cardDefinitionId);
     if (sourceDefinition?.effect !== 'SPY') return [];
     const [sourcePlayerId, stolenCardId] = event.targetIds;
     if (sourcePlayerId === undefined || stolenCardId === undefined) return [];
+    if (event.playerId !== visiblePlayerId && sourcePlayerId !== visiblePlayerId) return [];
     const stolenCard = state.kn?.progressCards[stolenCardId];
     if (stolenCard === undefined) return [];
     return [
@@ -882,6 +1069,7 @@ export function GameScreen() {
   const settings = useAppStore((state) => state.settings);
   const onlineCredentials = useOnlineStore((state) => state.credentials);
   const onlineRoom = useOnlineStore((state) => state.room);
+  const onlineClockOffsetMs = useOnlineStore((state) => state.clockOffsetMs);
   const onlineError = useOnlineStore((state) => state.error);
   const onlineActionPending = useOnlineStore((state) => state.actionPending);
   const onlineCommandPending = useOnlineStore((state) => state.commandPending);
@@ -1281,7 +1469,8 @@ export function GameScreen() {
       event.type === 'PROGRESS_CARD_RESOLVED' ||
       event.type === 'KN_PROGRESS_CARD_RESOLVED' ||
       event.type === 'AQUEDUCT_RESOURCE_CHOSEN' ||
-      event.type === 'WEDDING_CARDS_TRANSFERRED',
+      event.type === 'WEDDING_CARDS_TRANSFERRED' ||
+      event.type === 'RESOURCES_DISCARDED',
   );
   const resourceFlyovers = useMemo(
     () =>
@@ -1351,6 +1540,7 @@ export function GameScreen() {
     gameState.turn.activePlayerId === null
       ? undefined
       : gameState.players[gameState.turn.activePlayerId];
+  const playerActivities = pendingPlayerActivities(gameState);
   const viewerPlayer =
     onlineViewerPlayerId === null ? activePlayer : gameState.players[onlineViewerPlayerId];
   let progressTooltipResetIndex = -1;
@@ -2628,40 +2818,74 @@ export function GameScreen() {
   const recentActionBoostsTimer = recentGameEvents.some((event) =>
     TIMER_BOOST_EVENT_TYPES.has(event.type),
   );
+  const activePlayerName = activePlayer?.name ?? 'A player';
+  const knChoiceStatusPrompt =
+    knChoiceInteraction === null
+      ? null
+      : activitySentence(
+          gameState,
+          knChoiceInteraction.simultaneous === true
+            ? knChoiceInteraction.queue
+            : [knChoiceInteraction.playerId],
+          knSelectionActivityLabel(knChoiceInteraction.purpose),
+        );
+  const actionModePrompt =
+    knightCommand === 'MOVE'
+      ? `${activePlayerName} is moving a Knight`
+      : knightCommand === 'UPGRADE'
+        ? `${activePlayerName} is upgrading a Knight`
+        : knightCommand === 'ACTIVATE'
+          ? `${activePlayerName} is activating a Knight`
+          : knBoardAction?.type === 'BUILD_KNIGHT'
+            ? `${activePlayerName} is placing a Knight`
+            : knBoardAction?.type === 'BUILD_WALL'
+              ? `${activePlayerName} is building a Wall`
+              : knBoardAction?.type === 'MOVE_KNIGHT'
+                ? `${activePlayerName} is moving a Knight`
+                : constructionType === 'ROAD'
+                  ? `${activePlayerName} is placing a Road`
+                  : constructionType === 'HOUSE'
+                    ? `${activePlayerName} is placing a House`
+                    : constructionType === 'MANSION'
+                      ? `${activePlayerName} is upgrading a City`
+                      : `${activePlayerName} is taking actions`;
   const timedPhase =
     gameState.turn.phase === 'SETUP_PLACE_HOUSE'
       ? {
           duration: 180,
           key: `setup-building-${gameState.turn.setupPlacementIndex ?? 0}`,
-          prompt: `Place ${setupBuildingType === 'MANSION' ? 'City' : 'House'}`,
+          prompt: `${activePlayerName} is placing a ${setupBuildingType === 'MANSION' ? 'City' : 'House'}`,
           actorId: gameState.turn.activePlayerId,
         }
       : gameState.turn.phase === 'SETUP_PLACE_ROAD'
         ? {
             duration: 60,
             key: `setup-road-${gameState.turn.setupPlacementIndex ?? 0}`,
-            prompt: 'Place Road',
+            prompt: `${activePlayerName} is placing a Road`,
             actorId: gameState.turn.activePlayerId,
           }
         : gameState.turn.phase === 'DISCARD_RESOURCES' && discardPlayerId !== undefined
           ? {
               duration: 30,
               key: `discard-${gameState.turn.turnNumber}-${discardPlayerId}`,
-              prompt: 'Discard Cards',
+              prompt: activitySentence(gameState, [discardPlayerId], 'Discarding cards'),
               actorId: discardPlayerId,
             }
           : gameState.turn.phase === 'MOVE_ROBBER' || gameState.turn.phase === 'CHOOSE_STEAL_TARGET'
             ? {
                 duration: 20,
                 key: `robber-${gameState.turn.turnNumber}`,
-                prompt: phaseLabel(gameState.turn.phase),
+                prompt:
+                  gameState.turn.phase === 'MOVE_ROBBER'
+                    ? `${activePlayerName} is moving the robber`
+                    : `${activePlayerName} is choosing a player to rob`,
                 actorId: gameState.turn.activePlayerId,
               }
             : gameState.turn.phase === 'WAITING_FOR_ROLL'
               ? {
                   duration: 10,
                   key: `roll-${gameState.turn.turnNumber}`,
-                  prompt: 'Roll Dice',
+                  prompt: `${activePlayerName} is rolling the dice`,
                   actorId: gameState.turn.activePlayerId,
                 }
               : gameState.turn.phase === 'ACTION_PHASE'
@@ -2670,7 +2894,7 @@ export function GameScreen() {
                       ? 20
                       : (gameState.config.turnTimeSeconds ?? 60),
                     key: `actions-${gameState.turn.turnNumber}`,
-                    prompt: 'Take Actions',
+                    prompt: actionModePrompt,
                     actorId: gameState.turn.activePlayerId,
                   }
                 : gameState.turn.phase === 'CARD_RESOLUTION' && knChoiceInteraction !== null
@@ -2678,24 +2902,13 @@ export function GameScreen() {
                     ? {
                         duration: gameState.config.turnTimeSeconds ?? 60,
                         key: `actions-${gameState.turn.turnNumber}`,
-                        prompt: 'Take Actions',
+                        prompt: knChoiceStatusPrompt ?? actionModePrompt,
                         actorId: gameState.turn.activePlayerId,
                       }
                     : {
                         duration: knChoiceInteraction.purpose === 'DEFENDER_TIE_DECK' ? 15 : 30,
                         key: `kn-choice-${gameState.actionHistory.length}-${knChoiceInteraction.purpose}-${knChoiceInteraction.playerId}`,
-                        prompt:
-                          knChoiceInteraction.purpose === 'METROPOLIS_CITY'
-                            ? 'Place Metropolis'
-                            : knChoiceInteraction.purpose === 'DEFENDER_TIE_DECK'
-                              ? 'Choose Defender Reward'
-                              : knChoiceInteraction.purpose === 'WEDDING_CARDS'
-                                ? 'Give Wedding Cards'
-                                : knChoiceInteraction.purpose === 'ALCHEMIST_DICE'
-                                  ? 'Set Alchemist Dice'
-                                  : knChoiceInteraction.purpose === 'PROGRESS_DISCARD'
-                                    ? 'Return Progress Card'
-                                    : 'Resolve Progress Card',
+                        prompt: knChoiceStatusPrompt ?? `${activePlayerName} is resolving a card`,
                         actorId: knChoiceInteraction.playerId,
                       }
                   : null;
@@ -2933,6 +3146,7 @@ export function GameScreen() {
               paused={gamePaused}
               viewerPlayerId={onlineViewerPlayerId}
               deadlineAt={isOnlineMatch ? onlineRoom?.game?.tradeDeadlineAt : null}
+              clockOffsetMs={onlineClockOffsetMs}
               serverAuthoritative={isOnlineMatch}
               errorMessage={actionError}
               onRespond={respondToPlayerTrade}
@@ -3056,6 +3270,7 @@ export function GameScreen() {
                     holdsLongestRoad={gameState.bonuses.longestRoadHolderId === player.id}
                     holdsLargestForce={gameState.bonuses.largestForceHolderId === player.id}
                     winner={gameState.winnerId === player.id}
+                    activityLabel={playerActivities[player.id] ?? null}
                     kNMode={gameState.kn !== null}
                     knProgressCards={gameState.kn?.progressCards}
                     {...(onlineRoom?.game?.playerCards[player.id] === undefined
@@ -3121,7 +3336,7 @@ export function GameScreen() {
           )}
           {knTrayChoice === null ? null : (
             <KNChoiceTray
-              key={`${knTrayChoice.purpose}-${knTrayChoice.playerId}-${knTrayChoice.sourceCardId ?? 'roll'}-${knTraySelectedHexId}`}
+              key={`${knTrayChoice.purpose}-${knTrayChoice.playerId}-${knTrayChoice.sourceCardId ?? 'roll'}-${knTraySelectedHexId}-${knTrayChoice.eligibleIds.join('.')}`}
               state={gameState}
               interaction={knTrayChoice}
               errorMessage={actionError}
@@ -3261,6 +3476,7 @@ export function GameScreen() {
                   boostSignal={timerBoostSignal}
                   paused={gamePaused}
                   deadlineAt={isOnlineMatch ? onlineRoom.game?.deadlineAt : null}
+                  clockOffsetMs={onlineClockOffsetMs}
                   onUrgentTick={() => {
                     const silentPhase =
                       gameState.turn.phase === 'WAITING_FOR_ROLL' ||

@@ -188,10 +188,13 @@ function timedStep(state: GameState): TimedStep | null {
         interaction.sourceCardId !== undefined &&
         interaction.canCancel &&
         interaction.context.committed !== true;
+      const simultaneousChoice = interaction.simultaneous === true;
       return {
         key: uncommittedPreview
           ? `actions-${state.turn.turnNumber}`
-          : `choice-${state.actionHistory.length}-${interaction.purpose}-${interaction.playerId}`,
+          : simultaneousChoice
+            ? `choice-${state.turn.turnNumber}-${interaction.purpose}-simultaneous`
+            : `choice-${state.actionHistory.length}-${interaction.purpose}-${interaction.playerId}`,
         durationMs: uncommittedPreview
           ? (state.config.turnTimeSeconds ?? 60) * 1_000
           : interaction.purpose === 'DEFENDER_TIE_DECK'
@@ -526,7 +529,13 @@ export class RoomManager {
     if (duplicateRevision !== undefined) {
       return { ok: true, revision: duplicateRevision, duplicate: true };
     }
-    if (expectedRevision !== room.revision) {
+    const remainsEligibleForConcurrentChoice =
+      expectedRevision < room.revision &&
+      action.type === 'RESOLVE_PROGRESS_SELECTION' &&
+      room.state.pendingInteraction?.type === 'KN_SELECTION' &&
+      room.state.pendingInteraction.simultaneous === true &&
+      room.state.pendingInteraction.queue.includes(member.id);
+    if (expectedRevision !== room.revision && !remainsEligibleForConcurrentChoice) {
       return {
         ok: false,
         error: error(

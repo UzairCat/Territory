@@ -6,10 +6,14 @@ function formatRemaining(seconds: number): string {
   return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
-function remainingFor(deadlineAt: number | null, durationSeconds: number): number {
+function remainingFor(
+  deadlineAt: number | null,
+  durationSeconds: number,
+  clockOffsetMs: number,
+): number {
   return deadlineAt === null
     ? durationSeconds
-    : Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1_000));
+    : Math.max(0, Math.ceil((deadlineAt - (Date.now() + clockOffsetMs)) / 1_000));
 }
 
 interface TurnTimerProps {
@@ -18,6 +22,7 @@ interface TurnTimerProps {
   readonly boostSignal: string;
   readonly paused?: boolean;
   readonly deadlineAt?: number | null;
+  readonly clockOffsetMs?: number;
   readonly onExpire: () => void;
   readonly onUrgentTick: () => void;
 }
@@ -28,11 +33,12 @@ export function TurnTimer({
   boostSignal,
   paused = false,
   deadlineAt = null,
+  clockOffsetMs = 0,
   onExpire,
   onUrgentTick,
 }: TurnTimerProps) {
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
-    remainingFor(deadlineAt, durationSeconds),
+    remainingFor(deadlineAt, durationSeconds, clockOffsetMs),
   );
   const expiredRef = useRef(false);
   const onExpireRef = useRef(onExpire);
@@ -49,13 +55,18 @@ export function TurnTimer({
 
   useEffect(() => {
     if (paused) return undefined;
-    const interval = globalThis.setInterval(() => {
-      setRemainingSeconds((current) =>
-        deadlineAt === null ? Math.max(0, current - 1) : remainingFor(deadlineAt, durationSeconds),
-      );
-    }, 1_000);
+    const interval = globalThis.setInterval(
+      () => {
+        setRemainingSeconds((current) =>
+          deadlineAt === null
+            ? Math.max(0, current - 1)
+            : remainingFor(deadlineAt, durationSeconds, clockOffsetMs),
+        );
+      },
+      deadlineAt === null ? 1_000 : 250,
+    );
     return () => globalThis.clearInterval(interval);
-  }, [deadlineAt, durationSeconds, paused]);
+  }, [clockOffsetMs, deadlineAt, durationSeconds, paused]);
 
   useEffect(() => {
     if (previousBoostRef.current === boostSignal) return;
@@ -71,6 +82,7 @@ export function TurnTimer({
       }
       return;
     }
+    expiredRef.current = false;
     if (remainingSeconds <= 10) onUrgentTickRef.current();
   }, [remainingSeconds]);
 
