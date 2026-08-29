@@ -88,18 +88,21 @@ describe('online entry and lobby presentation', () => {
     await user.click(screen.getByRole('button', { name: 'Create private room' }));
 
     expect(createRoom).toHaveBeenCalledWith('Alex');
-    expect(await screen.findByRole('heading', { name: 'Gather your party' })).toBeInTheDocument();
-    expect(screen.getByText('NEW234')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
+    expect(screen.getAllByText('NEW234').length).toBeGreaterThan(0);
   });
 
-  it('renders a host room with reconnect status, open seats, and editable settings', () => {
+  it('renders a host room with open seats, editable settings, and paged map previews', async () => {
+    const user = userEvent.setup();
     const hostId = playerId('online-host');
     const settings = createDefaultLobby('online-ui-seed');
     const { players: _players, ...lobbySettings } = settings;
     expect(_players).toEqual([]);
+    const updateSettings = vi.fn(() => Promise.resolve(true));
     useOnlineStore.setState({
       connection: 'CONNECTED',
       credentials: { roomCode: 'ABC234', playerId: hostId, resumeToken: 'x'.repeat(32) },
+      updateSettings,
       room: {
         protocolVersion: 1,
         code: 'ABC234',
@@ -121,11 +124,70 @@ describe('online entry and lobby presentation', () => {
     });
 
     renderApp('/online/ABC234');
-    expect(screen.getByRole('heading', { name: 'Gather your party' })).toBeInTheDocument();
-    expect(screen.getByText('ABC234')).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveClass('lobby-screen--room', 'online-lobby-room');
+    expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
+    expect(screen.getAllByText('ABC234').length).toBeGreaterThan(0);
     expect(screen.getByText('Alex (You)')).toBeInTheDocument();
     expect(screen.getByText('Open seat')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start online match' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Map' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Select Classic mode' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Select Base - Small' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Select K+N mode' }));
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ modeId: 'k-n', victoryTarget: 13 }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Next maps' }));
+    expect(screen.getByRole('button', { name: 'Select Earth' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Select Base - Small' })).not.toBeInTheDocument();
+  });
+
+  it('shows live room state while locking match controls for a guest', () => {
+    const hostId = playerId('online-party-leader');
+    const guestId = playerId('online-guest');
+    const { players: _players, ...settings } = createDefaultLobby('online-guest-seed');
+    expect(_players).toEqual([]);
+    useOnlineStore.setState({
+      connection: 'RECONNECTING',
+      credentials: { roomCode: 'GUEST2', playerId: guestId, resumeToken: 'g'.repeat(32) },
+      room: {
+        protocolVersion: 1,
+        code: 'GUEST2',
+        phase: 'LOBBY',
+        viewerPlayerId: guestId,
+        hostPlayerId: hostId,
+        players: [
+          {
+            id: hostId,
+            name: 'Morgan',
+            colorId: colorId('cobalt'),
+            connected: false,
+            host: true,
+          },
+          {
+            id: guestId,
+            name: 'Alex',
+            colorId: colorId('crimson'),
+            connected: true,
+            host: false,
+          },
+        ],
+        settings,
+        game: null,
+      },
+    });
+
+    renderApp('/online/GUEST2');
+    expect(screen.getByRole('heading', { name: 'Room settings' })).toBeInTheDocument();
+    expect(screen.getByText('Morgan is party leader')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Game mode' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Map' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Select Classic mode' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Hide Bank Cards' })).toBeDisabled();
+    expect(screen.getByRole('slider', { name: 'Points to win' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Start online match' })).not.toBeInTheDocument();
+    expect(screen.getByText('Waiting for host…')).toBeInTheDocument();
   });
 });
