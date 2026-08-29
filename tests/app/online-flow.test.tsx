@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
@@ -44,6 +44,52 @@ describe('online entry and lobby presentation', () => {
     await user.type(screen.getByLabelText('Room code'), 'abc234');
     expect(screen.getByLabelText('Room code')).toHaveValue('ABC234');
     expect(screen.getByRole('button', { name: 'Join room' })).toBeEnabled();
+  });
+
+  it('enters the private lobby as soon as room creation succeeds', async () => {
+    const user = userEvent.setup();
+    const hostId = playerId('created-online-host');
+    const { players: _players, ...settings } = createDefaultLobby('created-online-room');
+    expect(_players).toEqual([]);
+    const credentials = {
+      roomCode: 'NEW234',
+      playerId: hostId,
+      resumeToken: 'n'.repeat(32),
+    };
+    const room = {
+      protocolVersion: 1 as const,
+      code: 'NEW234',
+      phase: 'LOBBY' as const,
+      viewerPlayerId: hostId,
+      hostPlayerId: hostId,
+      players: [
+        {
+          id: hostId,
+          name: 'Alex',
+          colorId: colorId('cobalt'),
+          connected: true,
+          host: true,
+        },
+      ],
+      settings,
+      game: null,
+    };
+    const createRoom = vi.fn(() => {
+      useOnlineStore.setState({ connection: 'CONNECTED', credentials, room });
+      return Promise.resolve(true);
+    });
+    useOnlineStore.setState({
+      createRoom,
+      initialize: vi.fn(() => Promise.resolve(true)),
+    });
+
+    renderApp('/online');
+    await user.type(screen.getByPlaceholderText('Player name'), 'Alex');
+    await user.click(screen.getByRole('button', { name: 'Create private room' }));
+
+    expect(createRoom).toHaveBeenCalledWith('Alex');
+    expect(await screen.findByRole('heading', { name: 'Gather your party' })).toBeInTheDocument();
+    expect(screen.getByText('NEW234')).toBeInTheDocument();
   });
 
   it('renders a host room with reconnect status, open seats, and editable settings', () => {

@@ -36,6 +36,22 @@ export function OnlineMenuScreen() {
   const validName = displayName.trim().length >= 1 && displayName.trim().length <= 20;
   const validCode = /^[A-Z2-9]{6}$/.test(roomCode.trim().toUpperCase());
 
+  const enterCreatedRoom = async () => {
+    const created = await createRoom(displayName);
+    const createdRoom = useOnlineStore.getState().room;
+    if (created && createdRoom !== null) {
+      void navigate(`/online/${createdRoom.code}`, { flushSync: true });
+    }
+  };
+
+  const enterJoinedRoom = async () => {
+    const joined = await joinRoom(roomCode, displayName);
+    const joinedRoom = useOnlineStore.getState().room;
+    if (joined && joinedRoom !== null) {
+      void navigate(`/online/${joinedRoom.code}`, { flushSync: true });
+    }
+  };
+
   return (
     <main className="online-entry-screen">
       <section className="online-entry-card" aria-labelledby="online-title">
@@ -70,7 +86,7 @@ export function OnlineMenuScreen() {
               variant="primary"
               fullWidth
               disabled={!validName || commandPending}
-              onClick={() => void createRoom(displayName)}
+              onClick={() => void enterCreatedRoom()}
             >
               Create private room
             </Button>
@@ -95,7 +111,7 @@ export function OnlineMenuScreen() {
               variant="secondary"
               fullWidth
               disabled={!validName || !validCode || commandPending}
-              onClick={() => void joinRoom(roomCode, displayName)}
+              onClick={() => void enterJoinedRoom()}
             >
               Join room
             </Button>
