@@ -9,7 +9,6 @@ import knightMoveUrl from '../../assets/audio/sfx/knight-move.wav';
 import longestRoadUrl from '../../assets/audio/sfx/longest_road.wav';
 import perkUrl from '../../assets/audio/sfx/perk.wav';
 import roadPlaceUrl from '../../assets/audio/sfx/road_place.wav';
-import robberThreatUrl from '../../assets/audio/sfx/robber-threat.wav';
 import stonePlaceUrl from '../../assets/audio/sfx/stone-place.mp3';
 import swordDrawUrl from '../../assets/audio/sfx/sword-draw.mp3';
 import timerUrl from '../../assets/audio/sfx/timer.wav';
@@ -32,7 +31,6 @@ export type SoundCue =
   | 'LONGEST_ROAD'
   | 'PERK'
   | 'ROAD_PLACE'
-  | 'ROBBER_THREAT'
   | 'STONE_PLACE'
   | 'SWORD_DRAW'
   | 'TIMER'
@@ -53,7 +51,6 @@ export const SOUND_ASSET_URLS: Readonly<Record<SoundCue, string>> = {
   LONGEST_ROAD: longestRoadUrl,
   PERK: perkUrl,
   ROAD_PLACE: roadPlaceUrl,
-  ROBBER_THREAT: robberThreatUrl,
   STONE_PLACE: stonePlaceUrl,
   SWORD_DRAW: swordDrawUrl,
   TIMER: timerUrl,

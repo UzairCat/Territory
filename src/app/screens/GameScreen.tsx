@@ -1166,7 +1166,7 @@ export function GameScreen() {
 
   useEffect(() => {
     if (audioSessionId === null) return undefined;
-    audioManager.startMusic();
+    audioManager.startMusic(audioSessionId);
     return () => audioManager.stopMusic();
   }, [audioSessionId]);
 

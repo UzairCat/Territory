@@ -88,7 +88,7 @@ export function audioCuesForEvents(
     ];
   }
   if (viewerMustDiscard) return [cue('DISCARD_SLAM')];
-  if (events.some((event) => event.type === 'ROBBER_MOVED')) return [cue('ROBBER_THREAT')];
+  if (events.some((event) => event.type === 'ROBBER_MOVED')) return [cue('STONE_PLACE')];
   if (events.some((event) => event.type === 'KNIGHT_ACTIVATED')) return [cue('SWORD_DRAW')];
   if (
     events.some((event) =>
@@ -137,7 +137,6 @@ const CUE_VOLUME: Readonly<Record<SoundCue, number>> = {
   LONGEST_ROAD: 0.72,
   PERK: 0.66,
   ROAD_PLACE: 0.58,
-  ROBBER_THREAT: 0.7,
   STONE_PLACE: 0.72,
   SWORD_DRAW: 0.68,
   TIMER: 0.42,
@@ -165,19 +164,12 @@ function mediaPlaybackAvailable(): boolean {
   return !globalThis.navigator?.userAgent.toLocaleLowerCase().includes('jsdom');
 }
 
-function shuffledTracks(previousTrackId: string | null): readonly MusicTrack[] {
-  const tracks = [...BACKGROUND_MUSIC_TRACKS];
-  for (let index = tracks.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [tracks[index], tracks[swapIndex]] = [tracks[swapIndex]!, tracks[index]!];
+export function backgroundMusicTrackForGame(gameSessionId: string): MusicTrack {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < gameSessionId.length; index += 1) {
+    hash = Math.imul(hash ^ gameSessionId.charCodeAt(index), 16_777_619);
   }
-  const firstTrack = tracks[0];
-  const secondTrack = tracks[1];
-  if (firstTrack !== undefined && secondTrack !== undefined && firstTrack.id === previousTrackId) {
-    tracks[0] = secondTrack;
-    tracks[1] = firstTrack;
-  }
-  return tracks;
+  return BACKGROUND_MUSIC_TRACKS[(hash >>> 0) % BACKGROUND_MUSIC_TRACKS.length]!;
 }
 
 class AudioManager {
@@ -186,8 +178,8 @@ class AudioManager {
   private scheduledEffects = new Set<ReturnType<typeof globalThis.setTimeout>>();
   private musicActive = false;
   private musicElement: HTMLAudioElement | null = null;
-  private musicQueue: readonly MusicTrack[] = [];
-  private lastMusicTrackId: string | null = null;
+  private musicTrack: MusicTrack | null = null;
+  private musicSessionId: string | null = null;
   private masterVolume = 0;
   private musicVolume = 0;
   private musicDuckTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -221,9 +213,12 @@ class AudioManager {
     this.scheduleCue('TIMER', 0, masterVolume, sfxVolume);
   }
 
-  startMusic(): void {
-    if (this.musicActive) return;
+  startMusic(gameSessionId: string): void {
+    if (this.musicActive && this.musicSessionId === gameSessionId) return;
+    if (this.musicActive) this.stopMusic();
     this.musicActive = true;
+    this.musicSessionId = gameSessionId;
+    this.musicTrack = backgroundMusicTrackForGame(gameSessionId);
     this.preloadEffects();
     if (globalThis.document !== undefined) {
       this.visibilityHandler = () => {
@@ -233,7 +228,7 @@ class AudioManager {
       };
       globalThis.document.addEventListener('visibilitychange', this.visibilityHandler);
     }
-    if (this.targetMusicVolume() > 0) this.playNextMusicTrack();
+    if (this.targetMusicVolume() > 0) this.playMusicTrack();
   }
 
   setMusicVolume(masterVolume: number, musicVolume: number): void {
@@ -245,12 +240,14 @@ class AudioManager {
       if (target === 0) this.musicElement.pause();
       else if (this.musicActive) this.tryPlayMusic(this.musicElement);
     } else if (this.musicActive && target > 0) {
-      this.playNextMusicTrack();
+      this.playMusicTrack();
     }
   }
 
   stopMusic(): void {
     this.musicActive = false;
+    this.musicSessionId = null;
+    this.musicTrack = null;
     this.removeUnlockHandler();
     if (this.visibilityHandler !== null && globalThis.document !== undefined) {
       globalThis.document.removeEventListener('visibilitychange', this.visibilityHandler);
@@ -340,40 +337,20 @@ class AudioManager {
     return clampUnit(this.masterVolume * this.musicVolume * 0.52);
   }
 
-  private nextMusicTrack(): MusicTrack | null {
-    if (this.musicQueue.length === 0) {
-      this.musicQueue = shuffledTracks(this.lastMusicTrackId);
-    }
-    const [track, ...remaining] = this.musicQueue;
-    this.musicQueue = remaining;
-    return track ?? null;
-  }
-
-  private playNextMusicTrack(): void {
+  private playMusicTrack(): void {
     if (!this.musicActive || !mediaPlaybackAvailable() || this.targetMusicVolume() === 0) return;
-    const track = this.nextMusicTrack();
+    const track = this.musicTrack;
     if (track === null) return;
     if (this.musicElement !== null) this.musicElement.pause();
     const audio = new Audio(track.url);
     audio.preload = 'auto';
+    audio.loop = true;
     audio.volume = this.musicDucked ? this.targetMusicVolume() * 0.14 : this.targetMusicVolume();
-    audio.addEventListener(
-      'ended',
-      () => {
-        if (this.musicElement !== audio) return;
-        this.lastMusicTrackId = track.id;
-        this.musicElement = null;
-        this.playNextMusicTrack();
-      },
-      { once: true },
-    );
     audio.addEventListener(
       'error',
       () => {
         if (this.musicElement !== audio) return;
-        this.lastMusicTrackId = track.id;
         this.musicElement = null;
-        this.playNextMusicTrack();
       },
       { once: true },
     );
@@ -405,7 +382,7 @@ class AudioManager {
     if (this.unlockHandler !== null || !this.musicActive) return;
     this.unlockHandler = () => {
       const music = this.musicElement;
-      if (music === null) this.playNextMusicTrack();
+      if (music === null) this.playMusicTrack();
       else this.tryPlayMusic(music);
     };
     globalThis.addEventListener('pointerdown', this.unlockHandler, { capture: true, once: true });

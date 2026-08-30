@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BACKGROUND_MUSIC_TRACKS } from '../../src/app/audio/audio-catalog';
-import { audioCuesForEvents } from '../../src/app/audio/audio-manager';
+import { audioCuesForEvents, backgroundMusicTrackForGame } from '../../src/app/audio/audio-manager';
 import { COMMODITY_IDS } from '../../src/engine/content/commodities';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
@@ -21,7 +21,7 @@ function cues(events: readonly GameEvent[], viewerPlayerId = TEST_PLAYER_IDS[0])
 }
 
 describe('game audio design', () => {
-  it('uses one weighty stone-placement sound for houses, cities, metropolises, knights, and walls', () => {
+  it('uses one weighty stone-placement sound for construction and the robber', () => {
     const placementEvents: readonly GameEvent[] = [
       {
         type: 'BUILDING_PLACED',
@@ -53,6 +53,12 @@ describe('game audio design', () => {
         playerId: TEST_PLAYER_IDS[0],
         vertexId: vertexId('sound-wall'),
       },
+      {
+        type: 'ROBBER_MOVED',
+        playerId: TEST_PLAYER_IDS[0],
+        fromHexId: null,
+        hexId: hexId('sound-robber'),
+      },
     ];
 
     for (const event of placementEvents) {
@@ -83,16 +89,6 @@ describe('game audio design', () => {
         },
       ]),
     ).toEqual(['CITY_COLLAPSE']);
-    expect(
-      cues([
-        {
-          type: 'ROBBER_MOVED',
-          playerId: TEST_PLAYER_IDS[0],
-          fromHexId: null,
-          hexId: hexId('sound-robber'),
-        },
-      ]),
-    ).toEqual(['ROBBER_THREAT']);
     expect(cues([{ type: 'LONGEST_ROAD_CHANGED', playerId: TEST_PLAYER_IDS[0] }])).toEqual([
       'LONGEST_ROAD',
     ]);
@@ -314,5 +310,17 @@ describe('game audio design', () => {
     expect(BACKGROUND_MUSIC_TRACKS).toHaveLength(2);
     expect(new Set(BACKGROUND_MUSIC_TRACKS.map((track) => track.id))).toHaveProperty('size', 2);
     expect(new Set(BACKGROUND_MUSIC_TRACKS.map((track) => track.url))).toHaveProperty('size', 2);
+  });
+
+  it('selects one stable background music track for each game', () => {
+    const selectedTracks = Array.from({ length: 32 }, (_, index) =>
+      backgroundMusicTrackForGame(`music-game-${index}`),
+    );
+
+    expect(backgroundMusicTrackForGame('stable-music-game')).toBe(
+      backgroundMusicTrackForGame('stable-music-game'),
+    );
+    expect(selectedTracks.every((track) => BACKGROUND_MUSIC_TRACKS.includes(track))).toBe(true);
+    expect(new Set(selectedTracks.map((track) => track.id))).toHaveProperty('size', 2);
   });
 });
