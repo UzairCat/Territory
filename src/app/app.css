@@ -1170,220 +1170,463 @@ h2 {
   overflow: visible;
 }
 
-.menu-map-water-ring {
-  fill: rgb(62 159 175 / 10%);
-  stroke: rgb(141 220 222 / 15%);
+.menu-map-water-details {
+  fill: none;
+  stroke: #8cdbe0;
   stroke-width: 2;
-  stroke-dasharray: 7 13;
+  stroke-linecap: round;
+  opacity: 0.24;
 }
 
-.menu-map-tile > polygon:first-child {
-  stroke: #eed38d;
-  stroke-width: 4;
+.menu-map-coast {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.menu-map-coast--water {
+  stroke: #58bfcc;
+  stroke-width: 23;
+  opacity: 0.28;
+}
+
+.menu-map-coast--foam {
+  stroke: #b9f0e8;
+  stroke-width: 14;
+  opacity: 0.76;
+}
+
+.menu-map-coast--sand {
+  stroke: #f2dda4;
+  stroke-width: 6;
+  opacity: 0.96;
+}
+
+.menu-map-tile__shadow {
+  fill: #050a07;
+  opacity: 0.42;
+}
+
+.menu-map-tile__surface {
+  stroke: #101710;
+  stroke-width: 3;
   stroke-linejoin: round;
 }
 
 .menu-map-tile__inset {
   fill: none;
-  stroke: rgb(255 247 211 / 28%);
-  stroke-width: 2;
+  stroke: rgb(255 245 201 / 18%);
+  stroke-width: 1.5;
 }
 
-.menu-map-tile--forest > polygon:first-child {
-  fill: #24744d;
+.menu-map-tile--forest .menu-map-tile__surface {
+  fill: #315f3c;
 }
 
-.menu-map-tile--grain > polygon:first-child {
-  fill: #d4a62f;
+.menu-map-tile--grain .menu-map-tile__surface {
+  fill: #cda642;
 }
 
-.menu-map-tile--pasture > polygon:first-child {
-  fill: #72a83e;
+.menu-map-tile--pasture .menu-map-tile__surface {
+  fill: #7e9f5b;
 }
 
-.menu-map-tile--brick > polygon:first-child {
-  fill: #b95a3e;
+.menu-map-tile--brick .menu-map-tile__surface {
+  fill: #9a503f;
 }
 
-.menu-map-tile--ore > polygon:first-child {
-  fill: #7f9092;
+.menu-map-tile--ore .menu-map-tile__surface {
+  fill: #676f7a;
 }
 
 .menu-map-mark {
-  opacity: 0.82;
+  opacity: 0.96;
 }
 
-.menu-map-mark--forest {
-  fill: #123f2d;
-  stroke: #a7c56d;
-  stroke-width: 2;
-  stroke-linecap: round;
+.menu-map-mark--forest > ellipse {
+  fill: #244f30;
+  opacity: 0.48;
+}
+
+.menu-map-pine rect {
+  fill: #5a3822;
+}
+
+.menu-map-pine > path:not(.menu-map-pine__light) {
+  fill: #245f38;
+  stroke: #123a24;
+  stroke-width: 1.4;
   stroke-linejoin: round;
 }
 
-.menu-map-mark--grain {
-  fill: rgb(255 235 139 / 24%);
-  stroke: #fff0a5;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.menu-map-pine__light {
+  fill: #65a15d;
+  opacity: 0.72;
 }
 
-.menu-map-mark--pasture {
-  fill: #f2eee0;
-  stroke: #355739;
-  stroke-width: 2.5;
+.menu-map-grass {
+  fill: none;
+  stroke: #294f2d;
+  stroke-width: 1.7;
   stroke-linecap: round;
 }
 
-.menu-map-mark--brick {
-  fill: rgb(103 42 31 / 18%);
-  stroke: #f1b087;
-  stroke-width: 3;
-}
-
-.menu-map-mark--ore {
-  fill: #d6ddda;
-  stroke: #536467;
-  stroke-width: 2.5;
-}
-
-.menu-map-number rect {
-  fill: #fff7dc;
-  stroke: rgb(55 51 35 / 44%);
+.menu-map-field-rows {
+  fill: none;
+  stroke: #f5cf5c;
   stroke-width: 2;
+  opacity: 0.4;
+}
+
+.menu-map-wheat path {
+  fill: none;
+  stroke: #7f5b1e;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.menu-map-wheat ellipse {
+  fill: #f4d166;
+  stroke: #9e7625;
+  stroke-width: 0.65;
+}
+
+.menu-map-meadow {
+  fill: #b2d575;
+  opacity: 0.25;
+}
+
+.menu-map-sheep > circle:not(.menu-map-sheep__head, .menu-map-sheep__eye) {
+  fill: #f7f1dd;
+  stroke: #d9d4c3;
+  stroke-width: 0.8;
+}
+
+.menu-map-sheep__head {
+  fill: #4a443b;
+}
+
+.menu-map-sheep__eye {
+  fill: #f7e8b8;
+}
+
+.menu-map-sheep__legs {
+  fill: none;
+  stroke: #514a3e;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+}
+
+.menu-map-hill--back {
+  fill: #713827;
+}
+
+.menu-map-hill {
+  fill: #bb633f;
+}
+
+.menu-map-hill__light {
+  fill: #e69b62;
+}
+
+.menu-map-bricks > rect {
+  fill: #663523;
+  stroke: #e39a67;
+  stroke-width: 1.4;
+}
+
+.menu-map-bricks > path {
+  fill: none;
+  stroke: #dc754d;
+  stroke-width: 4.4;
+  stroke-linecap: butt;
+}
+
+.menu-map-mountain--back {
+  fill: #444d58;
+}
+
+.menu-map-mountain {
+  fill: #687581;
+}
+
+.menu-map-snow {
+  fill: #e8e7dc;
+}
+
+.menu-map-snow--back {
+  fill: #cfd4cf;
+}
+
+.menu-map-rock {
+  fill: #889099;
+  stroke: #3c4650;
+  stroke-width: 1.2;
+}
+
+.menu-map-number__shadow {
+  fill: #191b17;
+  opacity: 0.42;
+}
+
+.menu-map-number__token {
+  fill: #fff8df;
+  stroke: #6f684f;
+  stroke-width: 2;
+}
+
+.menu-map-number.is-hot .menu-map-number__token {
+  stroke: #b84137;
+}
+
+.menu-map-number__inset {
+  fill: none;
+  stroke: rgb(255 255 255 / 68%);
+  stroke-width: 1;
 }
 
 .menu-map-number text {
-  fill: #19352b;
+  fill: #252820;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 22px;
-  font-weight: 900;
+  font-size: 21px;
+  font-weight: 700;
 }
 
 .menu-map-number.is-hot text {
-  fill: #bc2f25;
+  fill: #b72f2b;
 }
 
-.menu-map-roads path {
+.menu-map-number__dots {
+  fill: #4b5045;
+}
+
+.menu-map-number.is-hot .menu-map-number__dots {
+  fill: #c73a32;
+}
+
+.menu-map-docks > path:first-child {
   fill: none;
-  stroke: #e7a23d;
-  stroke-width: 13;
+  stroke: #bc7b35;
+  stroke-width: 6.5;
   stroke-linecap: round;
+  filter: drop-shadow(0 0 2px #31251b);
+}
+
+.menu-map-dock-planks {
+  fill: none;
+  stroke: #6f431f;
+  stroke-width: 1.4;
+}
+
+.menu-map-road path {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 2px #10140f) drop-shadow(0 0 1px #10140f)
+    drop-shadow(0 2px 1px rgb(0 0 0 / 45%));
+}
+
+.menu-map-road--amber path {
+  stroke: #e7a23d;
+}
+
+.menu-map-road--blue path {
+  stroke: #64a6bf;
+}
+
+.menu-map-piece-shadow {
+  fill: #07100d;
+  opacity: 0.52;
 }
 
 .menu-map-house {
-  fill: #f1cc68;
-  stroke: #583f16;
-  stroke-width: 2.5;
+  stroke: #11140f;
+  stroke-width: 2.4;
   stroke-linejoin: round;
+}
+
+.menu-map-house__front {
+  fill: #e4b94f;
+}
+
+.menu-map-house__side,
+.menu-map-house__chimney {
+  fill: #9e6d21;
 }
 
 .menu-map-house__roof {
-  fill: #e6a83f;
+  fill: #f6d675;
 }
 
-.menu-map-house__door,
-.menu-map-city__door {
-  fill: #65431b;
+.menu-map-house__door {
+  fill: #624217;
   stroke: none;
 }
 
+.menu-map-house__window {
+  fill: #fff0ad;
+  stroke: #624217;
+  stroke-width: 1;
+}
+
 .menu-map-city {
-  fill: #75a9bc;
-  stroke: #173d4d;
-  stroke-width: 2.5;
+  stroke: #11140f;
+  stroke-width: 2.4;
   stroke-linejoin: round;
+}
+
+.menu-map-city__wing {
+  fill: #477f99;
+}
+
+.menu-map-city__tower {
+  fill: #64a6bf;
 }
 
 .menu-map-city__roof {
-  fill: #a5cbd3;
+  fill: none;
+  stroke: #9dcbd6;
+  stroke-width: 7;
 }
 
-.menu-map-knight {
-  fill: #d4e0df;
-  stroke: #274b57;
+.menu-map-city__door {
+  fill: #173d4d;
+  stroke: none;
+}
+
+.menu-map-city__windows {
+  fill: #f5e8aa;
+  stroke: #28556a;
+  stroke-width: 0.8;
+}
+
+.menu-map-knight__sword {
+  fill: none;
+  stroke: #eef1df;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.menu-map-knight__shield {
+  fill: #4d8ca8;
+  stroke: #ffd96b;
   stroke-width: 3;
   stroke-linejoin: round;
 }
 
-.menu-map-knight__line {
-  fill: none;
-  stroke: #628795;
-  stroke-width: 4;
-  stroke-linecap: round;
+.menu-map-knight__shade {
+  fill: #244f65;
+  opacity: 0.7;
 }
 
-.menu-map-robber {
-  fill: #253333;
-  stroke: #101a1b;
-  stroke-width: 3;
+.menu-map-knight__helmet {
+  fill: #89bfd0;
+  stroke: #ffd96b;
+  stroke-width: 2;
+}
+
+.menu-map-knight__crest {
+  fill: #f2c655;
+  stroke: #244f65;
+  stroke-width: 1.2;
+}
+
+.menu-map-knight__insignia {
+  fill: none;
+  stroke: #fff0a4;
+  stroke-width: 2.4;
+}
+
+.menu-map-knight__rank {
+  fill: #fff1a6;
+  stroke: #244f65;
+  stroke-width: 0.7;
+}
+
+.menu-map-robber__body {
+  fill: #d7d0c2;
+  stroke: #111519;
+  stroke-width: 2.2;
+}
+
+.menu-map-robber__stripes {
+  fill: none;
+  stroke: #303338;
+  stroke-width: 5;
+}
+
+.menu-map-robber__neck {
+  fill: #a9a397;
+}
+
+.menu-map-robber__head {
+  fill: #bdb6a8;
+  stroke: #54534f;
+  stroke-width: 2;
 }
 
 .menu-map-robber__shine {
-  fill: none;
-  stroke: rgb(255 255 255 / 18%);
-  stroke-width: 3;
-  stroke-linecap: round;
+  fill: #ddd6c8;
+  opacity: 0.34;
 }
 
-.menu-map-ship__sail {
-  fill: #f4e8bd;
-  stroke: #6b5432;
+.menu-map-ship__water {
+  fill: none;
+  stroke: #b9f2ef;
+  stroke-width: 2;
+  opacity: 0.58;
+}
+
+.menu-map-ship__hull-shadow {
+  fill: #1d251f;
+  opacity: 0.5;
+}
+
+.menu-map-ship__hull {
+  fill: #8a502b;
+  stroke: #3d2a1c;
   stroke-width: 2;
   stroke-linejoin: round;
 }
 
-.menu-map-ship__sail--right {
-  fill: #e3c871;
+.menu-map-ship__deck {
+  fill: none;
+  stroke: #d59b55;
+  stroke-width: 1.4;
 }
 
 .menu-map-ship__mast {
   fill: none;
-  stroke: #6b4724;
-  stroke-width: 4;
+  stroke: #51351f;
+  stroke-width: 2.3;
 }
 
-.menu-map-ship__hull {
-  fill: #b66b31;
-  stroke: #5e371d;
-  stroke-width: 2.5;
+.menu-map-ship__sail {
+  fill: #7c69a3;
+  stroke: #fff0c7;
+  stroke-width: 1.4;
   stroke-linejoin: round;
 }
 
-.menu-board-art__seal {
-  position: absolute;
-  right: 5%;
-  bottom: 10%;
-  display: inline-flex;
-  padding: 0.4rem 0.62rem 0.4rem 0.38rem;
-  border: 1px solid rgb(238 211 137 / 52%);
-  border-radius: 999px;
-  align-items: center;
-  gap: 0.4rem;
-  color: #fff0bc;
-  background: rgb(5 42 52 / 82%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 8%),
-    0 0.5rem 1rem rgb(0 15 22 / 38%);
-  font-size: 0.58rem;
-  backdrop-filter: blur(0.45rem);
+.menu-map-ship__sail--right {
+  opacity: 0.78;
 }
 
-.menu-board-art__seal i {
-  display: grid;
-  width: 1.55rem;
-  height: 1.55rem;
-  border-radius: 50%;
-  place-items: center;
-  color: #27444b;
-  background: linear-gradient(145deg, #f2db91, #c89d42);
-  font-size: 0.75rem;
-  font-style: normal;
+.menu-map-ship__flag {
+  fill: #7c69a3;
 }
 
-.menu-board-art__seal b {
-  padding-right: 0.18rem;
+.menu-map-port-ratio rect {
+  fill: #fff4d4;
+  stroke: #7c69a3;
+  stroke-width: 2;
+}
+
+.menu-map-port-ratio text {
+  fill: #272a23;
+  font-family: Inter, sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
 }
 
 @keyframes menu-map-drift {
