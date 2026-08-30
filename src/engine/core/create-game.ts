@@ -16,6 +16,8 @@ import { validateGameConfig } from './game-config';
 import { GAME_STATE_VERSION } from './game-state';
 import type { GameState, PlayerState } from './game-state';
 import { createRandomState, shuffle } from './random';
+import { createMatchStatistics } from './match-statistics';
+import type { PlayerId } from './ids';
 
 export interface CreateGameIssue {
   readonly code: string;
@@ -170,6 +172,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
         ? { remainingPairIds: Array.from({ length: 36 }, (_, index) => index), recentTotals: [] }
         : null,
       inventorsMadness: config.inventorsMadness ? { pendingHexIds: null } : null,
+      statistics: createMatchStatistics(Object.keys(players) as PlayerId[]),
       kn:
         !isKN || generatedKNDecks === null
           ? null

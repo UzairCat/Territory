@@ -16,6 +16,7 @@ import type {
 } from './ids';
 import type { GameConfig } from './game-config';
 import type { RandomState } from './random';
+import type { MatchStatistics } from './match-statistics';
 
 export const GAME_STATE_VERSION = 1;
 
@@ -346,5 +347,6 @@ export interface GameState {
   readonly random: RandomState;
   readonly balancedDice: BalancedDiceState | null;
   readonly inventorsMadness: InventorsMadnessState | null;
+  readonly statistics?: MatchStatistics | undefined;
   readonly kn: KNState | null;
 }

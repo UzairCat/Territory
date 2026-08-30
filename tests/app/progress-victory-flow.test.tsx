@@ -364,6 +364,11 @@ describe('progress cards, open hands, and victory UI', () => {
     const victory = screen.getByRole('dialog', { name: 'Alex wins Territory!' });
     expect(within(victory).getByText('1 VP')).toBeInTheDocument();
     expect(within(victory).getByText(/Victory cards 1/)).toBeInTheDocument();
+    expect(within(victory).getByRole('tab', { name: /Resources/ })).toBeInTheDocument();
+    await user.click(within(victory).getByRole('tab', { name: /Dice/ }));
+    expect(within(victory).getByText('How the table rolled')).toBeInTheDocument();
+    await user.click(within(victory).getByRole('tab', { name: /Cards & actions/ }));
+    expect(within(victory).getByText('Deck activity')).toBeInTheDocument();
     await user.click(within(victory).getByRole('button', { name: /Rematch/ }));
 
     expect(screen.queryByRole('dialog', { name: /wins Territory/ })).not.toBeInTheDocument();

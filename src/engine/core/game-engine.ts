@@ -37,6 +37,7 @@ import { rejectAction } from './dispatch-result';
 import type { DispatchResult } from './dispatch-result';
 import type { GameState } from './game-state';
 import type { PlayerId } from './ids';
+import { accumulateMatchStatistics } from './match-statistics';
 
 export type { DispatchResult } from './dispatch-result';
 
@@ -80,26 +81,36 @@ function finalizeAcceptedAction(
   action: GameAction,
   result: DispatchResult,
 ): DispatchResult {
-  if (!result.ok || !actionCanChangeScore(action)) return result;
+  if (!result.ok) return result;
 
-  const scoring = resolveScoring(previousState, result.state);
-  if (scoring.events.length === 0) return { ...result, state: scoring.state };
+  let state = result.state;
+  let events = result.events;
+  if (actionCanChangeScore(action)) {
+    const scoring = resolveScoring(previousState, state);
+    state = scoring.state;
+    if (scoring.events.length > 0) {
+      events = [...events, ...scoring.events];
+      const history = state.actionHistory;
+      const lastEntry = history.at(-1);
+      state = {
+        ...state,
+        actionHistory:
+          lastEntry === undefined
+            ? history
+            : [
+                ...history.slice(0, -1),
+                { ...lastEntry, eventTypes: events.map((event) => event.type) },
+              ],
+      };
+    }
+  }
 
-  const events = [...result.events, ...scoring.events];
-  const history = scoring.state.actionHistory;
-  const lastEntry = history.at(-1);
   return {
     ok: true,
     events,
     state: {
-      ...scoring.state,
-      actionHistory:
-        lastEntry === undefined
-          ? history
-          : [
-              ...history.slice(0, -1),
-              { ...lastEntry, eventTypes: events.map((event) => event.type) },
-            ],
+      ...state,
+      statistics: accumulateMatchStatistics(previousState.statistics, previousState, state, events),
     },
   };
 }

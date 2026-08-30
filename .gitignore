@@ -5,4 +5,4 @@ coverage/
 *.local
 *.log
 .DS_Store
-
+*:Zone.Identifier

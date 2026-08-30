@@ -237,6 +237,7 @@ export function projectGameState(
       : state.commodityBank,
     progressDeck: hiddenIds('hidden-progress-deck', state.progressDeck.length),
     progressCards: visibleClassicCards(state, viewerPlayerId),
+    statistics: state.turn.phase === 'GAME_OVER' ? state.statistics : undefined,
     pendingInteraction,
     random: {
       algorithm: 'mulberry32',
