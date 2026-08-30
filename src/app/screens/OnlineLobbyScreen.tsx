@@ -251,6 +251,7 @@ export function OnlineLobbyScreen() {
 
   const viewerIsHost = room.viewerPlayerId === room.hostPlayerId;
   const settings = room.settings;
+  const previousSeed = room.previousSeed ?? null;
   const controlsDisabled = !viewerIsHost || commandPending;
   const full = room.players.length === settings.size;
   const connectedPlayers = room.players.filter((player) => player.connected).length;
@@ -886,16 +887,27 @@ export function OnlineLobbyScreen() {
                 }
               }}
             />
-            <Button
-              variant="ghost"
-              disabled={controlsDisabled}
-              onClick={() => {
-                const seed = createOnlineSeed();
-                changeSettings({ seed });
-              }}
-            >
-              Randomize
-            </Button>
+            <div className="lobby-room-seed__actions">
+              <Button
+                variant="ghost"
+                disabled={controlsDisabled}
+                onClick={() => {
+                  const seed = createOnlineSeed();
+                  changeSettings({ seed });
+                }}
+              >
+                Randomize
+              </Button>
+              {previousSeed === null ? null : (
+                <Button
+                  variant="ghost"
+                  disabled={controlsDisabled || settings.seed === previousSeed}
+                  onClick={() => changeSettings({ seed: previousSeed })}
+                >
+                  {settings.seed === previousSeed ? 'Using previous' : 'Use previous seed'}
+                </Button>
+              )}
+            </div>
           </section>
 
           <footer className="lobby-room-start">

@@ -62,6 +62,7 @@ export interface OnlineRoomView {
   readonly hostPlayerId: PlayerId;
   readonly players: readonly OnlineRoomPlayer[];
   readonly settings: OnlineLobbySettings;
+  readonly previousSeed?: string | null;
   readonly game: OnlineGameView | null;
 }
 

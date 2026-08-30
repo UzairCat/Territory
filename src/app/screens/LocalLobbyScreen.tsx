@@ -202,6 +202,7 @@ function formatTurnTime(seconds: number): string {
 export function LocalLobbyScreen() {
   const navigate = useNavigate();
   const lobby = useAppStore((state) => state.lobby);
+  const previousLobbySeed = useAppStore((state) => state.previousLobbySeed);
   const setLobbyMap = useAppStore((state) => state.setLobbyMap);
   const setLobbyMode = useAppStore((state) => state.setLobbyMode);
   const setLobbySeed = useAppStore((state) => state.setLobbySeed);
@@ -210,6 +211,7 @@ export function LocalLobbyScreen() {
   const setLobbyDiscardThreshold = useAppStore((state) => state.setLobbyDiscardThreshold);
   const setLobbyRule = useAppStore((state) => state.setLobbyRule);
   const randomizeLobbySeed = useAppStore((state) => state.randomizeLobbySeed);
+  const usePreviousLobbySeed = useAppStore((state) => state.usePreviousLobbySeed);
   const confirmLobbyResize = useAppStore((state) => state.confirmLobbyResize);
   const addLobbyPlayer = useAppStore((state) => state.addLobbyPlayer);
   const editLobbyPlayer = useAppStore((state) => state.editLobbyPlayer);
@@ -746,9 +748,20 @@ export function LocalLobbyScreen() {
               spellCheck="false"
               onChange={(event) => setLobbySeed(event.target.value)}
             />
-            <Button variant="ghost" onClick={randomizeLobbySeed}>
-              Randomize
-            </Button>
+            <div className="lobby-room-seed__actions">
+              <Button variant="ghost" onClick={randomizeLobbySeed}>
+                Randomize
+              </Button>
+              {previousLobbySeed === null ? null : (
+                <Button
+                  variant="ghost"
+                  disabled={lobby.seed === previousLobbySeed}
+                  onClick={usePreviousLobbySeed}
+                >
+                  {lobby.seed === previousLobbySeed ? 'Using previous' : 'Use previous seed'}
+                </Button>
+              )}
+            </div>
           </section>
 
           <footer className="lobby-room-start">

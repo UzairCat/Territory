@@ -44,6 +44,7 @@ export type BeginGameResult =
 
 interface AppStoreState {
   readonly lobby: LobbyConfig;
+  readonly previousLobbySeed: string | null;
   readonly gameState: GameState | null;
   readonly recentGameEvents: readonly GameEvent[];
   readonly gameEventHistory: readonly GameEvent[];
@@ -60,6 +61,7 @@ interface AppStoreState {
   readonly setLobbyDiscardThreshold: (cards: number) => void;
   readonly setLobbyRule: (rule: LobbyRuleKey, enabled: boolean) => void;
   readonly randomizeLobbySeed: () => void;
+  readonly usePreviousLobbySeed: () => void;
   readonly confirmLobbyResize: (size: PlayerCount) => void;
   readonly addLobbyPlayer: (name: string, colorId: ColorId) => void;
   readonly editLobbyPlayer: (id: PlayerId, name: string, colorId: ColorId) => void;
@@ -77,6 +79,7 @@ interface AppStoreState {
   readonly toggleAdminMode: () => void;
   readonly grantAllProgressCards: () => void;
   readonly clearGame: () => void;
+  readonly returnGameToLobby: () => void;
   readonly openSettings: () => void;
   readonly closeSettings: () => void;
   readonly updateSettings: (settings: Partial<AppSettings>) => void;
@@ -108,6 +111,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 function initialState() {
   return {
     lobby: createDefaultLobby(createLobbySeed()),
+    previousLobbySeed: null,
     gameState: null,
     recentGameEvents: [],
     gameEventHistory: [],
@@ -123,6 +127,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   startFreshLobby: () =>
     set({
       lobby: createDefaultLobby(createLobbySeed()),
+      previousLobbySeed: null,
       gameState: null,
       recentGameEvents: [],
       gameEventHistory: [],
@@ -154,6 +159,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setLobbyRule: (rule, enabled) => set((state) => ({ lobby: { ...state.lobby, [rule]: enabled } })),
   randomizeLobbySeed: () =>
     set((state) => ({ lobby: { ...state.lobby, seed: createLobbySeed() } })),
+  usePreviousLobbySeed: () =>
+    set((state) =>
+      state.previousLobbySeed === null
+        ? state
+        : { lobby: { ...state.lobby, seed: state.previousLobbySeed } },
+    ),
   confirmLobbyResize: (size) =>
     set((state) => ({
       lobby: { ...state.lobby, size, players: state.lobby.players.slice(0, size) },
@@ -326,6 +337,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       gamePaused: false,
       adminMode: false,
     }),
+  returnGameToLobby: () =>
+    set((state) => ({
+      lobby: { ...state.lobby, seed: createLobbySeed() },
+      previousLobbySeed: state.gameState?.config.seed ?? state.lobby.seed,
+      gameState: null,
+      recentGameEvents: [],
+      gameEventHistory: [],
+      gamePaused: false,
+      adminMode: false,
+    })),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   updateSettings: (settings) => set((state) => ({ settings: { ...state.settings, ...settings } })),

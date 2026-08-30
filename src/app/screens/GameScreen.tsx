@@ -1054,6 +1054,7 @@ export function GameScreen() {
   const gameEventHistory = useAppStore((state) => state.gameEventHistory);
   const gamePaused = useAppStore((state) => state.gamePaused);
   const clearGame = useAppStore((state) => state.clearGame);
+  const returnGameToLobby = useAppStore((state) => state.returnGameToLobby);
   const rematch = useAppStore((state) => state.rematch);
   const dispatchLocalGameAction = useAppStore((state) => state.dispatchGameAction);
   const pauseGame = useAppStore((state) => state.pauseGame);
@@ -1172,6 +1173,11 @@ export function GameScreen() {
   useEffect(() => {
     audioManager.setMusicVolume(settings.masterVolume, settings.musicVolume);
   }, [settings.masterVolume, settings.musicVolume]);
+
+  useEffect(() => {
+    if (audioSessionId === null || (gameState?.actionHistory.length ?? 0) !== 0) return;
+    audioManager.playGameBegin(audioSessionId, settings.masterVolume, settings.sfxVolume);
+  }, [audioSessionId, gameState?.actionHistory.length, settings.masterVolume, settings.sfxVolume]);
 
   useEffect(() => {
     if (audioEventKey === null || audioEventKey === lastPlayedAudioEventKey.current) return;
@@ -1871,7 +1877,8 @@ export function GameScreen() {
       return;
     }
     void navigate(destination, { flushSync: true });
-    clearGame();
+    if (destination === '/lobby') returnGameToLobby();
+    else clearGame();
   };
 
   const handleActionResult = (

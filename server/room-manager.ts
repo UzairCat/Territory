@@ -63,6 +63,7 @@ interface RoomRecord {
   readonly debugPlayerIds: Set<PlayerId>;
   hostPlayerId: PlayerId;
   settings: OnlineLobbySettings;
+  previousSeed: string | null;
   phase: OnlineRoomPhase;
   state: GameState | null;
   revision: number;
@@ -295,6 +296,7 @@ export class RoomManager {
       debugPlayerIds: new Set(),
       hostPlayerId: id,
       settings: toSettings(defaults),
+      previousSeed: null,
       phase: 'LOBBY',
       state: null,
       revision: 0,
@@ -573,6 +575,8 @@ export class RoomManager {
 
     this.clearTimer(room);
     this.clearTradeTimer(room);
+    room.previousSeed = room.settings.seed;
+    room.settings = { ...room.settings, seed: randomSeed() };
     room.phase = 'LOBBY';
     room.state = null;
     room.revision += 1;
@@ -794,6 +798,7 @@ export class RoomManager {
         host: member.id === room.hostPlayerId,
       })),
       settings: room.settings,
+      previousSeed: room.previousSeed,
       game:
         room.state === null
           ? null

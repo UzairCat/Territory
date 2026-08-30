@@ -181,6 +181,25 @@ describe('application session store', () => {
     expect(useAppStore.getState().gameEventHistory).toEqual([]);
   });
 
+  it('prepares a new seed when returning to the lobby and can restore the completed seed', () => {
+    const actions = useAppStore.getState();
+    actions.addLobbyPlayer('Alex', PLAYER_COLORS[0]!.id);
+    actions.addLobbyPlayer('Sam', PLAYER_COLORS[1]!.id);
+    expect(actions.beginGame().ok).toBe(true);
+    const completedSeed = useAppStore.getState().gameState?.config.seed;
+    if (completedSeed === undefined) throw new Error('Return-to-lobby fixture has no match seed.');
+
+    actions.returnGameToLobby();
+    expect(useAppStore.getState()).toMatchObject({
+      gameState: null,
+      previousLobbySeed: completedSeed,
+    });
+    expect(useAppStore.getState().lobby.seed).not.toBe(completedSeed);
+
+    actions.usePreviousLobbySeed();
+    expect(useAppStore.getState().lobby.seed).toBe(completedSeed);
+  });
+
   it('grants one fresh copy of every Progress Card on each developer-button press', () => {
     const actions = useAppStore.getState();
     actions.setLobbyMode(KN_MODE.id);

@@ -121,6 +121,7 @@ describe('online entry and lobby presentation', () => {
           },
         ],
         settings: lobbySettings,
+        previousSeed: 'previous-online-seed',
         game: null,
       },
     });
@@ -150,6 +151,11 @@ describe('online entry and lobby presentation', () => {
     await user.click(screen.getByRole('button', { name: 'Select K+N mode' }));
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ modeId: 'k-n', victoryTarget: 13 }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Use previous seed' }));
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ seed: 'previous-online-seed' }),
     );
 
     await user.click(screen.getByRole('button', { name: 'Next maps' }));

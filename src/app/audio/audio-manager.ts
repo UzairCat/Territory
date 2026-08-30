@@ -1,7 +1,7 @@
 import type { GameEvent } from '../../engine/core/events';
 import type { PlayerId } from '../../engine/core/ids';
 import {
-  MEDIEVAL_MUSIC_TRACKS,
+  BACKGROUND_MUSIC_TRACKS,
   SOUND_ASSET_URLS,
   type MusicTrack,
   type SoundCue,
@@ -36,40 +36,47 @@ export function audioCuesForEvents(
   );
   if (perkUnlock !== undefined) {
     if (!playerCanHearPrivateCue(viewerPlayerId, perkUnlock.playerId)) {
-      return [cue('IMPROVEMENT')];
+      return [];
     }
-    return [
-      cue(
-        perkUnlock.track === 'SCIENCE'
-          ? 'PERK_SCIENCE'
-          : perkUnlock.track === 'TRADE'
-            ? 'PERK_TRADE'
-            : 'PERK_POLITICS',
-      ),
-    ];
+    return [cue('PERK')];
   }
 
   if (events.some((event) => event.type === 'LONGEST_ROAD_CHANGED' && event.playerId !== null)) {
     return [cue('LONGEST_ROAD')];
   }
 
+  const turnStarted = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'TURN_STARTED' }> =>
+      event.type === 'TURN_STARTED',
+  );
+  if (turnStarted !== undefined && playerCanHearPrivateCue(viewerPlayerId, turnStarted.playerId)) {
+    return [cue('TURN')];
+  }
+
   const diceRolled = events.some(
     (event) => event.type === 'DICE_ROLLED' || event.type === 'KN_DICE_ROLLED',
   );
+  const discardAlert = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'ROBBER_SEQUENCE_STARTED' }> =>
+      event.type === 'ROBBER_SEQUENCE_STARTED',
+  );
+  const viewerMustDiscard =
+    discardAlert !== undefined &&
+    discardAlert.discardPlayerIds.length > 0 &&
+    (viewerPlayerId === null || discardAlert.discardPlayerIds.includes(viewerPlayerId));
   const cityCollapsed = events.some((event) => event.type === 'CITY_DOWNGRADED');
   const barbarianBattle = events.some((event) => event.type === 'BARBARIAN_ATTACK_RESOLVED');
-  const barbarianAdvanced = events.some((event) => event.type === 'BARBARIAN_ADVANCED');
   if (diceRolled) {
     const requests: ScheduledSoundCue[] = [cue('DICE_ROLL')];
     if (barbarianBattle) requests.push(cue('BARBARIAN_BATTLE', 700));
-    else if (barbarianAdvanced) requests.push(cue('BARBARIAN_ADVANCE', 720));
     if (cityCollapsed) requests.push(cue('CITY_COLLAPSE', barbarianBattle ? 1_150 : 760));
-    const drawnCard = events.find(
-      (event): event is Extract<GameEvent, { readonly type: 'KN_PROGRESS_CARD_DRAWN' }> =>
-        event.type === 'KN_PROGRESS_CARD_DRAWN',
-    );
-    if (drawnCard !== undefined && playerCanHearPrivateCue(viewerPlayerId, drawnCard.playerId)) {
-      requests.push(cue('CARD', 760));
+    if (viewerMustDiscard) {
+      requests.push(
+        cue(
+          'DISCARD_SLAM',
+          cityCollapsed ? (barbarianBattle ? 1_650 : 1_260) : barbarianBattle ? 1_220 : 650,
+        ),
+      );
     }
     return requests;
   }
@@ -80,15 +87,8 @@ export function audioCuesForEvents(
       ...(cityCollapsed ? [cue('CITY_COLLAPSE', barbarianBattle ? 520 : 0)] : []),
     ];
   }
+  if (viewerMustDiscard) return [cue('DISCARD_SLAM')];
   if (events.some((event) => event.type === 'ROBBER_MOVED')) return [cue('ROBBER_THREAT')];
-  if (
-    events.some(
-      (event) =>
-        event.type === 'RESOURCES_DISCARDED' || event.type === 'KN_PROGRESS_CARD_DISCARDED',
-    )
-  ) {
-    return [cue('DISCARD_SLAM')];
-  }
   if (events.some((event) => event.type === 'KNIGHT_ACTIVATED')) return [cue('SWORD_DRAW')];
   if (
     events.some((event) =>
@@ -112,67 +112,38 @@ export function audioCuesForEvents(
   ) {
     return [cue('KNIGHT_MOVE')];
   }
-  if (barbarianAdvanced) return [cue('BARBARIAN_ADVANCE')];
-  if (events.some((event) => event.type === 'MERCHANT_MOVED')) return [cue('MERCHANT')];
-  if (events.some((event) => event.type === 'IMPROVEMENT_BOUGHT')) return [cue('IMPROVEMENT')];
-  if (events.some((event) => event.type === 'ROAD_BUILT')) return [cue('ROAD_PLACE')];
-  if (
-    events.some(
-      (event) => event.type === 'TRADE_COMPLETED' || event.type === 'COMMERCIAL_HARBOR_EXCHANGED',
-    )
-  ) {
-    return [cue('TRADE')];
-  }
-  const privateCardDraw = events.find(
-    (event): event is Extract<GameEvent, { readonly type: 'KN_PROGRESS_CARD_DRAWN' }> =>
-      event.type === 'KN_PROGRESS_CARD_DRAWN',
+  const improvement = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'IMPROVEMENT_BOUGHT' }> =>
+      event.type === 'IMPROVEMENT_BOUGHT',
   );
-  if (
-    privateCardDraw !== undefined &&
-    !playerCanHearPrivateCue(viewerPlayerId, privateCardDraw.playerId)
-  ) {
-    return [];
+  if (improvement !== undefined && playerCanHearPrivateCue(viewerPlayerId, improvement.playerId)) {
+    return [cue('IMPROVEMENT')];
   }
-  if (
-    events.some((event) =>
-      [
-        'KN_PROGRESS_CARD_DRAWN',
-        'KN_PROGRESS_CARD_PLAYED',
-        'PROGRESS_CARD_BOUGHT',
-        'PROGRESS_CARD_PLAYED',
-      ].includes(event.type),
-    )
-  ) {
-    return [cue('CARD')];
-  }
-  if (events.some((event) => event.type === 'RESOURCES_PRODUCED')) return [cue('RESOURCE')];
-  if (events.some((event) => event.type === 'TURN_STARTED')) return [cue('TURN')];
+  if (events.some((event) => event.type === 'ROAD_BUILT')) return [cue('ROAD_PLACE')];
+  if (events.some((event) => event.type === 'TRADE_OFFERED')) return [cue('TRADE')];
+  if (events.some((event) => event.type === 'TRADE_ACCEPTED')) return [cue('TRADE_ACCEPT')];
   return [];
 }
 
 const CUE_VOLUME: Readonly<Record<SoundCue, number>> = {
-  BARBARIAN_ADVANCE: 0.66,
   BARBARIAN_BATTLE: 0.7,
-  CARD: 0.56,
   CITY_COLLAPSE: 0.76,
   DICE_ROLL: 0.72,
   DISCARD_SLAM: 0.74,
+  GAME_BEGIN: 0.72,
   IMPROVEMENT: 0.56,
   INVALID: 0.64,
   KNIGHT_MOVE: 0.56,
   LONGEST_ROAD: 0.72,
-  MERCHANT: 0.55,
-  PERK_POLITICS: 0.68,
-  PERK_SCIENCE: 0.65,
-  PERK_TRADE: 0.64,
-  RESOURCE: 0.46,
+  PERK: 0.66,
   ROAD_PLACE: 0.58,
   ROBBER_THREAT: 0.7,
   STONE_PLACE: 0.72,
   SWORD_DRAW: 0.68,
   TIMER: 0.42,
   TRADE: 0.54,
-  TURN: 0.44,
+  TRADE_ACCEPT: 0.58,
+  TURN: 0.56,
   VICTORY: 0.78,
 };
 
@@ -195,7 +166,7 @@ function mediaPlaybackAvailable(): boolean {
 }
 
 function shuffledTracks(previousTrackId: string | null): readonly MusicTrack[] {
-  const tracks = [...MEDIEVAL_MUSIC_TRACKS];
+  const tracks = [...BACKGROUND_MUSIC_TRACKS];
   for (let index = tracks.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
     [tracks[index], tracks[swapIndex]] = [tracks[swapIndex]!, tracks[index]!];
@@ -221,6 +192,7 @@ class AudioManager {
   private musicVolume = 0;
   private musicDuckTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private musicDucked = false;
+  private lastGameBeginSessionId: string | null = null;
   private unlockHandler: (() => void) | null = null;
   private visibilityHandler: (() => void) | null = null;
 
@@ -237,6 +209,12 @@ class AudioManager {
 
   playInvalid(masterVolume: number, sfxVolume: number): void {
     this.scheduleCue('INVALID', 0, masterVolume, sfxVolume);
+  }
+
+  playGameBegin(gameSessionId: string, masterVolume: number, sfxVolume: number): void {
+    if (this.lastGameBeginSessionId === gameSessionId) return;
+    this.lastGameBeginSessionId = gameSessionId;
+    this.scheduleCue('GAME_BEGIN', 0, masterVolume, sfxVolume);
   }
 
   playTimerTick(masterVolume: number, sfxVolume: number): void {
@@ -330,8 +308,9 @@ class AudioManager {
       cleanup();
     }
     if (cueName === 'VICTORY') this.duckMusic(5_100);
+    else if (cueName === 'GAME_BEGIN') this.duckMusic(3_400);
     else if (cueName === 'LONGEST_ROAD') this.duckMusic(3_050);
-    else if (cueName.startsWith('PERK_')) this.duckMusic(2_900);
+    else if (cueName === 'PERK') this.duckMusic(2_900);
   }
 
   private preloadEffects(): void {

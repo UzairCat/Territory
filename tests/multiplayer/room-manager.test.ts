@@ -422,6 +422,7 @@ describe('authoritative online rooms', () => {
   it('returns the shared match to its existing lobby without removing any seats', () => {
     const { manager, room, host, guest } = createStartedRoom();
     const memberIds = [...room.members.keys()];
+    const completedSeed = room.settings.seed;
 
     expect(manager.returnToLobby(guest)).toMatchObject({
       ok: false,
@@ -431,12 +432,21 @@ describe('authoritative online rooms', () => {
 
     expect(room.phase).toBe('LOBBY');
     expect(room.state).toBeNull();
+    expect(room.settings.seed).not.toBe(completedSeed);
+    expect(room.previousSeed).toBe(completedSeed);
     expect([...room.members.keys()]).toEqual(memberIds);
     expect(manager.view(room, host.playerId)).toMatchObject({
       phase: 'LOBBY',
       viewerPlayerId: host.playerId,
+      previousSeed: completedSeed,
       game: null,
     });
+
+    expect(manager.updateSettings(host, { ...room.settings, seed: completedSeed })).toEqual({
+      ok: true,
+    });
+    expect(manager.start(host)).toEqual({ ok: true });
+    expect(room.state?.config.seed).toBe(completedSeed);
     expect(manager.resume(host, 'host-returned-socket')).toMatchObject({ ok: true });
   });
 

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
 import { App } from '../../src/app/App';
+import { audioManager } from '../../src/app/audio/audio-manager';
 import { RANDOM_MAP_ID } from '../../src/app/lobby/lobby-model';
 import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
 import type { BoardViewportProps } from '../../src/board-renderer/BoardViewport';
@@ -120,6 +121,7 @@ describe('application flow', () => {
 
   it('creates two players and initializes a match through the engine', async () => {
     const user = userEvent.setup();
+    const gameBeginSound = vi.spyOn(audioManager, 'playGameBegin');
     renderApp();
 
     await user.click(screen.getByRole('button', { name: 'Local game' }));
@@ -133,6 +135,10 @@ describe('application flow', () => {
     const startButton = screen.getByRole('button', { name: 'Start game' });
     expect(startButton).toBeEnabled();
     await user.click(startButton);
+
+    expect(gameBeginSound).toHaveBeenCalledTimes(1);
+    expect(gameBeginSound).toHaveBeenCalledWith(expect.any(String), 80, 80);
+    gameBeginSound.mockRestore();
 
     expect(screen.getByText('Place a house')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Territory board' })).toBeInTheDocument();

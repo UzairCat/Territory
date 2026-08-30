@@ -11767,7 +11767,7 @@ input[type='checkbox'] {
   gap: 0.55rem;
 }
 
-.lobby-room-seed > div {
+.lobby-room-seed > div:first-child {
   display: grid;
   gap: 0.1rem;
 }
@@ -11800,6 +11800,14 @@ input[type='checkbox'] {
   color: #dceced;
   background: rgb(7 48 60 / 44%);
   font-size: 0.58rem;
+}
+
+.lobby-room-seed__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .lobby-room-start {
@@ -11973,8 +11981,12 @@ input[type='checkbox'] {
     grid-template-columns: 1fr auto;
   }
 
-  .lobby-room-seed > div {
+  .lobby-room-seed > div:first-child {
     grid-column: 1 / -1;
+  }
+
+  .lobby-room-seed__actions {
+    grid-column: 2;
   }
 
   .lobby-room-start {
