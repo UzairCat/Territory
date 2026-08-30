@@ -44,6 +44,16 @@ describe('locked classic content', () => {
       ['Lakes', 39, 9, 1],
       ['Pond', 24, 8, 1],
       ['Twirl', 42, 12, 1],
+      ['Crownlands', 45, 14, 1],
+      ['Four Kingdoms', 52, 16, 1],
+      ['Crescent Bay', 43, 13, 1],
+      ['Citadel', 43, 12, 1],
+      ['Rift', 48, 15, 1],
+      ["Dragon's Spine", 58, 18, 1],
+      ['Compass Rose', 46, 16, 1],
+      ['Hourglass', 39, 12, 1],
+      ['Clover', 41, 12, 1],
+      ['Great River', 56, 17, 2],
     ]);
     for (const map of MAPS) {
       const wastelandCount = map.terrainPool.filter((terrain) => terrain === 'wasteland').length;

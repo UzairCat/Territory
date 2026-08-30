@@ -13,6 +13,18 @@ import {
   USA_MAP,
 } from './additional-maps';
 import { BASE_MAP } from './base-map';
+import {
+  CITADEL_MAP,
+  CLOVER_MAP,
+  COMPASS_ROSE_MAP,
+  CRESCENT_BAY_MAP,
+  CROWNLANDS_MAP,
+  DRAGONS_SPINE_MAP,
+  FOUR_KINGDOMS_MAP,
+  GREAT_RIVER_MAP,
+  HOURGLASS_MAP,
+  RIFT_MAP,
+} from './original-maps';
 
 export const MAPS: readonly MapDefinition[] = [
   BASE_MAP,
@@ -26,6 +38,16 @@ export const MAPS: readonly MapDefinition[] = [
   LAKES_MAP,
   POND_MAP,
   TWIRL_MAP,
+  CROWNLANDS_MAP,
+  FOUR_KINGDOMS_MAP,
+  CRESCENT_BAY_MAP,
+  CITADEL_MAP,
+  RIFT_MAP,
+  DRAGONS_SPINE_MAP,
+  COMPASS_ROSE_MAP,
+  HOURGLASS_MAP,
+  CLOVER_MAP,
+  GREAT_RIVER_MAP,
 ];
 
 export function getMapDefinition(mapId: MapId): MapDefinition | undefined {
