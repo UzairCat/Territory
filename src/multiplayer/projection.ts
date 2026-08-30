@@ -54,6 +54,7 @@ function visibleClassicCards(
     Object.values(state.progressCards)
       .filter(
         (card) =>
+          state.turn.phase === 'GAME_OVER' ||
           card.ownerId === viewerPlayerId ||
           card.playedTurn !== null ||
           state.progressDiscard.includes(card.instanceId),

@@ -2,6 +2,8 @@ import { useState, type CSSProperties } from 'react';
 
 import { HAND_GOODS } from '../../engine/content/commodities';
 import { PLAYER_COLORS } from '../../engine/content/colors';
+import { getKNProgressCardDefinition } from '../../engine/content/kn-progress-cards';
+import { PROGRESS_CARDS } from '../../engine/content/progress-cards';
 import type { ResourceBundle } from '../../engine/content/types';
 import type { GameState } from '../../engine/core/game-state';
 import {
@@ -11,7 +13,7 @@ import {
   type ProgressStatisticFamily,
 } from '../../engine/core/match-statistics';
 import type { PlayerId, ResourceId } from '../../engine/core/ids';
-import { calculateScoreBreakdown } from '../../engine/rules/scoring-rules';
+import { calculateScoreBreakdown, type ScoreBreakdown } from '../../engine/rules/scoring-rules';
 import { orderedPlayerIds } from '../../engine/rules/setup-rules';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
@@ -26,7 +28,7 @@ interface VictoryModalProps {
   readonly onMenu: () => void;
 }
 
-type ReportTab = 'OVERVIEW' | 'RESOURCES' | 'DICE' | 'ACTIVITY';
+type ReportTab = 'OVERVIEW' | 'POINTS' | 'RESOURCES' | 'DICE' | 'ACTIVITY';
 
 const REPORT_TABS: readonly {
   readonly id: ReportTab;
@@ -34,6 +36,7 @@ const REPORT_TABS: readonly {
   readonly icon: string;
 }[] = [
   { id: 'OVERVIEW', label: 'Overview', icon: '♛' },
+  { id: 'POINTS', label: 'Points', icon: '★' },
   { id: 'RESOURCES', label: 'Resources', icon: '◆' },
   { id: 'DICE', label: 'Dice', icon: '⚄' },
   { id: 'ACTIVITY', label: 'Cards & actions', icon: '✦' },
@@ -93,6 +96,124 @@ function leaderId(
     }
   }
   return leader === null ? null : { playerId: leader, value: highest };
+}
+
+interface PointSource {
+  readonly id: string;
+  readonly icon: string;
+  readonly label: string;
+  readonly detail: string;
+  readonly points: number;
+}
+
+const METROPOLIS_NAMES = {
+  SCIENCE: 'Science',
+  TRADE: 'Trade',
+  POLITICS: 'Politics',
+} as const;
+
+function victoryCardNames(state: GameState, playerId: PlayerId): readonly string[] {
+  if (state.kn === null) {
+    return Object.values(state.progressCards).flatMap((card) => {
+      if (card.ownerId !== playerId) return [];
+      const definition = PROGRESS_CARDS.find((candidate) => candidate.id === card.definitionId);
+      return definition !== undefined && definition.victoryPoints > 0
+        ? [definition.displayName]
+        : [];
+    });
+  }
+  const player = state.players[playerId];
+  if (player === undefined) return [];
+  return player.revealedKNProgressCardIds.flatMap((cardInstanceId) => {
+    const card = state.kn?.progressCards[cardInstanceId];
+    const definition =
+      card === undefined ? undefined : getKNProgressCardDefinition(card.definitionId);
+    return definition !== undefined && definition.revealedVictoryPoints > 0
+      ? [definition.displayName]
+      : [];
+  });
+}
+
+function pointSources(
+  state: GameState,
+  playerId: PlayerId,
+  score: ScoreBreakdown,
+): readonly PointSource[] {
+  const metropolisNames = Object.values(state.board.vertices).flatMap((vertex) => {
+    const metropolis = vertex.building?.ownerId === playerId ? vertex.building.metropolis : null;
+    return metropolis === null || metropolis === undefined ? [] : [METROPOLIS_NAMES[metropolis]];
+  });
+  const cardNames = victoryCardNames(state, playerId);
+  const sources: PointSource[] = [
+    {
+      id: 'houses',
+      icon: '⌂',
+      label: 'Houses',
+      detail: `${score.houses} on the board × 1 VP`,
+      points: score.houses,
+    },
+    {
+      id: 'cities',
+      icon: '♜',
+      label: 'Cities',
+      detail: `${score.cities / 2} on the board × 2 VP`,
+      points: score.cities,
+    },
+    {
+      id: 'metropolises',
+      icon: '♛',
+      label: 'Metropolises',
+      detail:
+        metropolisNames.length > 0 ? `${metropolisNames.join(', ')} × 2 VP` : 'No Metropolis held',
+      points: score.metropolises,
+    },
+    {
+      id: 'longest-road',
+      icon: '═',
+      label: 'Longest Road',
+      detail: 'Held at the end of the match',
+      points: score.longestRoad,
+    },
+    {
+      id: 'largest-force',
+      icon: '♞',
+      label: 'Largest Force',
+      detail: 'Held at the end of the match',
+      points: score.largestForce,
+    },
+    {
+      id: 'defender',
+      icon: '⚔',
+      label: 'Defender rewards',
+      detail: `${score.defenderPoints} successful defense award${score.defenderPoints === 1 ? '' : 's'}`,
+      points: score.defenderPoints,
+    },
+    {
+      id: 'merchant',
+      icon: '⚓',
+      label: 'Merchant',
+      detail: 'Controlled at the end of the match',
+      points: score.merchant,
+    },
+    {
+      id: 'victory-cards',
+      icon: '✦',
+      label: 'Victory cards',
+      detail: cardNames.length > 0 ? cardNames.join(', ') : 'No victory cards revealed',
+      points: score.victoryCards,
+    },
+  ].filter((source) => source.points > 0);
+  const accountedPoints = sources.reduce((total, source) => total + source.points, 0);
+  if (accountedPoints < score.total) {
+    sources.push({
+      id: 'other',
+      icon: '+',
+      label: 'Other points',
+      detail: 'Additional scoring effects',
+      points: score.total - accountedPoints,
+    });
+  }
+  return sources;
 }
 
 function StatTile({
@@ -281,6 +402,7 @@ export function VictoryModal({
                     {rankedPlayerIds.map((playerId, index) => {
                       const player = state.players[playerId]!;
                       const score = calculateScoreBreakdown(state, playerId);
+                      const sources = pointSources(state, playerId, score);
                       const playerStatistics = statistics.players[playerId]!;
                       return (
                         <article
@@ -306,11 +428,11 @@ export function VictoryModal({
                               />
                             </div>
                             <small>
-                              Buildings {score.buildings} · Longest road {score.longestRoad} ·{' '}
-                              {state.kn === null
-                                ? `Largest force ${score.largestForce}`
-                                : 'C&K awards'}{' '}
-                              · Victory cards {score.progressCards}
+                              {sources.length === 0
+                                ? 'No victory points scored'
+                                : sources
+                                    .map((source) => `${source.label} ${source.points}`)
+                                    .join(' · ')}
                             </small>
                           </div>
                           <div className="match-report-standing-score">
@@ -355,6 +477,64 @@ export function VictoryModal({
                 </section>
               </div>
             </>
+          ) : null}
+
+          {activeTab === 'POINTS' ? (
+            <section className="match-report-section" aria-label="Victory point breakdown">
+              <header className="match-report-section__heading">
+                <div>
+                  <small>VICTORY POINTS</small>
+                  <h4>How every point was earned</h4>
+                </div>
+                <span>{state.config.victoryTarget} VP target</span>
+              </header>
+              <div className="match-report-point-players">
+                {rankedPlayerIds.map((playerId) => {
+                  const player = state.players[playerId]!;
+                  const score = calculateScoreBreakdown(state, playerId);
+                  const sources = pointSources(state, playerId, score);
+                  return (
+                    <article
+                      key={playerId}
+                      className={`match-report-point-player ${playerId === state.winnerId ? 'is-winner' : ''}`}
+                      style={playerStyle(state, playerId)}
+                      aria-label={`${player.name} point breakdown`}
+                    >
+                      <header>
+                        <PlayerAvatar playerName={player.name} avatarId={player.avatarId} />
+                        <div>
+                          <strong>{player.name}</strong>
+                          <small>
+                            {playerId === state.winnerId ? 'Match winner' : 'Final score'}
+                          </small>
+                        </div>
+                        <b>{score.total} VP</b>
+                      </header>
+                      {sources.length === 0 ? (
+                        <p className="match-report-empty">No victory points were scored.</p>
+                      ) : (
+                        <ul>
+                          {sources.map((source) => (
+                            <li key={source.id}>
+                              <i aria-hidden="true">{source.icon}</i>
+                              <div>
+                                <strong>{source.label}</strong>
+                                <small>{source.detail}</small>
+                              </div>
+                              <b>+{source.points} VP</b>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <footer>
+                        <span>Total accounted points</span>
+                        <strong>{score.total} VP</strong>
+                      </footer>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
           ) : null}
 
           {activeTab === 'RESOURCES' ? (

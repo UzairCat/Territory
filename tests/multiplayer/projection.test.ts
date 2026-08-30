@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { COMMODITY_IDS } from '../../src/engine/content/commodities';
 import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
+import { PROGRESS_CARD_IDS } from '../../src/engine/content/progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
 import { createGame } from '../../src/engine/core/create-game';
@@ -69,6 +70,44 @@ describe('online player projection', () => {
       [RESOURCE_IDS.ore]: 2,
     });
     expect(secondView.progressCards[hiddenCardId]?.definitionId).toBe('monopoly');
+  });
+
+  it('reveals classic victory cards to every player when the game ends', () => {
+    const hiddenCardId = cardInstanceId('card-final-chapel');
+    const state = createTestGameState('ACTION_PHASE');
+    const privateState: GameState = {
+      ...state,
+      players: {
+        ...state.players,
+        [TEST_PLAYER_IDS[1]]: {
+          ...state.players[TEST_PLAYER_IDS[1]]!,
+          progressCardIds: [hiddenCardId],
+        },
+      },
+      progressCards: {
+        [hiddenCardId]: {
+          instanceId: hiddenCardId,
+          definitionId: PROGRESS_CARD_IDS.chapel,
+          ownerId: TEST_PLAYER_IDS[1],
+          purchasedTurn: 1,
+          playedTurn: null,
+        },
+      },
+    };
+
+    expect(projectGameState(privateState, TEST_PLAYER_IDS[0]).progressCards[hiddenCardId]).toBe(
+      undefined,
+    );
+
+    const completedState: GameState = {
+      ...privateState,
+      winnerId: TEST_PLAYER_IDS[1],
+      turn: { ...privateState.turn, phase: 'GAME_OVER' },
+    };
+    expect(
+      projectGameState(completedState, TEST_PLAYER_IDS[0]).progressCards[hiddenCardId]
+        ?.definitionId,
+    ).toBe(PROGRESS_CARD_IDS.chapel);
   });
 
   it('publishes totals while redacting private card events from uninvolved players', () => {

@@ -13461,7 +13461,7 @@ input[type='checkbox'] {
   padding: 0 1rem;
   border-top: 1px solid rgb(255 255 255 / 4%);
   border-bottom: 1px solid rgb(255 255 255 / 8%);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   background: rgb(3 11 8 / 52%);
 }
 
@@ -13829,6 +13829,146 @@ input[type='checkbox'] {
   margin: 0;
   color: #788d81;
   font-size: 0.65rem;
+}
+
+.match-report-point-players {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.match-report-point-player {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--report-player-color) 25%, rgb(194 208 199 / 14%));
+  border-radius: 0.75rem;
+  background:
+    radial-gradient(
+      circle at 0 0,
+      color-mix(in srgb, var(--report-player-color) 13%, transparent),
+      transparent 9rem
+    ),
+    rgb(2 11 7 / 38%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.match-report-point-player.is-winner {
+  border-color: rgb(230 198 105 / 42%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    0 0 1rem rgb(207 172 76 / 7%);
+}
+
+.match-report-point-player > header {
+  display: grid;
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  background: rgb(255 255 255 / 2.5%);
+}
+
+.match-report-point-player > header .preset-player-avatar {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-color: color-mix(in srgb, var(--report-player-color) 68%, #ead78f);
+}
+
+.match-report-point-player > header > div {
+  display: grid;
+  min-width: 0;
+}
+
+.match-report-point-player > header strong {
+  overflow: hidden;
+  color: #edf3ee;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-report-point-player > header small {
+  color: #7f9488;
+  font-size: 0.48rem;
+}
+
+.match-report-point-player > header > b {
+  color: #f1d577;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+}
+
+.match-report-point-player > ul {
+  display: grid;
+  margin: 0;
+  padding: 0.42rem 0.6rem;
+  list-style: none;
+  gap: 0.3rem;
+}
+
+.match-report-point-player > ul > li {
+  display: grid;
+  min-width: 0;
+  padding: 0.38rem 0.45rem;
+  border: 1px solid rgb(190 207 196 / 8%);
+  border-radius: 0.5rem;
+  grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgb(0 0 0 / 12%);
+}
+
+.match-report-point-player > ul > li > i {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 1px solid color-mix(in srgb, var(--report-player-color) 38%, #927b42);
+  border-radius: 0.42rem;
+  place-items: center;
+  color: #dfc571;
+  background: color-mix(in srgb, var(--report-player-color) 10%, #112018);
+  font-size: 0.7rem;
+  font-style: normal;
+}
+
+.match-report-point-player > ul > li > div {
+  display: grid;
+  min-width: 0;
+}
+
+.match-report-point-player > ul > li strong {
+  color: #dce7df;
+  font-size: 0.62rem;
+}
+
+.match-report-point-player > ul > li small {
+  overflow: hidden;
+  color: #74897d;
+  font-size: 0.46rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-report-point-player > ul > li > b {
+  color: #ead078;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.match-report-point-player > footer {
+  display: flex;
+  padding: 0.48rem 0.7rem;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  align-items: center;
+  justify-content: space-between;
+  color: #71877b;
+  background: rgb(255 255 255 / 2%);
+  font-size: 0.5rem;
+}
+
+.match-report-point-player > footer strong {
+  color: #f0d57e;
+  font-size: 0.66rem;
 }
 
 .match-report-flow-key {
@@ -14561,6 +14701,9 @@ input[type='checkbox'] {
   }
   .match-report-honours {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .match-report-point-players {
+    grid-template-columns: 1fr;
   }
   .match-report-resource-metrics {
     grid-template-columns: repeat(4, minmax(0, 1fr));

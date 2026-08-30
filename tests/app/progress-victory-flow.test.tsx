@@ -365,6 +365,12 @@ describe('progress cards, open hands, and victory UI', () => {
     expect(within(victory).getByText('1 VP')).toBeInTheDocument();
     expect(within(victory).getByText(/Victory cards 1/)).toBeInTheDocument();
     expect(within(victory).getByRole('tab', { name: /Resources/ })).toBeInTheDocument();
+    await user.click(within(victory).getByRole('tab', { name: /Points/ }));
+    expect(within(victory).getByText('How every point was earned')).toBeInTheDocument();
+    const winnerPoints = within(victory).getByLabelText('Alex point breakdown');
+    expect(within(winnerPoints).getByText('Victory cards')).toBeInTheDocument();
+    expect(within(winnerPoints).getByText('Chapel')).toBeInTheDocument();
+    expect(within(winnerPoints).getByText('+1 VP')).toBeInTheDocument();
     await user.click(within(victory).getByRole('tab', { name: /Dice/ }));
     expect(within(victory).getByText('How the table rolled')).toBeInTheDocument();
     await user.click(within(victory).getByRole('tab', { name: /Cards & actions/ }));

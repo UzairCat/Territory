@@ -8,25 +8,37 @@ import type { EdgeId, PlayerId, VertexId } from '../core/ids';
 import { orderedPlayerIds } from './setup-rules';
 
 export interface ScoreBreakdown {
+  readonly houses: number;
+  readonly cities: number;
   readonly buildings: number;
   readonly longestRoad: number;
   readonly largestForce: number;
+  readonly victoryCards: number;
+  readonly metropolises: number;
+  readonly merchant: number;
+  readonly defenderPoints: number;
   readonly progressCards: number;
   readonly total: number;
 }
 
-function buildingScore(state: GameState, playerId: PlayerId): number {
-  return Object.values(state.board.vertices).reduce((total, vertex) => {
-    if (vertex.building?.ownerId !== playerId) return total;
-    return total + BUILDING_DEFINITIONS[vertex.building.type].victoryPoints;
-  }, 0);
+function buildingScore(state: GameState, playerId: PlayerId) {
+  const buildings = Object.values(state.board.vertices).filter(
+    (vertex) => vertex.building?.ownerId === playerId,
+  );
+  const houses = buildings.filter((vertex) => vertex.building?.type === 'HOUSE').length;
+  const cities =
+    buildings.filter((vertex) => vertex.building?.type === 'MANSION').length *
+    BUILDING_DEFINITIONS.MANSION.victoryPoints;
+  return { houses, cities, total: houses + cities };
 }
 
-function progressCardScore(state: GameState, playerId: PlayerId): number {
+function supplementalScore(state: GameState, playerId: PlayerId) {
   if (state.kn !== null) {
     const player = state.players[playerId];
-    if (player === undefined) return 0;
-    const revealed = player.revealedKNProgressCardIds.reduce((total, cardInstanceId) => {
+    if (player === undefined) {
+      return { victoryCards: 0, metropolises: 0, merchant: 0, defenderPoints: 0, total: 0 };
+    }
+    const victoryCards = player.revealedKNProgressCardIds.reduce((total, cardInstanceId) => {
       const card = state.kn?.progressCards[cardInstanceId];
       const definition =
         card === undefined ? undefined : getKNProgressCardDefinition(card.definitionId);
@@ -39,18 +51,25 @@ function progressCardScore(state: GameState, playerId: PlayerId): number {
           vertex.building.metropolis !== null &&
           vertex.building.metropolis !== undefined,
       ).length * 2;
-    const merchantPoint = state.kn.merchant?.ownerId === playerId ? 1 : 0;
-    return revealed + metropolisPoints + merchantPoint + player.defenderPoints;
+    const merchant = state.kn.merchant?.ownerId === playerId ? 1 : 0;
+    return {
+      victoryCards,
+      metropolises: metropolisPoints,
+      merchant,
+      defenderPoints: player.defenderPoints,
+      total: victoryCards + metropolisPoints + merchant + player.defenderPoints,
+    };
   }
-  return Object.values(state.progressCards).reduce((total, card) => {
+  const victoryCards = Object.values(state.progressCards).reduce((total, card) => {
     if (card.ownerId !== playerId) return total;
     const definition = PROGRESS_CARDS.find((candidate) => candidate.id === card.definitionId);
     return total + (definition?.victoryPoints ?? 0);
   }, 0);
+  return { victoryCards, metropolises: 0, merchant: 0, defenderPoints: 0, total: victoryCards };
 }
 
 export function calculateScoreBreakdown(state: GameState, playerId: PlayerId): ScoreBreakdown {
-  const buildings = buildingScore(state, playerId);
+  const buildingPoints = buildingScore(state, playerId);
   const longestRoad =
     state.bonuses.longestRoadHolderId === playerId
       ? state.config.rules.longestRoad.victoryPoints
@@ -59,14 +78,20 @@ export function calculateScoreBreakdown(state: GameState, playerId: PlayerId): S
     state.bonuses.largestForceHolderId === playerId
       ? state.config.rules.largestForce.victoryPoints
       : 0;
-  const progressCards = progressCardScore(state, playerId);
+  const supplemental = supplementalScore(state, playerId);
 
   return {
-    buildings,
+    houses: buildingPoints.houses,
+    cities: buildingPoints.cities,
+    buildings: buildingPoints.total,
     longestRoad,
     largestForce,
-    progressCards,
-    total: buildings + longestRoad + largestForce + progressCards,
+    victoryCards: supplemental.victoryCards,
+    metropolises: supplemental.metropolises,
+    merchant: supplemental.merchant,
+    defenderPoints: supplemental.defenderPoints,
+    progressCards: supplemental.total,
+    total: buildingPoints.total + longestRoad + largestForce + supplemental.total,
   };
 }
 

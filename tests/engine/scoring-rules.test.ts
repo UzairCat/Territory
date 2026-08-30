@@ -231,9 +231,15 @@ describe('central scoring and awards', () => {
       },
     };
     expect(calculateScoreBreakdown(scored, TEST_PLAYER_IDS[0])).toEqual({
+      houses: 1,
+      cities: 2,
       buildings: 3,
       longestRoad: 2,
       largestForce: 2,
+      victoryCards: 1,
+      metropolises: 0,
+      merchant: 0,
+      defenderPoints: 0,
       progressCards: 1,
       total: 8,
     });

@@ -121,7 +121,14 @@ export function audioCuesForEvents(
   }
   if (events.some((event) => event.type === 'ROAD_BUILT')) return [cue('ROAD_PLACE')];
   if (events.some((event) => event.type === 'TRADE_OFFERED')) return [cue('TRADE')];
-  if (events.some((event) => event.type === 'TRADE_ACCEPTED')) return [cue('TRADE_ACCEPT')];
+  if (
+    events.some(
+      (event) =>
+        event.type === 'TRADE_COMPLETED' && event.tradeId !== null && event.recipientId !== null,
+    )
+  ) {
+    return [cue('TRADE_ACCEPT')];
+  }
   return [];
 }
 

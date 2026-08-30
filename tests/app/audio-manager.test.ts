@@ -219,7 +219,7 @@ describe('game audio design', () => {
     expect(cues([event], TEST_PLAYER_IDS[1])).toEqual([]);
   });
 
-  it('plays dedicated cues when a player trade is offered or accepted', () => {
+  it('plays dedicated cues when a player trade is offered or fully completed', () => {
     const offerId = tradeId('sound-trade-request');
 
     expect(
@@ -242,14 +242,27 @@ describe('game audio design', () => {
           recipientId: TEST_PLAYER_IDS[1],
         },
       ]),
+    ).toEqual([]);
+
+    expect(
+      cues([
+        {
+          type: 'TRADE_COMPLETED',
+          tradeId: offerId,
+          playerId: TEST_PLAYER_IDS[0],
+          recipientId: TEST_PLAYER_IDS[1],
+          offered: resourceBundle([[RESOURCE_IDS.wood, 1]]),
+          requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
+        },
+      ]),
     ).toEqual(['TRADE_ACCEPT']);
 
     const silentTradeEvents: readonly GameEvent[] = [
       {
         type: 'TRADE_COMPLETED',
-        tradeId: offerId,
+        tradeId: null,
         playerId: TEST_PLAYER_IDS[0],
-        recipientId: TEST_PLAYER_IDS[1],
+        recipientId: null,
         offered: resourceBundle([[RESOURCE_IDS.wood, 1]]),
         requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
       },
