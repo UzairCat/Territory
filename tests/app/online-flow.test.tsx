@@ -139,7 +139,7 @@ describe('online entry and lobby presentation', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open profile gallery for Alex' }));
     const gallery = screen.getByRole('dialog', { name: 'Alex’s profile' });
-    expect(within(gallery).getAllByRole('button', { name: /profile picture$/ })).toHaveLength(8);
+    expect(within(gallery).getAllByRole('button', { name: /profile picture$/ })).toHaveLength(12);
     expect(within(gallery).getByRole('button', { name: 'Choose Onyx' })).toBeEnabled();
     await user.click(
       within(gallery).getByRole('button', { name: 'Choose Navigator profile picture' }),

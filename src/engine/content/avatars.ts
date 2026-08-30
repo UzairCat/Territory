@@ -10,6 +10,10 @@ export const PLAYER_AVATARS = [
   { id: 'scholar', displayName: 'Scholar' },
   { id: 'herbalist', displayName: 'Herbalist' },
   { id: 'courier', displayName: 'Courier' },
+  { id: 'gmcaleb', displayName: 'GM Caleb' },
+  { id: 'goofymussel', displayName: 'Goofy Mussel' },
+  { id: 'kevin', displayName: 'Kevin' },
+  { id: 'uzair', displayName: 'Uzair' },
 ] as const;
 
 export type PlayerAvatarId = (typeof PLAYER_AVATARS)[number]['id'];

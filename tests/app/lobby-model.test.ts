@@ -25,11 +25,11 @@ function completeLobby(): LobbyConfig {
 }
 
 describe('local lobby model', () => {
-  it('offers fourteen player colors and eight original preset avatars', () => {
+  it('offers fourteen player colors and twelve preset avatars', () => {
     expect(PLAYER_COLORS).toHaveLength(14);
-    expect(PLAYER_AVATARS).toHaveLength(8);
+    expect(PLAYER_AVATARS).toHaveLength(12);
     expect(new Set(PLAYER_COLORS.map((color) => color.id)).size).toBe(14);
-    expect(new Set(PLAYER_AVATARS.map((avatar) => avatar.id)).size).toBe(8);
+    expect(new Set(PLAYER_AVATARS.map((avatar) => avatar.id)).size).toBe(12);
   });
 
   it('explains why an incomplete lobby cannot start', () => {
