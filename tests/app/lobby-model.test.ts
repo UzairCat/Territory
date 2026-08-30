@@ -25,10 +25,11 @@ function completeLobby(): LobbyConfig {
 }
 
 describe('local lobby model', () => {
-  it('offers fourteen player colors and twelve preset avatars', () => {
-    expect(PLAYER_COLORS).toHaveLength(14);
+  it('offers twenty-two unique player colors and twelve preset avatars', () => {
+    expect(PLAYER_COLORS).toHaveLength(22);
     expect(PLAYER_AVATARS).toHaveLength(12);
-    expect(new Set(PLAYER_COLORS.map((color) => color.id)).size).toBe(14);
+    expect(new Set(PLAYER_COLORS.map((color) => color.id)).size).toBe(22);
+    expect(new Set(PLAYER_COLORS.map((color) => color.hex)).size).toBe(22);
     expect(new Set(PLAYER_AVATARS.map((avatar) => avatar.id)).size).toBe(12);
   });
 

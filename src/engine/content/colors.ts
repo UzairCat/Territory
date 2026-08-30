@@ -16,4 +16,12 @@ export const PLAYER_COLORS: readonly PlayerColorDefinition[] = [
   { id: colorId('slate'), displayName: 'Slate', hex: '#63758a', marker: 'SQUARE' },
   { id: colorId('ivory'), displayName: 'Ivory', hex: '#ddd6bf', marker: 'CIRCLE' },
   { id: colorId('onyx'), displayName: 'Onyx', hex: '#3c4148', marker: 'DIAMOND' },
+  { id: colorId('burgundy'), displayName: 'Burgundy', hex: '#8b2746', marker: 'TRIANGLE' },
+  { id: colorId('lemon'), displayName: 'Lemon', hex: '#e6dd3a', marker: 'SQUARE' },
+  { id: colorId('indigo'), displayName: 'Indigo', hex: '#4937a8', marker: 'TRIANGLE' },
+  { id: colorId('mint'), displayName: 'Mint', hex: '#7fe6b4', marker: 'SQUARE' },
+  { id: colorId('coral'), displayName: 'Coral', hex: '#ff8d73', marker: 'CIRCLE' },
+  { id: colorId('lilac'), displayName: 'Lilac', hex: '#c69af0', marker: 'DIAMOND' },
+  { id: colorId('teal'), displayName: 'Teal', hex: '#147a78', marker: 'CIRCLE' },
+  { id: colorId('umber'), displayName: 'Umber', hex: '#79513a', marker: 'DIAMOND' },
 ] as const;

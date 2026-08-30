@@ -226,7 +226,7 @@ describe('application flow', () => {
         .filter((button) => button.getAttribute('aria-pressed') === 'true'),
     ).toHaveLength(1);
     expect(within(gallery).getAllByRole('button', { name: /profile picture$/ })).toHaveLength(12);
-    expect(within(gallery).getAllByRole('button', { name: /^Choose / })).toHaveLength(26);
+    expect(within(gallery).getAllByRole('button', { name: /^Choose / })).toHaveLength(34);
 
     await user.click(
       within(gallery).getByRole('button', { name: 'Choose Courier profile picture' }),

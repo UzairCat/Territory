@@ -3037,7 +3037,7 @@ input[type='checkbox'] {
 
 .color-picker__options {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
 }
 
@@ -14598,7 +14598,7 @@ input[type='checkbox'] {
 
 .profile-gallery__colors > div {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.42rem;
 }
 
@@ -14662,6 +14662,12 @@ input[type='checkbox'] {
 
   .profile-gallery__colors > div {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 30rem) {
+  .color-picker__options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
