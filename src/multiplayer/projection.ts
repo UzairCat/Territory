@@ -107,9 +107,6 @@ function projectEvents(
   viewerPlayerId: PlayerId,
 ): readonly GameEvent[] {
   return events.map((event) => {
-    if (event.type === 'RESOURCES_DISCARDED' && event.playerId !== viewerPlayerId) {
-      return { ...event, resources: resourceBundle([]), hiddenCount: bundleCount(event.resources) };
-    }
     if (
       event.type === 'RESOURCE_STOLEN' &&
       event.playerId !== viewerPlayerId &&

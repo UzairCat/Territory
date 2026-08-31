@@ -138,7 +138,7 @@ describe('trading application flow', () => {
     vi.useRealTimers();
   });
 
-  it('completes a bank trade and keeps the composer open for another exchange', async () => {
+  it('completes a bank trade and closes the composer', async () => {
     const user = userEvent.setup();
     renderGame(tradingState());
 
@@ -160,7 +160,7 @@ describe('trading application flow', () => {
     expect(complete).toBeEnabled();
     await user.click(complete);
 
-    expect(screen.getByRole('dialog', { name: 'Trade' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Trade' })).not.toBeInTheDocument();
     expect(useAppStore.getState().gameState?.players[TEST_PLAYER_IDS[0]]?.resources).toMatchObject({
       wood: 2,
       grain: 1,
@@ -175,9 +175,6 @@ describe('trading application flow', () => {
     expect(screen.getByTestId('trade-flyovers')).toHaveTextContent(
       `BANK->PLAYER:${TEST_PLAYER_IDS[0]}:grain`,
     );
-
-    await user.click(within(dialog).getByRole('button', { name: 'Done' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('completes an 8:2 bank trade as one transaction', async () => {

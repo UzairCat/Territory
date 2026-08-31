@@ -566,7 +566,9 @@ export function HandTray({
                     onMouseLeave={() => {
                       tooltipNeedsPointerExitRef.current = false;
                       if (pinnedKNProgressCardIdRef.current !== instance.instanceId) {
-                        setOpenKNTooltip(null);
+                        setOpenKNTooltip((current) =>
+                          current?.instanceId === instance.instanceId ? null : current,
+                        );
                       }
                     }}
                     onFocus={(event) => {
@@ -577,7 +579,9 @@ export function HandTray({
                     onBlur={() => {
                       tooltipNeedsFocusExitRef.current = false;
                       if (pinnedKNProgressCardIdRef.current !== instance.instanceId) {
-                        setOpenKNTooltip(null);
+                        setOpenKNTooltip((current) =>
+                          current?.instanceId === instance.instanceId ? null : current,
+                        );
                       }
                     }}
                     onKeyDown={(event) => {

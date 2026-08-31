@@ -2319,7 +2319,7 @@ export function GameScreen() {
       setTradeOffered(resourceBundle([]));
       setTradeRequested(resourceBundle([]));
     }
-    handleActionResult(result, false, true);
+    handleActionResult(result);
   };
 
   const selectResourceForTrade = (resourceId: ResourceId) => {
@@ -3374,6 +3374,7 @@ export function GameScreen() {
                         : null
                     }
                     clockOffsetMs={onlineClockOffsetMs}
+                    disconnectCountdownPaused={gamePaused}
                     kNMode={gameState.kn !== null}
                     knProgressCards={gameState.kn?.progressCards}
                     {...(onlineRoom?.game?.playerCards[player.id] === undefined
@@ -3858,6 +3859,7 @@ export function GameScreen() {
         'RECLAMATION_HEX',
         'RECLAMATION_RESOURCE',
         'DESERTER_KNIGHT',
+        'BARBARIAN_CITY_LOSS',
       ].includes(knBoardChoice.purpose) ? null : (
         <aside className="kn-board-choice-banner" aria-live="polite">
           <div>

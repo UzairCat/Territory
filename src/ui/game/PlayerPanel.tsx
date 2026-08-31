@@ -20,6 +20,7 @@ interface PlayerPanelProps {
   readonly activityLabel?: string | null;
   readonly disconnectDeadlineAt?: number | null;
   readonly clockOffsetMs?: number;
+  readonly disconnectCountdownPaused?: boolean;
   readonly kNMode?: boolean;
   readonly wallCount?: number;
   readonly discardThreshold?: number;
@@ -47,9 +48,11 @@ function disconnectSecondsRemaining(deadlineAt: number, clockOffsetMs: number): 
 function DisconnectCountdown({
   deadlineAt,
   clockOffsetMs,
+  paused,
 }: {
   readonly deadlineAt: number;
   readonly clockOffsetMs: number;
+  readonly paused: boolean;
 }) {
   const [secondsRemaining, setSecondsRemaining] = useState(() =>
     disconnectSecondsRemaining(deadlineAt, clockOffsetMs),
@@ -58,16 +61,21 @@ function DisconnectCountdown({
   useEffect(() => {
     const update = () => setSecondsRemaining(disconnectSecondsRemaining(deadlineAt, clockOffsetMs));
     update();
+    if (paused) return;
     const interval = globalThis.setInterval(update, 250);
     return () => globalThis.clearInterval(interval);
-  }, [clockOffsetMs, deadlineAt]);
+  }, [clockOffsetMs, deadlineAt, paused]);
 
   const minutes = Math.floor(secondsRemaining / 60);
   const seconds = String(secondsRemaining % 60).padStart(2, '0');
   return (
     <span
       className="game-player__disconnect-timer"
-      title={`Removed from the match in ${minutes}:${seconds} unless they reconnect`}
+      title={
+        paused
+          ? `Removal countdown paused at ${minutes}:${seconds}`
+          : `Removed from the match in ${minutes}:${seconds} unless they reconnect`
+      }
     >
       <i aria-hidden="true" />
       {minutes}:{seconds}
@@ -96,6 +104,7 @@ export function PlayerPanel({
   activityLabel = null,
   disconnectDeadlineAt = null,
   clockOffsetMs = 0,
+  disconnectCountdownPaused = false,
   kNMode = false,
   wallCount = 0,
   discardThreshold = 7,
@@ -192,6 +201,7 @@ export function PlayerPanel({
               <DisconnectCountdown
                 deadlineAt={disconnectDeadlineAt}
                 clockOffsetMs={clockOffsetMs}
+                paused={disconnectCountdownPaused}
               />
             )}
           </span>
@@ -350,7 +360,11 @@ export function PlayerPanel({
             <strong>{score}</strong>
           </span>
           {disconnectDeadlineAt === null ? null : (
-            <DisconnectCountdown deadlineAt={disconnectDeadlineAt} clockOffsetMs={clockOffsetMs} />
+            <DisconnectCountdown
+              deadlineAt={disconnectDeadlineAt}
+              clockOffsetMs={clockOffsetMs}
+              paused={disconnectCountdownPaused}
+            />
           )}
         </span>
 

@@ -62,6 +62,14 @@ describe('game activity log', () => {
         resourceId: RESOURCE_IDS.brick,
       },
       {
+        type: 'RESOURCES_DISCARDED',
+        playerId: TEST_PLAYER_IDS[1],
+        resources: resourceBundle([
+          [RESOURCE_IDS.wood, 2],
+          [RESOURCE_IDS.brick, 1],
+        ]),
+      },
+      {
         type: 'ROAD_BUILT',
         playerId: TEST_PLAYER_IDS[0],
         edgeId: edgeId('activity-road'),
@@ -96,6 +104,8 @@ describe('game activity log', () => {
       within(log).getByText('Alex chose Grain for Monopoly and collected 3 cards.'),
     ).toBeInTheDocument();
     expect(within(log).getByText('Alex stole 1 Brick from Sam.')).toBeInTheDocument();
+    const discard = within(log).getByText('Sam discarded 2 Wood · 1 Brick.').closest('li');
+    expect(discard?.querySelectorAll('.activity-resource-card')).toHaveLength(3);
     expect(log.querySelectorAll('.activity-die')).toHaveLength(2);
     expect(log.querySelectorAll('.activity-die')[0]?.querySelectorAll('.is-visible')).toHaveLength(
       3,

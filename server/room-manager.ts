@@ -54,7 +54,8 @@ interface RoomMember {
   colorId: ColorId;
   avatarId: PlayerAvatarId;
   socketIds: Set<string>;
-  disconnectedAt: number | null;
+  disconnectDeadlineAt: number | null;
+  removalRemainingMs: number | null;
   removalTimer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -300,7 +301,8 @@ export class RoomManager {
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
-      disconnectedAt: null,
+      disconnectDeadlineAt: null,
+      removalRemainingMs: null,
       removalTimer: null,
     };
     const room: RoomRecord = {
@@ -367,7 +369,8 @@ export class RoomManager {
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
-      disconnectedAt: null,
+      disconnectDeadlineAt: null,
+      removalRemainingMs: null,
       removalTimer: null,
     });
     this.clearInactivityTimer(room);
@@ -404,7 +407,8 @@ export class RoomManager {
     if (member.removalTimer !== null) clearTimeout(member.removalTimer);
     member.removalTimer = null;
     member.socketIds.add(socketId);
-    member.disconnectedAt = null;
+    member.disconnectDeadlineAt = null;
+    member.removalRemainingMs = null;
     this.clearInactivityTimer(room);
     if (roomWasInactive) this.refreshTimers(room, [], true);
     this.hooks.onRoomChanged(room.code);
@@ -607,6 +611,9 @@ export class RoomManager {
     room.tradeTimerKey = null;
     room.tradeDeadlineAt = null;
     room.tradePausedRemainingMs = null;
+    for (const roomMember of room.members.values()) {
+      if (roomMember.socketIds.size === 0) this.scheduleMemberRemoval(room, roomMember);
+    }
     this.hooks.onRoomChanged(room.code);
     return { ok: true };
   }
@@ -690,6 +697,7 @@ export class RoomManager {
     if (room.paused === paused) return { ok: true };
     room.paused = paused;
     if (paused) {
+      this.pauseMemberRemovalTimers(room);
       room.pausedRemainingMs =
         room.deadlineAt === null ? null : Math.max(0, room.deadlineAt - Date.now());
       room.tradePausedRemainingMs =
@@ -699,6 +707,7 @@ export class RoomManager {
       this.clearTimer(room);
       this.clearTradeTimer(room);
     } else {
+      this.resumeMemberRemovalTimers(room);
       const step = room.state === null ? null : timedStep(room.state);
       if (step !== null) {
         room.timerKey = step.key;
@@ -771,7 +780,6 @@ export class RoomManager {
     const { room, member } = authenticated;
     if (room.phase !== 'LOBBY') {
       member.socketIds.clear();
-      member.disconnectedAt = Date.now();
       this.scheduleMemberRemoval(room, member);
       this.scheduleInactivityCleanup(room);
       this.hooks.onRoomChanged(room.code);
@@ -787,7 +795,6 @@ export class RoomManager {
       for (const member of room.members.values()) {
         if (!member.socketIds.delete(socketId) || member.socketIds.size > 0) continue;
         roomChanged = true;
-        member.disconnectedAt = Date.now();
         this.scheduleMemberRemoval(room, member);
       }
       if (!roomChanged) continue;
@@ -813,9 +820,11 @@ export class RoomManager {
         avatarId: member.avatarId,
         connected: member.socketIds.size > 0,
         disconnectDeadlineAt:
-          member.socketIds.size > 0 || member.disconnectedAt === null || room.phase === 'LOBBY'
+          member.socketIds.size > 0 || room.phase === 'LOBBY'
             ? null
-            : member.disconnectedAt + MATCH_DISCONNECT_GRACE_MS,
+            : room.paused && member.removalRemainingMs !== null
+              ? Date.now() + member.removalRemainingMs
+              : member.disconnectDeadlineAt,
         host: member.id === room.hostPlayerId,
       })),
       settings: room.settings,
@@ -1066,9 +1075,44 @@ export class RoomManager {
     }, this.inactiveRoomTtlMs);
   }
 
-  private scheduleMemberRemoval(room: RoomRecord, member: RoomMember): void {
+  private pauseMemberRemovalTimers(room: RoomRecord): void {
+    const now = Date.now();
+    for (const member of room.members.values()) {
+      if (member.socketIds.size > 0) continue;
+      if (member.removalTimer !== null) clearTimeout(member.removalTimer);
+      member.removalTimer = null;
+      member.removalRemainingMs = Math.max(
+        0,
+        member.removalRemainingMs ??
+          (member.disconnectDeadlineAt === null
+            ? MATCH_DISCONNECT_GRACE_MS
+            : member.disconnectDeadlineAt - now),
+      );
+    }
+  }
+
+  private resumeMemberRemovalTimers(room: RoomRecord): void {
+    for (const member of room.members.values()) {
+      if (member.socketIds.size > 0 || member.removalRemainingMs === null) continue;
+      this.scheduleMemberRemoval(room, member, member.removalRemainingMs);
+    }
+  }
+
+  private scheduleMemberRemoval(
+    room: RoomRecord,
+    member: RoomMember,
+    remainingOverrideMs?: number,
+  ): void {
     if (member.removalTimer !== null) clearTimeout(member.removalTimer);
     const gracePeriod = room.phase === 'LOBBY' ? RECONNECT_GRACE_MS : MATCH_DISCONNECT_GRACE_MS;
+    const remainingMs = Math.max(0, remainingOverrideMs ?? gracePeriod);
+    member.disconnectDeadlineAt = Date.now() + remainingMs;
+    if (room.phase !== 'LOBBY' && room.paused) {
+      member.removalRemainingMs = remainingMs;
+      member.removalTimer = null;
+      return;
+    }
+    member.removalRemainingMs = null;
     member.removalTimer = setTimeout(() => {
       member.removalTimer = null;
       if (
@@ -1080,7 +1124,7 @@ export class RoomManager {
       }
       if (room.phase === 'LOBBY') this.removeMember(room, member.id);
       else this.removeMatchMember(room, member.id);
-    }, gracePeriod);
+    }, remainingMs);
   }
 
   private removeMatchMember(room: RoomRecord, player: PlayerId): void {

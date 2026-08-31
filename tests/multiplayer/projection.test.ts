@@ -110,7 +110,7 @@ describe('online player projection', () => {
     ).toBe(PROGRESS_CARD_IDS.chapel);
   });
 
-  it('publishes totals while redacting private card events from uninvolved players', () => {
+  it('publishes discard details while redacting genuinely private card events', () => {
     const state = createTestGameState('ACTION_PHASE');
     const events: readonly GameEvent[] = [
       {
@@ -148,7 +148,7 @@ describe('online player projection', () => {
       progressCards: 0,
     });
     const discarded = view.recentEvents.find((event) => event.type === 'RESOURCES_DISCARDED');
-    expect(discarded).toMatchObject({ resources: {}, hiddenCount: 3 });
+    expect(discarded).toMatchObject({ resources: { [RESOURCE_IDS.wood]: 3 } });
     const bought = view.recentEvents.find((event) => event.type === 'PROGRESS_CARD_BOUGHT');
     expect(bought).toMatchObject({ cardDefinitionId: 'hidden-progress-card' });
     const stolen = view.recentEvents.find((event) => event.type === 'RESOURCE_STOLEN');

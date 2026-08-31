@@ -89,7 +89,6 @@ describe('authoritative online rooms', () => {
   it('shows a three-minute match absence window, then removes the seat and its pieces', () => {
     vi.useFakeTimers();
     const { manager, room, host, guest } = createStartedRoom();
-    expect(manager.pause(host, true)).toEqual({ ok: true });
     const vertex = Object.values(room.state!.board.vertices)[0];
     const edge = Object.values(room.state!.board.edges)[0];
     if (vertex === undefined || edge === undefined)
@@ -156,6 +155,41 @@ describe('authoritative online rooms', () => {
     vi.advanceTimersByTime(10_001);
     expect(room.members.has(guest.playerId)).toBe(true);
     expect(room.state!.players[guest.playerId]).toBeDefined();
+  });
+
+  it('freezes an absent player countdown while the match is paused', () => {
+    vi.useFakeTimers();
+    const { manager, room, host, guest } = createStartedRoom();
+    manager.disconnect('guest-socket');
+    vi.advanceTimersByTime(60_000);
+
+    expect(manager.pause(host, true)).toEqual({ ok: true });
+    const pausedDeadline = manager
+      .view(room, host.playerId)
+      .players.find((player) => player.id === guest.playerId)?.disconnectDeadlineAt;
+    if (pausedDeadline === null || pausedDeadline === undefined) {
+      throw new Error('Paused disconnect deadline is missing.');
+    }
+    const remainingAtPause = pausedDeadline - Date.now();
+    expect(remainingAtPause).toBe(120_000);
+
+    vi.advanceTimersByTime(5 * 60_000);
+    expect(room.members.has(guest.playerId)).toBe(true);
+    const frozenDeadline = manager
+      .view(room, host.playerId)
+      .players.find((player) => player.id === guest.playerId)?.disconnectDeadlineAt;
+    if (frozenDeadline === null || frozenDeadline === undefined) {
+      throw new Error('Frozen disconnect deadline is missing.');
+    }
+    const remainingAfterWait = frozenDeadline - Date.now();
+    expect(remainingAfterWait).toBe(remainingAtPause);
+
+    room.pausedRemainingMs = 10 * 60_000;
+    expect(manager.pause(host, false)).toEqual({ ok: true });
+    vi.advanceTimersByTime(remainingAtPause - 1);
+    expect(room.members.has(guest.playerId)).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(room.members.has(guest.playerId)).toBe(false);
   });
 
   it('randomly assigns different preset portraits to joining online guests', () => {

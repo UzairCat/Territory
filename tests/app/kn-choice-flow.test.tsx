@@ -717,6 +717,42 @@ describe('K+N compact choice flows', () => {
     expect(screen.getByTestId('merchant-placement')).toHaveTextContent('active');
   });
 
+  it('shows city-loss indicators without the generic Progress Card banner', () => {
+    const original = knActionState();
+    const vertex = Object.values(original.board.vertices)[0];
+    if (vertex === undefined) throw new Error('City-loss UI fixture has no board vertex.');
+    const state: GameState = {
+      ...original,
+      board: {
+        ...original.board,
+        vertices: {
+          ...original.board.vertices,
+          [vertex.id]: {
+            ...vertex,
+            building: { ownerId: TEST_PLAYER_IDS[0], type: 'MANSION' },
+          },
+        },
+      },
+      turn: { ...original.turn, phase: 'CARD_RESOLUTION' },
+      pendingInteraction: {
+        type: 'KN_SELECTION',
+        playerId: TEST_PLAYER_IDS[0],
+        purpose: 'BARBARIAN_CITY_LOSS',
+        eligibleIds: [vertex.id],
+        minimumSelections: 1,
+        maximumSelections: 1,
+        queue: [TEST_PLAYER_IDS[0]],
+        canCancel: false,
+        context: {},
+      },
+    };
+
+    const view = renderGame(state);
+    expect(screen.getByRole('button', { name: `Select VERTEX ${vertex.id}` })).toBeInTheDocument();
+    expect(screen.getByText('Alex is choosing a City to lose')).toBeInTheDocument();
+    expect(view.container.querySelector('.kn-board-choice-banner')).toBeNull();
+  });
+
   it('returns an excess Progress Card through the same hand-and-shelf flow', async () => {
     const user = userEvent.setup();
     const original = knActionState();
@@ -987,6 +1023,8 @@ describe('K+N compact choice flows', () => {
     await user.hover(screen.getByRole('button', { name: `Play ${otherDefinition.displayName}` }));
     expect(screen.getByRole('dialog', { name: 'Alchemist' })).toBeInTheDocument();
     expect(screen.queryByRole('tooltip', { name: otherDefinition.displayName })).toBeNull();
+    await user.unhover(screen.getByRole('button', { name: `Play ${otherDefinition.displayName}` }));
+    expect(screen.getByRole('dialog', { name: 'Alchemist' })).toBeInTheDocument();
     await user.click(alchemistCard);
     const cancelledTooltip = screen.getByRole('tooltip', { name: 'Alchemist' });
     expect(within(cancelledTooltip).queryByRole('button', { name: 'Cancel' })).toBeNull();
@@ -1994,6 +2032,24 @@ describe('K+N compact choice flows', () => {
     expect(view.container).toHaveTextContent('Connection lost');
 
     await act(() => vi.advanceTimersByTime(1_100));
+    expect(timer).toHaveTextContent('2:59');
+
+    view.rerender(
+      <PlayerPanel
+        player={player}
+        position={1}
+        active={false}
+        score={2}
+        longestRoadLength={0}
+        robberCount={0}
+        holdsLongestRoad={false}
+        holdsLargestForce={false}
+        winner={false}
+        disconnectDeadlineAt={Date.now() + 179_000}
+        disconnectCountdownPaused
+      />,
+    );
+    await act(() => vi.advanceTimersByTime(60_000));
     expect(timer).toHaveTextContent('2:59');
   });
 
