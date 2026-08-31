@@ -3348,6 +3348,9 @@ export function GameScreen() {
             >
               {orderedPlayerConfigs.map((config, index) => {
                 const player = gameState.players[config.id];
+                const onlinePresence = onlineRoom?.players.find(
+                  (candidate) => candidate.id === config.id,
+                );
                 return player === undefined ? null : (
                   <PlayerPanel
                     key={player.id}
@@ -3365,6 +3368,12 @@ export function GameScreen() {
                     holdsLargestForce={gameState.bonuses.largestForceHolderId === player.id}
                     winner={gameState.winnerId === player.id}
                     activityLabel={playerActivities[player.id] ?? null}
+                    disconnectDeadlineAt={
+                      onlinePresence?.connected === false
+                        ? (onlinePresence.disconnectDeadlineAt ?? null)
+                        : null
+                    }
+                    clockOffsetMs={onlineClockOffsetMs}
                     kNMode={gameState.kn !== null}
                     knProgressCards={gameState.kn?.progressCards}
                     {...(onlineRoom?.game?.playerCards[player.id] === undefined

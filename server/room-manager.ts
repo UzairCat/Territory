@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
-import { PLAYER_COLORS } from '../src/engine/content/colors';
+import { PLAYER_COLORS, randomAvailablePlayerColorId } from '../src/engine/content/colors';
 import {
   isPlayerAvatarId,
   randomAvailablePlayerAvatarId,
@@ -13,6 +13,7 @@ import type { GameEvent } from '../src/engine/core/events';
 import type { GameState } from '../src/engine/core/game-state';
 import { actionId, gameId, playerId, tradeId } from '../src/engine/core/ids';
 import type { ColorId, PlayerId } from '../src/engine/core/ids';
+import { removePlayerFromGame } from '../src/engine/rules/player-removal-rules';
 import {
   grantDeveloperLoadout,
   grantDeveloperProgressCards,
@@ -28,6 +29,7 @@ import {
 import { createOnlineGameView } from '../src/multiplayer/projection';
 import {
   ONLINE_PROTOCOL_VERSION,
+  MATCH_DISCONNECT_GRACE_MS,
   RECONNECT_GRACE_MS,
   type ActionAck,
   type OnlineAck,
@@ -126,6 +128,13 @@ function randomSeed(): string {
 function randomAvatarId(room: RoomRecord | null): PlayerAvatarId {
   return randomAvailablePlayerAvatarId(
     room === null ? [] : [...room.members.values()].map((member) => member.avatarId),
+    randomBytes(4).readUInt32BE(0) / 4_294_967_296,
+  );
+}
+
+function randomColorId(room: RoomRecord | null): ColorId {
+  return randomAvailablePlayerColorId(
+    room === null ? [] : [...room.members.values()].map((member) => member.colorId),
     randomBytes(4).readUInt32BE(0) / 4_294_967_296,
   );
 }
@@ -286,7 +295,7 @@ export class RoomManager {
     const member: RoomMember = {
       id,
       name: displayName.trim(),
-      colorId: PLAYER_COLORS[0]!.id,
+      colorId: randomColorId(null),
       avatarId: randomAvatarId(null),
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
@@ -348,18 +357,12 @@ export class RoomManager {
     ) {
       return { ok: false, error: error('NAME_TAKEN', 'Choose a different name for this room.') };
     }
-    const color = PLAYER_COLORS.find(
-      (candidate) => ![...room.members.values()].some((member) => member.colorId === candidate.id),
-    );
-    if (color === undefined) {
-      return { ok: false, error: error('NO_COLOR_AVAILABLE', 'No player color is available.') };
-    }
     const id = playerId(`online-player-${randomUUID()}`);
     const token = secureToken();
     room.members.set(id, {
       id,
       name: displayName.trim(),
-      colorId: color.id,
+      colorId: randomColorId(room),
       avatarId: randomAvatarId(room),
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
@@ -769,6 +772,7 @@ export class RoomManager {
     if (room.phase !== 'LOBBY') {
       member.socketIds.clear();
       member.disconnectedAt = Date.now();
+      this.scheduleMemberRemoval(room, member);
       this.scheduleInactivityCleanup(room);
       this.hooks.onRoomChanged(room.code);
       return { ok: true };
@@ -784,12 +788,7 @@ export class RoomManager {
         if (!member.socketIds.delete(socketId) || member.socketIds.size > 0) continue;
         roomChanged = true;
         member.disconnectedAt = Date.now();
-        if (room.phase === 'LOBBY') {
-          member.removalTimer = setTimeout(
-            () => this.removeMember(room, member.id),
-            RECONNECT_GRACE_MS,
-          );
-        }
+        this.scheduleMemberRemoval(room, member);
       }
       if (!roomChanged) continue;
       this.scheduleInactivityCleanup(room);
@@ -813,6 +812,10 @@ export class RoomManager {
         colorId: member.colorId,
         avatarId: member.avatarId,
         connected: member.socketIds.size > 0,
+        disconnectDeadlineAt:
+          member.socketIds.size > 0 || member.disconnectedAt === null || room.phase === 'LOBBY'
+            ? null
+            : member.disconnectedAt + MATCH_DISCONNECT_GRACE_MS,
         host: member.id === room.hostPlayerId,
       })),
       settings: room.settings,
@@ -1061,6 +1064,38 @@ export class RoomManager {
       }
       this.rooms.delete(room.code);
     }, this.inactiveRoomTtlMs);
+  }
+
+  private scheduleMemberRemoval(room: RoomRecord, member: RoomMember): void {
+    if (member.removalTimer !== null) clearTimeout(member.removalTimer);
+    const gracePeriod = room.phase === 'LOBBY' ? RECONNECT_GRACE_MS : MATCH_DISCONNECT_GRACE_MS;
+    member.removalTimer = setTimeout(() => {
+      member.removalTimer = null;
+      if (
+        this.rooms.get(room.code) !== room ||
+        room.members.get(member.id) !== member ||
+        member.socketIds.size > 0
+      ) {
+        return;
+      }
+      if (room.phase === 'LOBBY') this.removeMember(room, member.id);
+      else this.removeMatchMember(room, member.id);
+    }, gracePeriod);
+  }
+
+  private removeMatchMember(room: RoomRecord, player: PlayerId): void {
+    const member = room.members.get(player);
+    if (member === undefined || member.socketIds.size > 0) return;
+    if (room.state !== null && room.state.players[player] !== undefined) {
+      room.state = removePlayerFromGame(room.state, player);
+      room.revision += 1;
+      room.recentEvents = [];
+      room.processedActions.clear();
+      room.debugPlayerIds.delete(player);
+      if (room.state.turn.phase === 'GAME_OVER') room.phase = 'FINISHED';
+      this.refreshTimers(room, [], true);
+    }
+    this.removeMember(room, player);
   }
 
   private removeMember(room: RoomRecord, player: PlayerId): void {

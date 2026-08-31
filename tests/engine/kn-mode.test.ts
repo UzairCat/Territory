@@ -668,16 +668,33 @@ describe('K+N Knights, improvements, and attacks', () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.state.board.vertices[vulnerableVertex!.id]?.building).toMatchObject({
+    expect(result.state.pendingInteraction).toMatchObject({
+      type: 'KN_SELECTION',
+      playerId: vulnerablePlayerId,
+      purpose: 'BARBARIAN_CITY_LOSS',
+      eligibleIds: [vulnerableVertex!.id],
+    });
+    expect(result.state.board.vertices[vulnerableVertex!.id]?.building?.type).toBe('MANSION');
+    expect(result.events.some((event) => event.type === 'CITY_DOWNGRADED')).toBe(false);
+
+    const selected = dispatch(result.state, {
+      id: actionId('select-only-vulnerable-city'),
+      type: 'RESOLVE_PROGRESS_SELECTION',
+      actorId: vulnerablePlayerId,
+      selections: [vulnerableVertex!.id],
+    });
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) return;
+    expect(selected.state.board.vertices[vulnerableVertex!.id]?.building).toMatchObject({
       type: 'HOUSE',
       hasWall: false,
     });
-    expect(result.state.players[vulnerablePlayerId]?.cityWallsRemaining).toBe(3);
-    expect(result.state.board.vertices[protectedVertex!.id]?.building).toMatchObject({
+    expect(selected.state.players[vulnerablePlayerId]?.cityWallsRemaining).toBe(3);
+    expect(selected.state.board.vertices[protectedVertex!.id]?.building).toMatchObject({
       type: 'MANSION',
       metropolis: 'SCIENCE',
     });
-    expect(result.events).toContainEqual(
+    expect(selected.events).toContainEqual(
       expect.objectContaining({
         type: 'CITY_DOWNGRADED',
         playerId: vulnerablePlayerId,

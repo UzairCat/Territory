@@ -214,6 +214,13 @@ export function HandTray({
     ignorePointerLatch = false,
   ) => {
     if (!ignorePointerLatch && tooltipNeedsPointerExitRef.current) return;
+    if (
+      pinnedKNProgressCardIdRef.current !== null ||
+      (pinnedProgressCardIdRef.current !== null &&
+        pinnedProgressCardIdRef.current !== card.instanceId)
+    ) {
+      return;
+    }
     const bounds = element.getBoundingClientRect();
     setOpenTooltip({
       ...card,
@@ -532,6 +539,13 @@ export function HandTray({
                 ].includes(definition.effect);
                 const showTooltip = (element: HTMLElement, ignorePointerLatch = false) => {
                   if (!ignorePointerLatch && tooltipNeedsPointerExitRef.current) return;
+                  if (
+                    pinnedProgressCardIdRef.current !== null ||
+                    (pinnedKNProgressCardIdRef.current !== null &&
+                      pinnedKNProgressCardIdRef.current !== instance.instanceId)
+                  ) {
+                    return;
+                  }
                   const bounds = element.getBoundingClientRect();
                   setOpenKNTooltip({
                     instanceId: instance.instanceId,

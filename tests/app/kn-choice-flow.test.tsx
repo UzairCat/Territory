@@ -944,7 +944,16 @@ describe('K+N compact choice flows', () => {
     const card = Object.values(original.kn.progressCards).find(
       (candidate) => candidate.definitionId === definition?.id,
     );
-    if (definition === undefined || card === undefined) {
+    const otherDefinition = KN_PROGRESS_CARDS.find((candidate) => candidate.effect === 'CRANE');
+    const otherCard = Object.values(original.kn.progressCards).find(
+      (candidate) => candidate.definitionId === otherDefinition?.id,
+    );
+    if (
+      definition === undefined ||
+      card === undefined ||
+      otherDefinition === undefined ||
+      otherCard === undefined
+    ) {
       throw new Error('Alchemist fixture card is missing.');
     }
     const state: GameState = {
@@ -953,7 +962,7 @@ describe('K+N compact choice flows', () => {
         ...original.players,
         [TEST_PLAYER_IDS[0]]: {
           ...original.players[TEST_PLAYER_IDS[0]]!,
-          knProgressCardIds: [card.instanceId],
+          knProgressCardIds: [card.instanceId, otherCard.instanceId],
         },
       },
       turn: { ...original.turn, phase: 'WAITING_FOR_ROLL', dice: null },
@@ -962,6 +971,7 @@ describe('K+N compact choice flows', () => {
         progressCards: {
           ...original.kn.progressCards,
           [card.instanceId]: { ...card, ownerId: TEST_PLAYER_IDS[0] },
+          [otherCard.instanceId]: { ...otherCard, ownerId: TEST_PLAYER_IDS[0] },
         },
       },
     };
@@ -974,6 +984,9 @@ describe('K+N compact choice flows', () => {
     expect(confirmation).toHaveClass('progress-card-tooltip--confirming');
     expect(confirmation).toHaveTextContent(definition.description);
     expect(within(confirmation).queryByRole('combobox')).toBeNull();
+    await user.hover(screen.getByRole('button', { name: `Play ${otherDefinition.displayName}` }));
+    expect(screen.getByRole('dialog', { name: 'Alchemist' })).toBeInTheDocument();
+    expect(screen.queryByRole('tooltip', { name: otherDefinition.displayName })).toBeNull();
     await user.click(alchemistCard);
     const cancelledTooltip = screen.getByRole('tooltip', { name: 'Alchemist' });
     expect(within(cancelledTooltip).queryByRole('button', { name: 'Cancel' })).toBeNull();
@@ -1951,6 +1964,37 @@ describe('K+N compact choice flows', () => {
     expect(view.container.querySelector('.game-player__stat--robber')).toHaveClass(
       'is-award-holder',
     );
+  });
+
+  it('counts down an absent online seat beneath its profile picture', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-31T10:00:00.000Z'));
+    const state = knActionState();
+    const player = state.players[TEST_PLAYER_IDS[0]]!;
+    const view = render(
+      <PlayerPanel
+        player={player}
+        position={1}
+        active={false}
+        score={2}
+        longestRoadLength={0}
+        robberCount={0}
+        holdsLongestRoad={false}
+        holdsLargestForce={false}
+        winner={false}
+        disconnectDeadlineAt={Date.now() + 180_000}
+      />,
+    );
+
+    const timer = view.container.querySelector('.game-player__disconnect-timer');
+    expect(timer).toHaveTextContent('3:00');
+    expect(timer?.closest('.game-player__portrait')).toHaveClass(
+      'game-player__portrait--disconnecting',
+    );
+    expect(view.container).toHaveTextContent('Connection lost');
+
+    await act(() => vi.advanceTimersByTime(1_100));
+    expect(timer).toHaveTextContent('2:59');
   });
 
   it('uses compact player details without Defender points and treats equal defense as enough', () => {

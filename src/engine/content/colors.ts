@@ -1,4 +1,4 @@
-import { colorId } from '../core/ids';
+import { colorId, type ColorId } from '../core/ids';
 import type { PlayerColorDefinition } from './types';
 
 export const PLAYER_COLORS: readonly PlayerColorDefinition[] = [
@@ -25,3 +25,14 @@ export const PLAYER_COLORS: readonly PlayerColorDefinition[] = [
   { id: colorId('teal'), displayName: 'Teal', hex: '#147a78', marker: 'CIRCLE' },
   { id: colorId('umber'), displayName: 'Umber', hex: '#79513a', marker: 'DIAMOND' },
 ] as const;
+
+export function randomAvailablePlayerColorId(
+  usedColorIds: readonly ColorId[],
+  randomValue: number,
+): ColorId {
+  const used = new Set(usedColorIds);
+  const available = PLAYER_COLORS.filter((color) => !used.has(color.id));
+  const pool = available.length > 0 ? available : PLAYER_COLORS;
+  const normalizedRandom = Number.isFinite(randomValue) ? ((randomValue % 1) + 1) % 1 : 0;
+  return pool[Math.floor(normalizedRandom * pool.length)]!.id;
+}

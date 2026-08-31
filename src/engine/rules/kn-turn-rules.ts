@@ -228,15 +228,9 @@ export function resolveBarbarianAttack(state: GameState): KNResolution {
         (playerId) =>
           vulnerableByPlayer.has(playerId) && (contributions[playerId] ?? 0) === minimum,
       );
-      const choices: PlayerId[] = [];
-      for (const playerId of affectedPlayerIds) {
-        const eligible = vulnerableByPlayer.get(playerId) ?? [];
-        if (eligible.length === 1) {
-          const downgraded = downgradeBarbarianCity(nextState, playerId, eligible[0]!);
-          nextState = downgraded.state;
-          events.push(...downgraded.events);
-        } else if (eligible.length > 1) choices.push(playerId);
-      }
+      const choices = affectedPlayerIds.filter(
+        (playerId) => (vulnerableByPlayer.get(playerId)?.length ?? 0) > 0,
+      );
       const first = choices[0];
       if (first !== undefined) {
         nextInteraction = {

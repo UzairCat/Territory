@@ -34,17 +34,18 @@ export function setupOrder(state: GameState): readonly PlayerId[] {
 export function getSetupProgress(state: GameState): SetupProgress | null {
   const index = state.turn.setupPlacementIndex;
   if (index === null) return null;
+  const playerCount = orderedPlayerIds(state).length;
 
   return {
     placementNumber: index + 1,
-    totalPlacements: state.config.playerCount * 2,
-    round: index < state.config.playerCount ? 'FORWARD' : 'REVERSE',
+    totalPlacements: playerCount * 2,
+    round: index < playerCount ? 'FORWARD' : 'REVERSE',
   };
 }
 
 export function getSetupBuildingType(state: GameState): 'HOUSE' | 'MANSION' {
   const placementIndex = state.turn.setupPlacementIndex ?? 0;
-  return state.config.modeId === KN_MODE_ID && placementIndex >= state.config.playerCount
+  return state.config.modeId === KN_MODE_ID && placementIndex >= orderedPlayerIds(state).length
     ? 'MANSION'
     : 'HOUSE';
 }
@@ -240,7 +241,7 @@ export function placeSetupHouse(
     },
   ];
 
-  if (placementIndex >= state.config.playerCount) {
+  if (placementIndex >= orderedPlayerIds(state).length) {
     const grant = grantStartingResources(state, nextPlayer, vertex);
     nextPlayer = grant.player;
     nextBank = grant.bank;

@@ -666,9 +666,18 @@ describe('K+N Politics Progress Cards', () => {
     expect(attacked.ok).toBe(true);
     if (!attacked.ok) return;
     expect(attacked.state.kn?.barbarianPosition).toBe(0);
-    expect(attacked.state.board.vertices[cityVertexId]?.building?.type).toBe('HOUSE');
-    expect(attacked.state.turn.phase).toBe('ACTION_PHASE');
+    expect(attacked.state.pendingInteraction).toMatchObject({
+      purpose: 'BARBARIAN_CITY_LOSS',
+      eligibleIds: [cityVertexId],
+    });
+    expect(attacked.state.turn.phase).toBe('CARD_RESOLUTION');
     expect(attacked.events.some((event) => event.type === 'BARBARIAN_ATTACK_RESOLVED')).toBe(true);
+
+    const broken = choose(attacked.state, ACTIVE, [cityVertexId]);
+    expect(broken.ok).toBe(true);
+    if (!broken.ok) return;
+    expect(broken.state.board.vertices[cityVertexId]?.building?.type).toBe('HOUSE');
+    expect(broken.state.turn.phase).toBe('ACTION_PHASE');
   });
 
   it('uses Bishop to steal from every eligible opponent on the destination tile', () => {

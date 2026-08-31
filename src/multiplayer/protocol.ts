@@ -12,6 +12,7 @@ import type { ColorId, PlayerId } from '../engine/core/ids';
 export const ONLINE_PROTOCOL_VERSION = 1;
 export const ROOM_CODE_LENGTH = 6;
 export const RECONNECT_GRACE_MS = 90_000;
+export const MATCH_DISCONNECT_GRACE_MS = 3 * 60_000;
 
 export type OnlineRoomPhase = 'LOBBY' | 'PLAYING' | 'FINISHED';
 export type OnlineConnectionState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING';
@@ -28,6 +29,8 @@ export interface OnlineRoomPlayer {
   readonly colorId: ColorId;
   readonly avatarId?: PlayerAvatarId;
   readonly connected: boolean;
+  /** Authoritative server deadline for an absent match seat. Null while connected or in lobby. */
+  readonly disconnectDeadlineAt?: number | null;
   readonly host: boolean;
 }
 

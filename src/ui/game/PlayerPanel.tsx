@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import { PLAYER_COLORS } from '../../engine/content/colors';
@@ -18,6 +18,8 @@ interface PlayerPanelProps {
   readonly holdsLargestForce: boolean;
   readonly winner: boolean;
   readonly activityLabel?: string | null;
+  readonly disconnectDeadlineAt?: number | null;
+  readonly clockOffsetMs?: number;
   readonly kNMode?: boolean;
   readonly wallCount?: number;
   readonly discardThreshold?: number;
@@ -36,6 +38,41 @@ interface ProgressSummaryAnchor {
   readonly top: number;
   readonly width: number;
   readonly height: number;
+}
+
+function disconnectSecondsRemaining(deadlineAt: number, clockOffsetMs: number): number {
+  return Math.max(0, Math.ceil((deadlineAt - (Date.now() + clockOffsetMs)) / 1_000));
+}
+
+function DisconnectCountdown({
+  deadlineAt,
+  clockOffsetMs,
+}: {
+  readonly deadlineAt: number;
+  readonly clockOffsetMs: number;
+}) {
+  const [secondsRemaining, setSecondsRemaining] = useState(() =>
+    disconnectSecondsRemaining(deadlineAt, clockOffsetMs),
+  );
+
+  useEffect(() => {
+    const update = () => setSecondsRemaining(disconnectSecondsRemaining(deadlineAt, clockOffsetMs));
+    update();
+    const interval = globalThis.setInterval(update, 250);
+    return () => globalThis.clearInterval(interval);
+  }, [clockOffsetMs, deadlineAt]);
+
+  const minutes = Math.floor(secondsRemaining / 60);
+  const seconds = String(secondsRemaining % 60).padStart(2, '0');
+  return (
+    <span
+      className="game-player__disconnect-timer"
+      title={`Removed from the match in ${minutes}:${seconds} unless they reconnect`}
+    >
+      <i aria-hidden="true" />
+      {minutes}:{seconds}
+    </span>
+  );
 }
 
 const PROGRESS_FAMILY_DETAILS: Readonly<
@@ -57,6 +94,8 @@ export function PlayerPanel({
   holdsLargestForce,
   winner,
   activityLabel = null,
+  disconnectDeadlineAt = null,
+  clockOffsetMs = 0,
   kNMode = false,
   wallCount = 0,
   discardThreshold = 7,
@@ -113,7 +152,7 @@ export function PlayerPanel({
   if (kNMode) {
     return (
       <article
-        className={`game-player game-player--kn ${active ? 'game-player--active' : ''} ${activityLabel === null ? '' : 'game-player--busy'} ${winner ? 'game-player--winner' : ''}`}
+        className={`game-player game-player--kn ${active ? 'game-player--active' : ''} ${activityLabel === null ? '' : 'game-player--busy'} ${disconnectDeadlineAt === null ? '' : 'game-player--disconnected'} ${winner ? 'game-player--winner' : ''}`}
         data-player-panel={player.id}
         style={{ '--player-color': color?.hex ?? '#ffffff' } as CSSProperties}
         aria-label={`${player.name}, player ${position}`}
@@ -124,11 +163,16 @@ export function PlayerPanel({
             {activityLabel === null ? (
               <span className="game-player__status-dot" aria-hidden="true" />
             ) : null}
-            {activityLabel ?? (active ? 'Taking their turn' : color?.displayName)}
+            {disconnectDeadlineAt === null
+              ? (activityLabel ?? (active ? 'Taking their turn' : color?.displayName))
+              : 'Connection lost'}
           </small>
         </header>
         <div className="game-player-kn__body">
-          <span className="game-player__portrait game-player-kn__portrait" aria-hidden="true">
+          <span
+            className={`game-player__portrait game-player-kn__portrait ${disconnectDeadlineAt === null ? '' : 'game-player__portrait--disconnecting'}`}
+            aria-hidden="true"
+          >
             {activityLabel === null ? null : (
               <span className="game-player__busy-dots">
                 <i />
@@ -144,6 +188,12 @@ export function PlayerPanel({
             <span className="game-player__score-ribbon" title="Victory points">
               <strong>{score}</strong>
             </span>
+            {disconnectDeadlineAt === null ? null : (
+              <DisconnectCountdown
+                deadlineAt={disconnectDeadlineAt}
+                clockOffsetMs={clockOffsetMs}
+              />
+            )}
           </span>
           <dl className="game-player-kn__stats">
             <div title="Resource and commodity cards">
@@ -259,7 +309,7 @@ export function PlayerPanel({
 
   return (
     <article
-      className={`game-player ${active ? 'game-player--active' : ''} ${activityLabel === null ? '' : 'game-player--busy'} ${winner ? 'game-player--winner' : ''}`}
+      className={`game-player ${active ? 'game-player--active' : ''} ${activityLabel === null ? '' : 'game-player--busy'} ${disconnectDeadlineAt === null ? '' : 'game-player--disconnected'} ${winner ? 'game-player--winner' : ''}`}
       data-player-panel={player.id}
       style={{ '--player-color': color?.hex ?? '#ffffff' } as CSSProperties}
       aria-label={`${player.name}, player ${position}`}
@@ -271,14 +321,19 @@ export function PlayerPanel({
             {activityLabel === null ? (
               <span className="game-player__status-dot" aria-hidden="true" />
             ) : null}
-            {activityLabel ?? (active ? 'Taking their turn' : color?.displayName)}
+            {disconnectDeadlineAt === null
+              ? (activityLabel ?? (active ? 'Taking their turn' : color?.displayName))
+              : 'Connection lost'}
           </small>
         </div>
         {winner ? <span className="game-player__winner-label">Winner</span> : null}
       </header>
 
       <div className="game-player__body">
-        <span className="game-player__portrait" aria-hidden="true">
+        <span
+          className={`game-player__portrait ${disconnectDeadlineAt === null ? '' : 'game-player__portrait--disconnecting'}`}
+          aria-hidden="true"
+        >
           {activityLabel === null ? null : (
             <span className="game-player__busy-dots">
               <i />
@@ -294,6 +349,9 @@ export function PlayerPanel({
           <span className="game-player__score-ribbon" title="Victory points">
             <strong>{score}</strong>
           </span>
+          {disconnectDeadlineAt === null ? null : (
+            <DisconnectCountdown deadlineAt={disconnectDeadlineAt} clockOffsetMs={clockOffsetMs} />
+          )}
         </span>
 
         <dl className="game-player__stats">

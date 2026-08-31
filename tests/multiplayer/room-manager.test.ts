@@ -10,6 +10,7 @@ import { resourceBundle } from '../../src/engine/content/types';
 import { getLegalSetupHouseVertexIds } from '../../src/engine/rules/setup-rules';
 import { actionId, tradeId } from '../../src/engine/core/ids';
 import { KN_MODE } from '../../src/engine/modes/kn';
+import { MATCH_DISCONNECT_GRACE_MS } from '../../src/multiplayer/protocol';
 
 const managers: RoomManager[] = [];
 
@@ -85,6 +86,78 @@ describe('authoritative online rooms', () => {
     expect(room.deadlineAt).toBeGreaterThan(Date.now());
   });
 
+  it('shows a three-minute match absence window, then removes the seat and its pieces', () => {
+    vi.useFakeTimers();
+    const { manager, room, host, guest } = createStartedRoom();
+    expect(manager.pause(host, true)).toEqual({ ok: true });
+    const vertex = Object.values(room.state!.board.vertices)[0];
+    const edge = Object.values(room.state!.board.edges)[0];
+    if (vertex === undefined || edge === undefined)
+      throw new Error('Online board fixture is empty.');
+    const bankWoodBefore = room.state!.bank[RESOURCE_IDS.wood] ?? 0;
+    room.state = {
+      ...room.state!,
+      players: {
+        ...room.state!.players,
+        [guest.playerId]: {
+          ...room.state!.players[guest.playerId]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 2]]),
+        },
+      },
+      board: {
+        ...room.state!.board,
+        vertices: {
+          ...room.state!.board.vertices,
+          [vertex.id]: {
+            ...vertex,
+            building: { ownerId: guest.playerId, type: 'HOUSE' },
+          },
+        },
+        edges: {
+          ...room.state!.board.edges,
+          [edge.id]: { ...edge, roadOwnerId: guest.playerId },
+        },
+      },
+    };
+
+    const disconnectedAt = Date.now();
+    manager.disconnect('guest-socket');
+    expect(
+      manager.view(room, host.playerId).players.find((player) => player.id === guest.playerId),
+    ).toMatchObject({
+      connected: false,
+      disconnectDeadlineAt: disconnectedAt + MATCH_DISCONNECT_GRACE_MS,
+    });
+
+    vi.advanceTimersByTime(MATCH_DISCONNECT_GRACE_MS - 1);
+    expect(room.members.has(guest.playerId)).toBe(true);
+    expect(room.state.board.vertices[vertex.id]?.building?.ownerId).toBe(guest.playerId);
+
+    vi.advanceTimersByTime(1);
+    expect(room.members.has(guest.playerId)).toBe(false);
+    expect(room.state.players[guest.playerId]).toBeUndefined();
+    expect(room.state.config.players.some((player) => player.id === guest.playerId)).toBe(false);
+    expect(room.state.board.vertices[vertex.id]?.building).toBeNull();
+    expect(room.state.board.edges[edge.id]?.roadOwnerId).toBeNull();
+    expect(room.state.bank[RESOURCE_IDS.wood]).toBe(bankWoodBefore + 2);
+  });
+
+  it('cancels match-seat removal when the absent player reconnects', () => {
+    vi.useFakeTimers();
+    const { manager, room, guest } = createStartedRoom();
+    manager.disconnect('guest-socket');
+    vi.advanceTimersByTime(MATCH_DISCONNECT_GRACE_MS - 10_000);
+
+    expect(manager.resume(guest, 'guest-reconnected-socket')).toMatchObject({ ok: true });
+    expect(
+      manager.view(room, guest.playerId).players.find((player) => player.id === guest.playerId),
+    ).toMatchObject({ connected: true, disconnectDeadlineAt: null });
+
+    vi.advanceTimersByTime(10_001);
+    expect(room.members.has(guest.playerId)).toBe(true);
+    expect(room.state!.players[guest.playerId]).toBeDefined();
+  });
+
   it('randomly assigns different preset portraits to joining online guests', () => {
     const manager = new RoomManager({ onRoomChanged: () => undefined });
     managers.push(manager);
@@ -111,7 +184,10 @@ describe('authoritative online rooms', () => {
     expect(guest.ok).toBe(true);
     if (!guest.ok) throw new Error(guest.error.message);
     const avatar = PLAYER_AVATARS.find((candidate) => candidate.id === 'navigator')!;
-    const color = PLAYER_COLORS.find((candidate) => candidate.id === 'emerald')!;
+    const usedColors = manager
+      .view(manager.rooms.get(host.credentials.roomCode)!, host.credentials.playerId)
+      .players.map((player) => player.colorId);
+    const color = PLAYER_COLORS.find((candidate) => !usedColors.includes(candidate.id))!;
 
     expect(manager.updateProfile(guest.credentials, avatar.id, color.id)).toEqual({ ok: true });
     expect(
@@ -134,6 +210,25 @@ describe('authoritative online rooms', () => {
       ok: false,
       error: { code: 'MATCH_ALREADY_STARTED' },
     });
+  });
+
+  it('assigns every online arrival a valid unused color', () => {
+    const manager = new RoomManager({ onRoomChanged: () => undefined });
+    managers.push(manager);
+    const host = manager.create('Host', 'random-color-host');
+    expect(host.ok).toBe(true);
+    if (!host.ok) throw new Error(host.error.message);
+    const guest = manager.join(host.credentials.roomCode, 'Guest', 'random-color-guest');
+    expect(guest.ok).toBe(true);
+    if (!guest.ok) throw new Error(guest.error.message);
+
+    const colors = manager
+      .view(manager.rooms.get(host.credentials.roomCode)!, host.credentials.playerId)
+      .players.map((player) => player.colorId);
+    expect(colors.every((colorId) => PLAYER_COLORS.some((color) => color.id === colorId))).toBe(
+      true,
+    );
+    expect(new Set(colors)).toHaveProperty('size', 2);
   });
 
   it('creates private seats, starts only when full, and gives each socket its own view', () => {

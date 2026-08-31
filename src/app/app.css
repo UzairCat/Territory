@@ -4054,6 +4054,53 @@ input[type='checkbox'] {
     0 0.25rem 0.55rem rgb(0 0 0 / 30%);
 }
 
+.game-player--disconnected {
+  border-color: color-mix(in srgb, #a94d45 54%, var(--player-color));
+  background: linear-gradient(145deg, rgb(245 238 220 / 97%), rgb(211 199 179 / 97%));
+}
+
+.game-player__portrait.game-player__portrait--disconnecting {
+  margin-bottom: 1.78rem;
+  filter: saturate(0.58) contrast(0.94);
+}
+
+.game-player__disconnect-timer {
+  position: absolute;
+  z-index: 7;
+  top: calc(100% + 0.72rem);
+  left: 50%;
+  display: inline-flex;
+  min-width: 3.45rem;
+  height: 1.02rem;
+  padding: 0 0.4rem;
+  border: 1px solid #763934;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.27rem;
+  color: #fff5df;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  background: linear-gradient(#a84e45, #70322e);
+  box-shadow:
+    inset 0 1px rgb(255 255 255 / 20%),
+    0 0.12rem 0.22rem rgb(44 18 15 / 28%);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.game-player__disconnect-timer > i {
+  width: 0.36rem;
+  height: 0.36rem;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 50%;
+  background: #edc96c;
+  box-shadow: 0 0 0.25rem rgb(237 201 108 / 62%);
+}
+
 .game-player__portrait .player-marker {
   width: 1.18rem;
   height: 1.18rem;
@@ -4508,45 +4555,70 @@ input[type='checkbox'] {
 .game-player__bridge-art {
   position: relative;
   display: block;
-  width: 2.15rem;
-  height: 1.65rem;
+  width: 2.2rem;
+  height: 2.05rem;
+  border: 1px solid #8a8272;
+  border-radius: 48% 48% 42% 42% / 42% 42% 58% 58%;
+  background:
+    radial-gradient(circle at 48% 38%, rgb(255 255 255 / 48%), transparent 48%),
+    linear-gradient(145deg, #ece8dc, #b9b5aa);
+  box-shadow:
+    inset 0 0 0 0.13rem rgb(255 255 255 / 28%),
+    0 0.12rem 0.18rem rgb(0 0 0 / 24%);
 }
 
 .game-player__bridge-art::before,
 .game-player__bridge-art::after {
   position: absolute;
-  top: 0.3rem;
-  width: 0.2rem;
-  height: 1.1rem;
+  z-index: 1;
+  width: 0.78rem;
+  height: 0.3rem;
+  border: 1px solid #4d4031;
   border-radius: 999px;
   content: '';
-  background: #7c8380;
+  background: linear-gradient(#9b7650, #694a31);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 24%),
+    0 0.1rem 0.08rem rgb(0 0 0 / 25%);
 }
 
 .game-player__bridge-art::before {
-  left: 0.15rem;
+  top: 1.24rem;
+  left: 0.28rem;
+  transform: rotate(-32deg);
 }
 
 .game-player__bridge-art::after {
-  right: 0.15rem;
+  top: 0.49rem;
+  right: 0.2rem;
+  transform: rotate(-38deg);
 }
 
 .game-player__bridge-art i {
   position: absolute;
-  top: 0.72rem;
-  right: 0.12rem;
-  left: 0.12rem;
-  height: 0.2rem;
+  z-index: 2;
+  top: 0.89rem;
+  left: 0.82rem;
+  width: 0.78rem;
+  height: 0.3rem;
+  border: 1px solid #4d4031;
   border-radius: 999px;
-  background: #7c8380;
+  background: linear-gradient(#a47b50, #704c30);
   box-shadow:
-    0 -0.42rem 0 -0.07rem #9ca29f,
-    0 0.42rem 0 -0.07rem #656c69;
+    inset 0 1px 0 rgb(255 255 255 / 24%),
+    0 0.1rem 0.08rem rgb(0 0 0 / 25%);
+  transform: rotate(28deg);
 }
 
 .game-player__stat.is-award-holder .game-player__bridge-art,
 .game-player-kn__plain-stat.is-award-holder .game-player__bridge-art {
-  filter: drop-shadow(0 0.08rem 0.09rem rgb(109 77 17 / 36%));
+  border-color: #a77922;
+  background:
+    radial-gradient(circle at 48% 38%, rgb(255 255 255 / 58%), transparent 48%),
+    linear-gradient(145deg, #f4dd8e, #b9892f);
+  box-shadow:
+    inset 0 0 0 0.13rem rgb(255 249 205 / 34%),
+    0 0.12rem 0.2rem rgb(109 77 17 / 32%);
 }
 
 .game-player__stat.is-award-holder .game-player__bridge-art::before,
@@ -4555,14 +4627,15 @@ input[type='checkbox'] {
 .game-player-kn__plain-stat.is-award-holder .game-player__bridge-art::after,
 .game-player__stat.is-award-holder .game-player__bridge-art i,
 .game-player-kn__plain-stat.is-award-holder .game-player__bridge-art i {
-  background: #d5ac3f;
+  border-color: #76500f;
+  background: linear-gradient(#f1ce62, #b27c20);
 }
 
 .game-player__stat.is-award-holder .game-player__bridge-art i,
 .game-player-kn__plain-stat.is-award-holder .game-player__bridge-art i {
   box-shadow:
-    0 -0.42rem 0 -0.07rem #e6c866,
-    0 0.42rem 0 -0.07rem #aa7d25;
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 0.1rem 0.1rem rgb(109 77 17 / 28%);
 }
 
 .game-player__awards {
