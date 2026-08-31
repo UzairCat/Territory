@@ -1520,6 +1520,7 @@ describe('K+N compact choice flows', () => {
             name: player.name,
             colorId: player.colorId,
             connected: true,
+            ready: true,
             host: player.id === actorId,
           })),
           settings: {
@@ -1829,6 +1830,7 @@ describe('K+N compact choice flows', () => {
           name: player.name,
           colorId: player.colorId,
           connected: true,
+          ready: true,
           host: player.id === TEST_PLAYER_IDS[0],
         })),
         settings: {
@@ -1884,6 +1886,7 @@ describe('K+N compact choice flows', () => {
       name: player.name,
       colorId: player.colorId,
       connected: true,
+      ready: true,
       host: player.id === TEST_PLAYER_IDS[0],
     }));
     const originalLeaveRoom = useOnlineStore.getState().leaveRoom;

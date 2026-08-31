@@ -18,6 +18,7 @@ const session = vi.hoisted(() => ({
         name: 'Alex',
         colorId: 'cobalt',
         connected: true,
+        ready: false,
         host: true,
       },
     ],
@@ -85,6 +86,19 @@ describe('online room sessions', () => {
       commandPending: false,
       error: null,
     });
+  });
+
+  it('sends the viewer readiness choice with their room credentials', async () => {
+    await expect(useOnlineStore.getState().createRoom('Alex')).resolves.toBe(true);
+    socket.emit.mockClear();
+
+    await expect(useOnlineStore.getState().setReady(true)).resolves.toBe(true);
+
+    expect(socket.emit).toHaveBeenCalledWith(
+      'room:set-ready',
+      { credentials: session.credentials, ready: true },
+      expect.any(Function),
+    );
   });
 
   it('closes the idle transport after leaving a room', async () => {

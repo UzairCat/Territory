@@ -10,9 +10,21 @@ import { resourceBundle } from '../../src/engine/content/types';
 import { getLegalSetupHouseVertexIds } from '../../src/engine/rules/setup-rules';
 import { actionId, tradeId } from '../../src/engine/core/ids';
 import { KN_MODE } from '../../src/engine/modes/kn';
-import { MATCH_DISCONNECT_GRACE_MS } from '../../src/multiplayer/protocol';
+import {
+  MATCH_DISCONNECT_GRACE_MS,
+  type OnlineSessionCredentials,
+} from '../../src/multiplayer/protocol';
 
 const managers: RoomManager[] = [];
+
+function readyPlayers(
+  manager: RoomManager,
+  ...credentials: readonly OnlineSessionCredentials[]
+): void {
+  for (const playerCredentials of credentials) {
+    expect(manager.setReady(playerCredentials, true)).toEqual({ ok: true });
+  }
+}
 
 function createStartedRoom(kNMode = false) {
   const manager = new RoomManager({ onRoomChanged: () => undefined });
@@ -32,6 +44,7 @@ function createStartedRoom(kNMode = false) {
       }),
     ).toEqual({ ok: true });
   }
+  readyPlayers(manager, host.credentials, guest.credentials);
   const started = manager.start(host.credentials);
   expect(started).toEqual({ ok: true });
   const room = manager.rooms.get(host.credentials.roomCode);
@@ -59,6 +72,7 @@ describe('authoritative online rooms', () => {
     const guest = manager.join(host.credentials.roomCode, 'Guest', 'inactive-guest-socket');
     expect(guest.ok).toBe(true);
     if (!guest.ok) throw new Error(guest.error.message);
+    readyPlayers(manager, host.credentials, guest.credentials);
     expect(manager.start(host.credentials)).toEqual({ ok: true });
     const room = manager.rooms.get(host.credentials.roomCode);
     if (room === undefined) throw new Error('Inactive room fixture disappeared before disconnect.');
@@ -234,6 +248,7 @@ describe('authoritative online rooms', () => {
       error: { code: 'COLOR_TAKEN' },
     });
 
+    readyPlayers(manager, host.credentials, guest.credentials);
     expect(manager.start(host.credentials)).toEqual({ ok: true });
     const room = manager.rooms.get(host.credentials.roomCode)!;
     expect(room.state?.players[guest.credentials.playerId]).toMatchObject({
@@ -265,18 +280,67 @@ describe('authoritative online rooms', () => {
     expect(new Set(colors)).toHaveProperty('size', 2);
   });
 
-  it('creates private seats, starts only when full, and gives each socket its own view', () => {
+  it('starts only when every full-room player is ready without settings clearing readiness', () => {
     const manager = new RoomManager({ onRoomChanged: () => undefined });
     managers.push(manager);
     const host = manager.create('Host', 'host-socket');
     expect(host.ok).toBe(true);
     if (!host.ok) return;
+    expect(host.room.players).toHaveLength(1);
+    expect(host.room.players[0]).toMatchObject({ ready: false });
     expect(manager.start(host.credentials)).toMatchObject({
       ok: false,
       error: { code: 'LOBBY_NOT_READY' },
     });
+
+    expect(manager.setReady(host.credentials, true)).toEqual({ ok: true });
+    expect(
+      manager
+        .view(manager.rooms.get(host.credentials.roomCode)!, host.credentials.playerId)
+        .players.find((player) => player.id === host.credentials.playerId),
+    ).toMatchObject({ ready: true });
+    expect(
+      manager.updateSettings(host.credentials, {
+        ...host.room.settings,
+        seed: 'settings-do-not-clear-ready',
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      manager
+        .view(manager.rooms.get(host.credentials.roomCode)!, host.credentials.playerId)
+        .players.find((player) => player.id === host.credentials.playerId),
+    ).toMatchObject({ ready: true });
+
     const guest = manager.join(host.credentials.roomCode, 'Guest', 'guest-socket');
     expect(guest.ok).toBe(true);
+    if (!guest.ok) return;
+    expect(
+      guest.room.players.find((player) => player.id === guest.credentials.playerId),
+    ).toMatchObject({
+      ready: false,
+    });
+    expect(manager.start(host.credentials)).toMatchObject({
+      ok: false,
+      error: { code: 'PLAYERS_NOT_READY' },
+    });
+
+    expect(manager.setReady(guest.credentials, true)).toEqual({ ok: true });
+    expect(manager.setReady(guest.credentials, false)).toEqual({ ok: true });
+    expect(manager.start(host.credentials)).toMatchObject({
+      ok: false,
+      error: { code: 'PLAYERS_NOT_READY' },
+    });
+    expect(manager.setReady(guest.credentials, true)).toEqual({ ok: true });
+    const readyRoom = manager.rooms.get(host.credentials.roomCode)!;
+    expect(
+      manager.updateSettings(host.credentials, {
+        ...readyRoom.settings,
+        victoryTarget: readyRoom.settings.victoryTarget + 1,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      manager.view(readyRoom, host.credentials.playerId).players.every((player) => player.ready),
+    ).toBe(true);
     expect(manager.start(host.credentials)).toEqual({ ok: true });
     const targets = manager.connectedViews(host.credentials.roomCode);
     expect(targets.map((target) => target.socketId).sort()).toEqual([
@@ -615,6 +679,8 @@ describe('authoritative online rooms', () => {
     expect(manager.updateSettings(host, { ...room.settings, seed: completedSeed })).toEqual({
       ok: true,
     });
+    expect(manager.view(room, host.playerId).players.every((player) => !player.ready)).toBe(true);
+    readyPlayers(manager, host, guest);
     expect(manager.start(host)).toEqual({ ok: true });
     expect(room.state?.config.seed).toBe(completedSeed);
     expect(manager.resume(host, 'host-returned-socket')).toMatchObject({ ok: true });
@@ -630,6 +696,7 @@ describe('authoritative online rooms', () => {
     const guest = manager.join(admin.credentials.roomCode, 'Guest', 'guest-socket');
     expect(guest.ok).toBe(true);
     if (!guest.ok) throw new Error(guest.error.message);
+    readyPlayers(manager, admin.credentials, guest.credentials);
     expect(manager.start(admin.credentials)).toEqual({ ok: true });
     const room = manager.rooms.get(admin.credentials.roomCode);
     if (room?.state === null || room?.state === undefined)

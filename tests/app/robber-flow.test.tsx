@@ -207,6 +207,7 @@ describe('robber application flow', () => {
           name: player.name,
           colorId: player.colorId,
           connected: true,
+          ready: true,
           host: player.id === TEST_PLAYER_IDS[0],
         })),
         settings: {

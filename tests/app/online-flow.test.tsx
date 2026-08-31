@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -68,6 +68,7 @@ describe('online entry and lobby presentation', () => {
           name: 'Alex',
           colorId: colorId('cobalt'),
           connected: true,
+          ready: false,
           host: true,
         },
       ],
@@ -100,11 +101,13 @@ describe('online entry and lobby presentation', () => {
     expect(_players).toEqual([]);
     const updateSettings = vi.fn(() => Promise.resolve(true));
     const updateProfile = vi.fn(() => Promise.resolve(true));
+    const setReady = vi.fn(() => Promise.resolve(true));
     useOnlineStore.setState({
       connection: 'CONNECTED',
       credentials: { roomCode: 'ABC234', playerId: hostId, resumeToken: 'x'.repeat(32) },
       updateSettings,
       updateProfile,
+      setReady,
       room: {
         protocolVersion: 1,
         code: 'ABC234',
@@ -117,6 +120,7 @@ describe('online entry and lobby presentation', () => {
             name: 'Alex',
             colorId: colorId('cobalt'),
             connected: true,
+            ready: false,
             host: true,
           },
         ],
@@ -136,6 +140,10 @@ describe('online entry and lobby presentation', () => {
     expect(screen.getByRole('combobox', { name: 'Map' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Classic mode' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Base - Small' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Ready up' })).toHaveTextContent('Ready');
+
+    await user.click(screen.getByRole('button', { name: 'Ready up' }));
+    expect(setReady).toHaveBeenCalledWith(true);
 
     await user.click(screen.getByRole('button', { name: 'Open profile gallery for Alex' }));
     const gallery = screen.getByRole('dialog', { name: 'Alex’s profile' });
@@ -183,6 +191,7 @@ describe('online entry and lobby presentation', () => {
             name: 'Morgan',
             colorId: colorId('cobalt'),
             connected: false,
+            ready: true,
             host: true,
           },
           {
@@ -190,6 +199,7 @@ describe('online entry and lobby presentation', () => {
             name: 'Alex',
             colorId: colorId('crimson'),
             connected: true,
+            ready: false,
             host: false,
           },
         ],
@@ -207,6 +217,65 @@ describe('online entry and lobby presentation', () => {
     expect(screen.getByRole('button', { name: 'Hide Bank Cards' })).toBeDisabled();
     expect(screen.getByRole('slider', { name: 'Points to win' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Start online match' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ready up' })).toHaveTextContent('Ready');
     expect(screen.getByText('Waiting for host…')).toBeInTheDocument();
+  });
+
+  it('enables the host start button only after every connected seat is ready', () => {
+    const hostId = playerId('ready-host');
+    const guestId = playerId('ready-guest');
+    const { players: _players, ...settings } = createDefaultLobby('ready-room');
+    expect(_players).toEqual([]);
+    useOnlineStore.setState({
+      connection: 'CONNECTED',
+      credentials: { roomCode: 'RDY234', playerId: hostId, resumeToken: 'r'.repeat(32) },
+      room: {
+        protocolVersion: 1,
+        code: 'RDY234',
+        phase: 'LOBBY',
+        viewerPlayerId: hostId,
+        hostPlayerId: hostId,
+        players: [
+          {
+            id: hostId,
+            name: 'Alex',
+            colorId: colorId('cobalt'),
+            connected: true,
+            ready: true,
+            host: true,
+          },
+          {
+            id: guestId,
+            name: 'Morgan',
+            colorId: colorId('crimson'),
+            connected: true,
+            ready: false,
+            host: false,
+          },
+        ],
+        settings,
+        game: null,
+      },
+    });
+
+    renderApp('/online/RDY234');
+    expect(screen.getByRole('button', { name: 'Start online match' })).toBeDisabled();
+    expect(screen.getByText('Waiting for 1 player to ready up')).toBeInTheDocument();
+
+    act(() => {
+      useOnlineStore.setState((state) => ({
+        room:
+          state.room === null
+            ? null
+            : {
+                ...state.room,
+                players: state.room.players.map((player) => ({ ...player, ready: true })),
+              },
+      }));
+    });
+
+    expect(screen.getByRole('button', { name: 'Start online match' })).toBeEnabled();
+    expect(screen.getByText('Lobby ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unready yourself' })).toHaveTextContent('Unready');
   });
 });

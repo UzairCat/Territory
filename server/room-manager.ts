@@ -53,6 +53,7 @@ interface RoomMember {
   name: string;
   colorId: ColorId;
   avatarId: PlayerAvatarId;
+  ready: boolean;
   socketIds: Set<string>;
   disconnectDeadlineAt: number | null;
   removalRemainingMs: number | null;
@@ -298,6 +299,7 @@ export class RoomManager {
       name: displayName.trim(),
       colorId: randomColorId(null),
       avatarId: randomAvatarId(null),
+      ready: false,
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
@@ -366,6 +368,7 @@ export class RoomManager {
       name: displayName.trim(),
       colorId: randomColorId(room),
       avatarId: randomAvatarId(room),
+      ready: false,
       resumeTokenHash: hashToken(token),
       createdAt: Date.now(),
       socketIds: new Set([socketId]),
@@ -480,6 +483,24 @@ export class RoomManager {
     return { ok: true };
   }
 
+  setReady(credentials: OnlineSessionCredentials, ready: boolean): OnlineAck {
+    const authenticated = this.authenticate(credentials);
+    if (authenticated === null) {
+      return { ok: false, error: error('UNAUTHORIZED', 'Session expired.') };
+    }
+    const { room, member } = authenticated;
+    if (room.phase !== 'LOBBY') {
+      return {
+        ok: false,
+        error: error('MATCH_ALREADY_STARTED', 'Readiness is locked after the match starts.'),
+      };
+    }
+    if (member.ready === ready) return { ok: true };
+    member.ready = ready;
+    this.hooks.onRoomChanged(room.code);
+    return { ok: true };
+  }
+
   start(credentials: OnlineSessionCredentials): OnlineAck {
     const authenticated = this.authenticate(credentials);
     if (authenticated === null)
@@ -503,6 +524,12 @@ export class RoomManager {
       return {
         ok: false,
         error: error('LOBBY_NOT_READY', config.issues[0]?.message ?? 'Room is not ready.'),
+      };
+    }
+    if ([...room.members.values()].some((candidate) => !candidate.ready)) {
+      return {
+        ok: false,
+        error: error('PLAYERS_NOT_READY', 'Every player must ready up before the match can start.'),
       };
     }
     const created = createGame(config.config);
@@ -612,6 +639,7 @@ export class RoomManager {
     room.tradeDeadlineAt = null;
     room.tradePausedRemainingMs = null;
     for (const roomMember of room.members.values()) {
+      roomMember.ready = false;
       if (roomMember.socketIds.size === 0) this.scheduleMemberRemoval(room, roomMember);
     }
     this.hooks.onRoomChanged(room.code);
@@ -819,6 +847,7 @@ export class RoomManager {
         colorId: member.colorId,
         avatarId: member.avatarId,
         connected: member.socketIds.size > 0,
+        ready: member.ready,
         disconnectDeadlineAt:
           member.socketIds.size > 0 || room.phase === 'LOBBY'
             ? null

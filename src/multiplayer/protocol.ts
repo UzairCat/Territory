@@ -29,6 +29,7 @@ export interface OnlineRoomPlayer {
   readonly colorId: ColorId;
   readonly avatarId?: PlayerAvatarId;
   readonly connected: boolean;
+  readonly ready: boolean;
   /** Authoritative server deadline for an absent match seat. Null while connected or in lobby. */
   readonly disconnectDeadlineAt?: number | null;
   readonly host: boolean;
@@ -106,6 +107,10 @@ export interface UpdatePlayerProfilePayload extends RoomCommandPayload {
   readonly profile: PlayerProfileSelection;
 }
 
+export interface SetPlayerReadyPayload extends RoomCommandPayload {
+  readonly ready: boolean;
+}
+
 export interface RoomCommandPayload {
   readonly credentials: OnlineSessionCredentials;
 }
@@ -156,6 +161,7 @@ export interface ClientToServerEvents {
     payload: UpdatePlayerProfilePayload,
     acknowledge: (ack: OnlineAck) => void,
   ) => void;
+  'room:set-ready': (payload: SetPlayerReadyPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'room:start': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'room:rematch': (payload: RoomCommandPayload, acknowledge: (ack: OnlineAck) => void) => void;
   'room:return-to-lobby': (

@@ -239,6 +239,15 @@ io.on('connection', (socket) => {
     );
   });
 
+  socket.on('room:set-ready', (payload, acknowledge) => {
+    const credentials = parsedCredentials(payload?.credentials);
+    acknowledge(
+      credentials === null || typeof payload?.ready !== 'boolean'
+        ? invalidPayload()
+        : manager.setReady(credentials, payload.ready),
+    );
+  });
+
   socket.on('room:start', (payload, acknowledge) => {
     const credentials = parsedCredentials(payload?.credentials);
     acknowledge(credentials === null ? invalidPayload() : manager.start(credentials));

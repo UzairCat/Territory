@@ -33,6 +33,7 @@ interface OnlineStoreState {
   readonly joinRoom: (roomCode: string, displayName: string) => Promise<boolean>;
   readonly updateSettings: (settings: OnlineLobbySettings) => Promise<boolean>;
   readonly updateProfile: (profile: PlayerProfileSelection) => Promise<boolean>;
+  readonly setReady: (ready: boolean) => Promise<boolean>;
   readonly startMatch: () => Promise<boolean>;
   readonly rematch: () => Promise<boolean>;
   readonly returnToLobby: () => Promise<boolean>;
@@ -389,6 +390,16 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     set({ commandPending: true, error: null });
     const ack = await emitWithAck((acknowledge) =>
       getOnlineSocket().emit('room:update-profile', { credentials, profile }, acknowledge),
+    );
+    set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
+    return ack.ok;
+  },
+  setReady: async (ready) => {
+    const credentials = get().credentials;
+    if (credentials === null) return false;
+    set({ commandPending: true, error: null });
+    const ack = await emitWithAck((acknowledge) =>
+      getOnlineSocket().emit('room:set-ready', { credentials, ready }, acknowledge),
     );
     set({ commandPending: false, ...(!ack.ok ? { error: ack.error } : {}) });
     return ack.ok;

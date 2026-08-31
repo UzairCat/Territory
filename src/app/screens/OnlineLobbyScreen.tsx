@@ -218,6 +218,7 @@ export function OnlineLobbyScreen() {
   const initialize = useOnlineStore((state) => state.initialize);
   const updateSettings = useOnlineStore((state) => state.updateSettings);
   const updateProfile = useOnlineStore((state) => state.updateProfile);
+  const setReady = useOnlineStore((state) => state.setReady);
   const startMatch = useOnlineStore((state) => state.startMatch);
   const leaveRoom = useOnlineStore((state) => state.leaveRoom);
   const openSettings = useAppStore((state) => state.openSettings);
@@ -255,7 +256,10 @@ export function OnlineLobbyScreen() {
   const controlsDisabled = !viewerIsHost || commandPending;
   const full = room.players.length === settings.size;
   const connectedPlayers = room.players.filter((player) => player.connected).length;
+  const readyPlayers = room.players.filter((player) => player.ready).length;
   const allConnected = room.players.every((player) => player.connected);
+  const allReady = full && allConnected && room.players.every((player) => player.ready);
+  const waitingForReady = room.players.filter((player) => player.connected && !player.ready).length;
   const hostPlayer = room.players.find((player) => player.id === room.hostPlayerId);
   const viewerPlayer = room.players.find((player) => player.id === room.viewerPlayerId);
   const selectedMode = AVAILABLE_MODES.find((mode) => mode.id === settings.modeId);
@@ -368,15 +372,15 @@ export function OnlineLobbyScreen() {
               </h2>
             </div>
             <span
-              className={`lobby-room-ready-dot ${allConnected ? '' : 'is-reconnecting'}`}
-              title={`${connectedPlayers} players connected`}
-              aria-label={`${connectedPlayers} players connected`}
+              className={`lobby-room-ready-dot ${allReady ? '' : allConnected ? 'is-waiting' : 'is-reconnecting'}`}
+              title={`${readyPlayers} of ${settings.size} seats ready`}
+              aria-label={`${readyPlayers} of ${settings.size} seats ready`}
             >
               ●
             </span>
           </header>
           <p className="lobby-room-player-summary">
-            {connectedPlayers}/{settings.size} connected · Share room code {room.code}
+            {connectedPlayers}/{settings.size} connected · {readyPlayers}/{settings.size} ready
           </p>
           <ol className="player-list">
             {Array.from({ length: settings.size }, (_, index) => {
@@ -397,7 +401,7 @@ export function OnlineLobbyScreen() {
               return (
                 <li
                   key={player.id}
-                  className={`player-slot online-player-slot ${isViewer ? 'is-you' : ''} ${player.connected ? '' : 'is-disconnected'}`}
+                  className={`player-slot online-player-slot ${isViewer ? 'is-you' : ''} ${player.ready ? 'is-ready' : ''} ${player.connected ? '' : 'is-disconnected'}`}
                   style={{ '--seat-color': color?.hex ?? '#ffffff' } as CSSProperties}
                 >
                   <span className="player-slot__number">{index + 1}</span>
@@ -416,11 +420,25 @@ export function OnlineLobbyScreen() {
                       {color?.displayName ?? 'Player'} {player.host ? '· Party leader' : ''}
                     </small>
                   </span>
-                  <span
-                    className={`online-player-presence ${player.connected ? 'is-online' : 'is-reconnecting'}`}
-                  >
-                    <i aria-hidden="true" /> {player.connected ? 'Ready' : 'Reconnecting'}
-                  </span>
+                  {isViewer && player.connected ? (
+                    <button
+                      type="button"
+                      className={`online-player-ready-button ${player.ready ? 'is-ready' : ''}`}
+                      aria-label={player.ready ? 'Unready yourself' : 'Ready up'}
+                      aria-pressed={player.ready}
+                      disabled={commandPending}
+                      onClick={() => void setReady(!player.ready)}
+                    >
+                      <i aria-hidden="true" /> {player.ready ? 'Unready' : 'Ready'}
+                    </button>
+                  ) : (
+                    <span
+                      className={`online-player-presence ${!player.connected ? 'is-reconnecting' : player.ready ? 'is-ready' : 'is-waiting'}`}
+                    >
+                      <i aria-hidden="true" />
+                      {!player.connected ? 'Reconnecting' : player.ready ? 'Ready' : 'Not ready'}
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -916,13 +934,15 @@ export function OnlineLobbyScreen() {
                 <p className="online-lobby-inline-error" role="alert">
                   {error.message}
                 </p>
-              ) : full && allConnected ? (
+              ) : allReady ? (
                 <p className="validation-ready">Lobby ready</p>
               ) : (
                 <p>
                   {!full
                     ? `Waiting for ${settings.size - room.players.length} more player${settings.size - room.players.length === 1 ? '' : 's'}`
-                    : 'Waiting for every player to reconnect'}
+                    : !allConnected
+                      ? 'Waiting for every player to reconnect'
+                      : `Waiting for ${waitingForReady} player${waitingForReady === 1 ? '' : 's'} to ready up`}
                 </p>
               )}
             </div>
@@ -933,7 +953,7 @@ export function OnlineLobbyScreen() {
             {viewerIsHost ? (
               <Button
                 variant="primary"
-                disabled={!full || !allConnected || commandPending}
+                disabled={!allReady || commandPending}
                 onClick={() => void startMatch()}
               >
                 Start online match
