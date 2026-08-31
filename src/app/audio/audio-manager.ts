@@ -166,6 +166,22 @@ function clampUnit(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+const MUSIC_LOOP_CROSSFADE_SECONDS = 2;
+const MUSIC_LOOP_CROSSFADE_TRIGGER_SECONDS = 2.4;
+
+export interface MusicCrossfadeGains {
+  readonly outgoing: number;
+  readonly incoming: number;
+}
+
+export function musicCrossfadeGains(progress: number): MusicCrossfadeGains {
+  const normalized = clampUnit(progress);
+  return {
+    outgoing: Math.cos((normalized * Math.PI) / 2),
+    incoming: Math.sin((normalized * Math.PI) / 2),
+  };
+}
+
 function mediaPlaybackAvailable(): boolean {
   if (globalThis.Audio === undefined) return false;
   return !globalThis.navigator?.userAgent.toLocaleLowerCase().includes('jsdom');
@@ -185,6 +201,9 @@ class AudioManager {
   private scheduledEffects = new Set<ReturnType<typeof globalThis.setTimeout>>();
   private musicActive = false;
   private musicElement: HTMLAudioElement | null = null;
+  private incomingMusicElement: HTMLAudioElement | null = null;
+  private musicCrossfadeFrame: number | null = null;
+  private musicCrossfadeDuration = MUSIC_LOOP_CROSSFADE_SECONDS;
   private musicTrack: MusicTrack | null = null;
   private musicSessionId: string | null = null;
   private masterVolume = 0;
@@ -229,9 +248,13 @@ class AudioManager {
     this.preloadEffects();
     if (globalThis.document !== undefined) {
       this.visibilityHandler = () => {
-        if (!this.musicActive || this.musicElement === null) return;
-        if (globalThis.document.visibilityState === 'hidden') this.musicElement.pause();
-        else if (this.targetMusicVolume() > 0) this.tryPlayMusic(this.musicElement);
+        if (!this.musicActive) return;
+        const elements = this.musicElements();
+        if (globalThis.document.visibilityState === 'hidden') {
+          for (const element of elements) element.pause();
+        } else if (this.targetMusicVolume() > 0) {
+          for (const element of elements) this.tryPlayMusic(element);
+        }
       };
       globalThis.document.addEventListener('visibilitychange', this.visibilityHandler);
     }
@@ -242,10 +265,14 @@ class AudioManager {
     this.masterVolume = clampUnit(masterVolume / 100);
     this.musicVolume = clampUnit(musicVolume / 100);
     const target = this.targetMusicVolume();
-    if (this.musicElement !== null) {
-      this.musicElement.volume = this.musicDucked ? target * 0.14 : target;
-      if (target === 0) this.musicElement.pause();
-      else if (this.musicActive) this.tryPlayMusic(this.musicElement);
+    const elements = this.musicElements();
+    if (elements.length > 0) {
+      this.applyMusicVolumes();
+      if (target === 0) {
+        for (const element of elements) element.pause();
+      } else if (this.musicActive) {
+        for (const element of elements) this.tryPlayMusic(element);
+      }
     } else if (this.musicActive && target > 0) {
       this.playMusicTrack();
     }
@@ -265,12 +292,7 @@ class AudioManager {
       this.musicDuckTimer = null;
     }
     this.musicDucked = false;
-    if (this.musicElement !== null) {
-      this.musicElement.pause();
-      this.musicElement.removeAttribute('src');
-      this.musicElement.load();
-      this.musicElement = null;
-    }
+    this.clearMusicElements();
     for (const timer of this.scheduledEffects) globalThis.clearTimeout(timer);
     this.scheduledEffects.clear();
     for (const effect of this.activeEffects) {
@@ -350,25 +372,156 @@ class AudioManager {
     return clampUnit(this.masterVolume * this.musicVolume * 0.52);
   }
 
+  private musicElements(): readonly HTMLAudioElement[] {
+    if (this.musicElement === null) return [];
+    return this.incomingMusicElement === null
+      ? [this.musicElement]
+      : [this.musicElement, this.incomingMusicElement];
+  }
+
+  private applyMusicVolumes(): void {
+    const outgoing = this.musicElement;
+    if (outgoing === null) return;
+    const baseVolume = this.targetMusicVolume() * (this.musicDucked ? 0.14 : 1);
+    const incoming = this.incomingMusicElement;
+    if (incoming === null) {
+      outgoing.volume = baseVolume;
+      return;
+    }
+    const progress =
+      this.musicCrossfadeDuration <= 0
+        ? 1
+        : clampUnit(incoming.currentTime / this.musicCrossfadeDuration);
+    const gains = musicCrossfadeGains(progress);
+    outgoing.volume = clampUnit(baseVolume * gains.outgoing);
+    incoming.volume = clampUnit(baseVolume * gains.incoming);
+  }
+
   private playMusicTrack(): void {
     if (!this.musicActive || !mediaPlaybackAvailable() || this.targetMusicVolume() === 0) return;
     const track = this.musicTrack;
     if (track === null) return;
-    if (this.musicElement !== null) this.musicElement.pause();
+    this.clearMusicElements();
     const audio = new Audio(track.url);
     audio.preload = 'auto';
-    audio.loop = true;
-    audio.volume = this.musicDucked ? this.targetMusicVolume() * 0.14 : this.targetMusicVolume();
-    audio.addEventListener(
-      'error',
-      () => {
-        if (this.musicElement !== audio) return;
-        this.musicElement = null;
-      },
-      { once: true },
-    );
+    audio.loop = false;
+    audio.addEventListener('timeupdate', () => this.maybeStartMusicCrossfade(audio));
+    audio.addEventListener('ended', () => this.handleMusicEnded(audio));
+    audio.addEventListener('error', () => this.handleMusicError(audio), { once: true });
     this.musicElement = audio;
+    this.applyMusicVolumes();
     this.tryPlayMusic(audio);
+  }
+
+  private maybeStartMusicCrossfade(audio: HTMLAudioElement): void {
+    if (
+      !this.musicActive ||
+      this.musicElement !== audio ||
+      this.incomingMusicElement !== null ||
+      !Number.isFinite(audio.duration)
+    ) {
+      return;
+    }
+    const remaining = audio.duration - audio.currentTime;
+    if (remaining > MUSIC_LOOP_CROSSFADE_TRIGGER_SECONDS) return;
+    if (audio.duration <= MUSIC_LOOP_CROSSFADE_TRIGGER_SECONDS) {
+      audio.loop = true;
+      return;
+    }
+
+    const track = this.musicTrack;
+    if (track === null) return;
+    const incoming = new Audio(track.url);
+    incoming.preload = 'auto';
+    incoming.loop = false;
+    incoming.volume = 0;
+    incoming.addEventListener('timeupdate', () => this.maybeStartMusicCrossfade(incoming));
+    incoming.addEventListener('ended', () => this.handleMusicEnded(incoming));
+    incoming.addEventListener('error', () => this.handleMusicError(incoming), { once: true });
+    this.musicCrossfadeDuration = Math.min(
+      MUSIC_LOOP_CROSSFADE_SECONDS,
+      Math.max(0.4, remaining - 0.08),
+    );
+    this.incomingMusicElement = incoming;
+    this.applyMusicVolumes();
+    this.tryPlayMusic(incoming);
+    this.updateMusicCrossfade();
+  }
+
+  private updateMusicCrossfade(): void {
+    if (this.musicCrossfadeFrame !== null) {
+      globalThis.cancelAnimationFrame(this.musicCrossfadeFrame);
+      this.musicCrossfadeFrame = null;
+    }
+    const outgoing = this.musicElement;
+    const incoming = this.incomingMusicElement;
+    if (outgoing === null || incoming === null) return;
+    this.applyMusicVolumes();
+    if (incoming.currentTime >= this.musicCrossfadeDuration) {
+      this.musicElement = incoming;
+      this.incomingMusicElement = null;
+      this.releaseMusicElement(outgoing);
+      this.applyMusicVolumes();
+      return;
+    }
+    this.musicCrossfadeFrame = globalThis.requestAnimationFrame(() => {
+      this.musicCrossfadeFrame = null;
+      if (this.musicElement === outgoing && this.incomingMusicElement === incoming) {
+        this.updateMusicCrossfade();
+      }
+    });
+  }
+
+  private handleMusicEnded(audio: HTMLAudioElement): void {
+    if (audio !== this.musicElement) return;
+    const incoming = this.incomingMusicElement;
+    if (incoming !== null) {
+      this.musicElement = incoming;
+      this.incomingMusicElement = null;
+      this.cancelMusicCrossfadeFrame();
+      this.releaseMusicElement(audio);
+      this.applyMusicVolumes();
+      return;
+    }
+    audio.currentTime = 0;
+    this.tryPlayMusic(audio);
+  }
+
+  private handleMusicError(audio: HTMLAudioElement): void {
+    if (audio === this.incomingMusicElement) {
+      this.incomingMusicElement = null;
+      this.cancelMusicCrossfadeFrame();
+      this.releaseMusicElement(audio);
+      this.applyMusicVolumes();
+      return;
+    }
+    if (audio !== this.musicElement) return;
+    const incoming = this.incomingMusicElement;
+    this.musicElement = incoming;
+    this.incomingMusicElement = null;
+    this.cancelMusicCrossfadeFrame();
+    this.releaseMusicElement(audio);
+    this.applyMusicVolumes();
+  }
+
+  private cancelMusicCrossfadeFrame(): void {
+    if (this.musicCrossfadeFrame === null) return;
+    globalThis.cancelAnimationFrame(this.musicCrossfadeFrame);
+    this.musicCrossfadeFrame = null;
+  }
+
+  private clearMusicElements(): void {
+    this.cancelMusicCrossfadeFrame();
+    const elements = this.musicElements();
+    this.musicElement = null;
+    this.incomingMusicElement = null;
+    for (const element of elements) this.releaseMusicElement(element);
+  }
+
+  private releaseMusicElement(audio: HTMLAudioElement): void {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
   }
 
   private tryPlayMusic(audio: HTMLAudioElement): void {
@@ -394,9 +547,9 @@ class AudioManager {
   private installUnlockHandler(): void {
     if (this.unlockHandler !== null || !this.musicActive) return;
     this.unlockHandler = () => {
-      const music = this.musicElement;
-      if (music === null) this.playMusicTrack();
-      else this.tryPlayMusic(music);
+      const elements = this.musicElements();
+      if (elements.length === 0) this.playMusicTrack();
+      else for (const element of elements) this.tryPlayMusic(element);
     };
     globalThis.addEventListener('pointerdown', this.unlockHandler, { capture: true, once: true });
     globalThis.addEventListener('keydown', this.unlockHandler, { capture: true, once: true });
@@ -412,12 +565,12 @@ class AudioManager {
   private duckMusic(durationMs: number): void {
     if (this.musicElement === null) return;
     this.musicDucked = true;
-    this.musicElement.volume = this.targetMusicVolume() * 0.14;
+    this.applyMusicVolumes();
     if (this.musicDuckTimer !== null) globalThis.clearTimeout(this.musicDuckTimer);
     this.musicDuckTimer = globalThis.setTimeout(() => {
       this.musicDuckTimer = null;
       this.musicDucked = false;
-      if (this.musicElement !== null) this.musicElement.volume = this.targetMusicVolume();
+      this.applyMusicVolumes();
     }, durationMs);
   }
 }

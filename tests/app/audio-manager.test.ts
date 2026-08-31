@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { BACKGROUND_MUSIC_TRACKS } from '../../src/app/audio/audio-catalog';
-import { audioCuesForEvents, backgroundMusicTrackForGame } from '../../src/app/audio/audio-manager';
+import {
+  audioCuesForEvents,
+  backgroundMusicTrackForGame,
+  musicCrossfadeGains,
+} from '../../src/app/audio/audio-manager';
 import { COMMODITY_IDS } from '../../src/engine/content/commodities';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import { resourceBundle } from '../../src/engine/content/types';
@@ -335,5 +339,14 @@ describe('game audio design', () => {
     );
     expect(selectedTracks.every((track) => BACKGROUND_MUSIC_TRACKS.includes(track))).toBe(true);
     expect(new Set(selectedTracks.map((track) => track.id))).toHaveProperty('size', 2);
+  });
+
+  it('uses an equal-power handoff to smooth each music loop', () => {
+    expect(musicCrossfadeGains(0)).toEqual({ outgoing: 1, incoming: 0 });
+    const midpoint = musicCrossfadeGains(0.5);
+    expect(midpoint.outgoing).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(midpoint.incoming).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(musicCrossfadeGains(1).outgoing).toBeCloseTo(0, 6);
+    expect(musicCrossfadeGains(1).incoming).toBeCloseTo(1, 6);
   });
 });
