@@ -12,6 +12,7 @@ export default tseslint.config(
       'node_modules',
       'eslint.config.js',
       'scripts/generate-audio-assets.mjs',
+      'scripts/precompress-dist.mjs',
     ],
   },
   js.configs.recommended,

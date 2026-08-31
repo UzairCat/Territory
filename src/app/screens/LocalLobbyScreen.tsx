@@ -1,6 +1,8 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import '../app.css';
+
 import { TERRAINS } from '../../engine/content/resources';
 import type { MapDefinition, PlayerCount } from '../../engine/content/types';
 import type { MapId, PlayerId } from '../../engine/core/ids';

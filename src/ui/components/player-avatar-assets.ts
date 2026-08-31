@@ -1,15 +1,15 @@
-import cartographerImage from '../../assets/avatars/cartographer.png';
-import courierImage from '../../assets/avatars/courier.png';
-import gmCalebImage from '../../assets/avatars/gmcaleb.png';
-import goofyMusselImage from '../../assets/avatars/goofymussel.png';
-import herbalistImage from '../../assets/avatars/herbalist.png';
-import kevinImage from '../../assets/avatars/kevin.png';
-import merchantImage from '../../assets/avatars/merchant.png';
-import navigatorImage from '../../assets/avatars/navigator.png';
-import rangerImage from '../../assets/avatars/ranger.png';
-import scholarImage from '../../assets/avatars/scholar.png';
-import smithImage from '../../assets/avatars/smith.png';
-import uzairImage from '../../assets/avatars/uzair.png';
+import cartographerImage from '../../assets/avatars/cartographer.webp';
+import courierImage from '../../assets/avatars/courier.webp';
+import gmCalebImage from '../../assets/avatars/gmcaleb.webp';
+import goofyMusselImage from '../../assets/avatars/goofymussel.webp';
+import herbalistImage from '../../assets/avatars/herbalist.webp';
+import kevinImage from '../../assets/avatars/kevin.webp';
+import merchantImage from '../../assets/avatars/merchant.webp';
+import navigatorImage from '../../assets/avatars/navigator.webp';
+import rangerImage from '../../assets/avatars/ranger.webp';
+import scholarImage from '../../assets/avatars/scholar.webp';
+import smithImage from '../../assets/avatars/smith.webp';
+import uzairImage from '../../assets/avatars/uzair.webp';
 import { DEFAULT_PLAYER_AVATAR_ID, type PlayerAvatarId } from '../../engine/content/avatars';
 
 const PLAYER_AVATAR_IMAGES = {

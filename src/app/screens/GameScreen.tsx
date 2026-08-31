@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
+import '../app.css';
+
 import { useAppStore } from '../stores/app-store';
 import { useOnlineStore } from '../stores/online-store';
 import { audioManager } from '../audio/audio-manager';
@@ -368,7 +370,7 @@ function productionFlyovers(
         for (let index = 0; index < amount && sources.length > 0; index += 1) {
           const sourceHexId = sources[index % sources.length]!;
           flyovers.push({
-            id: `${state.config.gameId}-${state.actionHistory.length}-production-${resource.id}-${index}-${sourceHexId}`,
+            id: `${state.config.gameId}-${state.actionSequence}-production-${resource.id}-${index}-${sourceHexId}`,
             source: { kind: 'HEX', hexId: sourceHexId },
             resourceId: resource.id,
             delayMs: sequence * 140,
@@ -393,7 +395,7 @@ function productionFlyovers(
         for (let index = 0; index < amount && sourceHexIds.length > 0; index += 1) {
           const sourceHexId = sourceHexIds[index % sourceHexIds.length]!;
           flyovers.push({
-            id: `${state.config.gameId}-${state.actionHistory.length}-setup-${resource.id}-${index}-${sourceHexId}`,
+            id: `${state.config.gameId}-${state.actionSequence}-setup-${resource.id}-${index}-${sourceHexId}`,
             source: { kind: 'HEX', hexId: sourceHexId },
             resourceId: resource.id,
             delayMs: sequence * 140,
@@ -433,7 +435,7 @@ function productionFlyovers(
       const amount = progress.resources[resource.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
-          id: `${state.config.gameId}-${state.actionHistory.length}-bank-${progress.cardInstanceId}-${resource.id}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-bank-${progress.cardInstanceId}-${resource.id}-${index}`,
           source:
             masterMerchantSourceId === undefined
               ? { kind: 'BANK' }
@@ -458,7 +460,7 @@ function productionFlyovers(
     for (const [playerId, amount] of Object.entries(progress.transfers)) {
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
-          id: `${state.config.gameId}-${state.actionHistory.length}-monopoly-${progress.cardInstanceId}-${playerId}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-monopoly-${progress.cardInstanceId}-${playerId}-${index}`,
           source: { kind: 'PLAYER', playerId: playerId as PlayerState['id'] },
           target: { kind: 'PLAYER', playerId: progress.playerId },
           resourceId: progress.resourceId,
@@ -475,7 +477,7 @@ function productionFlyovers(
   )) {
     if (stolen.playerId !== visiblePlayerId && stolen.targetPlayerId !== visiblePlayerId) continue;
     flyovers.push({
-      id: `${state.config.gameId}-${state.actionHistory.length}-steal-${stolen.targetPlayerId}-${stolen.resourceId}-${sequence}`,
+      id: `${state.config.gameId}-${state.actionSequence}-steal-${stolen.targetPlayerId}-${stolen.resourceId}-${sequence}`,
       source: { kind: 'PLAYER', playerId: stolen.targetPlayerId },
       targetPlayerId: stolen.playerId,
       resourceId: stolen.resourceId,
@@ -508,7 +510,7 @@ function productionFlyovers(
       },
     ] as const) {
       flyovers.push({
-        id: `${state.config.gameId}-${state.actionHistory.length}-harbor-${movement.id}-${sequence}`,
+        id: `${state.config.gameId}-${state.actionSequence}-harbor-${movement.id}-${sequence}`,
         source: { kind: 'PLAYER', playerId: movement.sourcePlayerId },
         target: { kind: 'PLAYER', playerId: movement.targetPlayerId },
         resourceId: movement.resourceId,
@@ -523,7 +525,7 @@ function productionFlyovers(
   )) {
     if (restrictToViewer && aqueduct.playerId !== visiblePlayerId) continue;
     flyovers.push({
-      id: `${state.config.gameId}-${state.actionHistory.length}-aqueduct-${aqueduct.resourceId}`,
+      id: `${state.config.gameId}-${state.actionSequence}-aqueduct-${aqueduct.resourceId}`,
       source: { kind: 'BANK' },
       resourceId: aqueduct.resourceId,
       delayMs: sequence * 140,
@@ -544,7 +546,7 @@ function productionFlyovers(
       const amount = wedding.resources[good.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
-          id: `${state.config.gameId}-${state.actionHistory.length}-wedding-${wedding.targetPlayerId}-${good.id}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-wedding-${wedding.targetPlayerId}-${good.id}-${index}`,
           source: { kind: 'PLAYER', playerId: wedding.targetPlayerId },
           target: { kind: 'PLAYER', playerId: wedding.playerId },
           targetPlayerId: wedding.playerId,
@@ -564,7 +566,7 @@ function productionFlyovers(
       const amount = discarded.resources[good.id] ?? 0;
       for (let index = 0; index < amount; index += 1) {
         flyovers.push({
-          id: `${state.config.gameId}-${state.actionHistory.length}-discard-${discarded.playerId}-${good.id}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-discard-${discarded.playerId}-${good.id}-${index}`,
           source: { kind: 'PLAYER', playerId: discarded.playerId },
           target: { kind: 'BANK' },
           resourceId: good.id,
@@ -588,7 +590,7 @@ function productionFlyovers(
       const offeredAmount = trade.offered[good.id] ?? 0;
       for (let index = 0; index < offeredAmount; index += 1) {
         flyovers.push({
-          id: `${state.config.gameId}-${state.actionHistory.length}-trade-offered-${trade.tradeId ?? 'bank'}-${good.id}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-trade-offered-${trade.tradeId ?? 'bank'}-${good.id}-${index}`,
           source: { kind: 'PLAYER', playerId: trade.playerId },
           target:
             trade.recipientId === null
@@ -602,7 +604,7 @@ function productionFlyovers(
       const requestedAmount = trade.requested[good.id] ?? 0;
       for (let index = 0; index < requestedAmount; index += 1) {
         flyovers.push({
-          id: `${state.config.gameId}-${state.actionHistory.length}-trade-requested-${trade.tradeId ?? 'bank'}-${good.id}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-trade-requested-${trade.tradeId ?? 'bank'}-${good.id}-${index}`,
           source:
             trade.recipientId === null
               ? { kind: 'BANK' }
@@ -630,7 +632,7 @@ function progressCardMovementFlyovers(
       if (event.playerId !== visiblePlayerId) return [];
       return [
         {
-          id: `${state.config.gameId}-${state.actionHistory.length}-progress-draw-${event.cardInstanceId}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-progress-draw-${event.cardInstanceId}-${index}`,
           source: { kind: 'DECK' } as const,
           targetPlayerId: event.playerId,
           cardDefinitionId: event.cardDefinitionId,
@@ -644,7 +646,7 @@ function progressCardMovementFlyovers(
       if (drawnCard === undefined) return [];
       return [
         {
-          id: `${state.config.gameId}-${state.actionHistory.length}-kn-progress-draw-${event.cardInstanceId}-${index}`,
+          id: `${state.config.gameId}-${state.actionSequence}-kn-progress-draw-${event.cardInstanceId}-${index}`,
           source: { kind: 'DECK', family: event.family } as const,
           targetPlayerId: event.playerId,
           cardDefinitionId: drawnCard.definitionId,
@@ -662,7 +664,7 @@ function progressCardMovementFlyovers(
     if (stolenCard === undefined) return [];
     return [
       {
-        id: `${state.config.gameId}-${state.actionHistory.length}-spy-${stolenCardId}-${index}`,
+        id: `${state.config.gameId}-${state.actionSequence}-spy-${stolenCardId}-${index}`,
         source: { kind: 'PLAYER', playerId: sourcePlayerId as PlayerState['id'] } as const,
         targetPlayerId: event.playerId,
         cardDefinitionId: stolenCard.definitionId,
@@ -1084,10 +1086,12 @@ export function GameScreen() {
   const onlineViewerIsHost = isOnlineMatch && onlineRoom.viewerPlayerId === onlineRoom.hostPlayerId;
   const dispatchGameAction = isOnlineMatch ? submitOnlineAction : dispatchLocalGameAction;
   const audioSessionId = gameState?.config.gameId ?? null;
+  const [boardReady, setBoardReady] = useState(false);
+  const boardAudioReady = import.meta.env.MODE === 'test' || boardReady;
   const audioEventKey =
     gameState === null || recentGameEvents.length === 0
       ? null
-      : `${gameState.config.gameId}:${isOnlineMatch ? (onlineRoom.game?.revision ?? 0) : gameState.actionHistory.length}:${recentGameEvents
+      : `${gameState.config.gameId}:${isOnlineMatch ? (onlineRoom.game?.revision ?? 0) : gameState.actionSequence}:${recentGameEvents
           .map((event) => event.type)
           .join(',')}`;
   const lastPlayedAudioEventKey = useRef<string | null>(null);
@@ -1151,7 +1155,7 @@ export function GameScreen() {
   const longestRoadNoticeKey =
     longestRoadPlayer === undefined || gameState === null
       ? null
-      : `${gameState.config.gameId}:${gameState.actionHistory.length}:${longestRoadPlayer.id}`;
+      : `${gameState.config.gameId}:${gameState.actionSequence}:${longestRoadPlayer.id}`;
   const longestRoadNotice =
     longestRoadPlayer === undefined ||
     longestRoadNoticeKey === null ||
@@ -1165,19 +1169,26 @@ export function GameScreen() {
         };
 
   useEffect(() => {
-    if (audioSessionId === null) return undefined;
+    if (audioSessionId === null || !boardAudioReady) return undefined;
     audioManager.startMusic(audioSessionId);
     return () => audioManager.stopMusic();
-  }, [audioSessionId]);
+  }, [audioSessionId, boardAudioReady]);
 
   useEffect(() => {
     audioManager.setMusicVolume(settings.masterVolume, settings.musicVolume);
   }, [settings.masterVolume, settings.musicVolume]);
 
   useEffect(() => {
-    if (audioSessionId === null || (gameState?.actionHistory.length ?? 0) !== 0) return;
+    if (audioSessionId === null || !boardAudioReady || (gameState?.actionSequence ?? 0) !== 0)
+      return;
     audioManager.playGameBegin(audioSessionId, settings.masterVolume, settings.sfxVolume);
-  }, [audioSessionId, gameState?.actionHistory.length, settings.masterVolume, settings.sfxVolume]);
+  }, [
+    audioSessionId,
+    boardAudioReady,
+    gameState?.actionSequence,
+    settings.masterVolume,
+    settings.sfxVolume,
+  ]);
 
   useEffect(() => {
     if (audioEventKey === null || audioEventKey === lastPlayedAudioEventKey.current) return;
@@ -1587,7 +1598,7 @@ export function GameScreen() {
     onlineViewerPlayerId === null ? activePlayer : gameState.players[onlineViewerPlayerId];
   const developerControlsVisible =
     import.meta.env.DEV || adminMode || hasAdminDisplayName(viewerPlayer?.name ?? '');
-  let progressTooltipResetIndex = -1;
+  let progressTooltipResetSequence = -1;
   for (let index = gameState.actionHistory.length - 1; index >= 0; index -= 1) {
     if (
       gameState.actionHistory[index]?.eventTypes.some(
@@ -1595,11 +1606,11 @@ export function GameScreen() {
           eventType === 'PROGRESS_CARD_RESOLVED' || eventType === 'KN_PROGRESS_CARD_RESOLVED',
       )
     ) {
-      progressTooltipResetIndex = index;
+      progressTooltipResetSequence = gameState.actionHistory[index]?.sequence ?? -1;
       break;
     }
   }
-  const progressTooltipResetSignal = `${progressTooltipResetIndex}`;
+  const progressTooltipResetSignal = `${progressTooltipResetSequence}`;
   const inspection = describeTarget(gameState, inspectedTarget);
   const turnFeedback = recentEventMessage(recentGameEvents, gameState);
   const setupProgress = getSetupProgress(gameState);
@@ -2988,7 +2999,7 @@ export function GameScreen() {
                       }
                     : {
                         duration: knChoiceInteraction.purpose === 'DEFENDER_TIE_DECK' ? 15 : 30,
-                        key: `kn-choice-${gameState.actionHistory.length}-${knChoiceInteraction.purpose}-${knChoiceInteraction.playerId}`,
+                        key: `kn-choice-${gameState.actionSequence}-${knChoiceInteraction.purpose}-${knChoiceInteraction.playerId}`,
                         prompt: knChoiceStatusPrompt ?? `${activePlayerName} is resolving a card`,
                         actorId: knChoiceInteraction.playerId,
                       }
@@ -3003,7 +3014,7 @@ export function GameScreen() {
           : knBoardChoice?.purpose === 'SMITH_KNIGHT'
             ? 'Upgrade Knight'
             : null;
-  let lastTimerBoostIndex = -1;
+  let lastTimerBoostSequence = -1;
   for (let index = gameState.actionHistory.length - 1; index >= 0; index -= 1) {
     const entry = gameState.actionHistory[index];
     if (
@@ -3011,11 +3022,11 @@ export function GameScreen() {
         TIMER_BOOST_EVENT_TYPES.has(eventType as GameEvent['type']),
       )
     ) {
-      lastTimerBoostIndex = index;
+      lastTimerBoostSequence = entry.sequence;
       break;
     }
   }
-  const timerBoostSignal = `${lastTimerBoostIndex}`;
+  const timerBoostSignal = `${lastTimerBoostSequence}`;
   const timerKey = `${gameState.config.gameId}:${timedPhase?.actorId ?? 'none'}:${timedPhase?.key ?? 'paused'}`;
   const activePlayerColor =
     activePlayer === undefined ? '#d9bc72' : (playerColors[activePlayer.id] ?? '#d9bc72');
@@ -3196,6 +3207,7 @@ export function GameScreen() {
                 knBoardAction !== null ||
                 knightCommand !== null)
             }
+            onReady={() => setBoardReady(true)}
             onInspect={setInspectedTarget}
             onSelect={selectBoardTarget}
           />
@@ -3294,7 +3306,7 @@ export function GameScreen() {
                 <div>
                   <dt>Actions</dt>
                   <dd>
-                    {gameState.actionHistory.length} ·{' '}
+                    {gameState.actionSequence} ·{' '}
                     {gameState.actionHistory.at(-1)?.actionType ?? 'none'}
                   </dd>
                 </div>

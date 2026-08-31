@@ -166,6 +166,7 @@ export function createGame(config: GameState['config']): CreateGameResult {
       pendingInteraction: null,
       bonuses: { longestRoadHolderId: null, largestForceHolderId: null },
       winnerId: null,
+      actionSequence: 0,
       actionHistory: [],
       random,
       balancedDice: config.balancedDice

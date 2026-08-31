@@ -196,7 +196,7 @@ export function backgroundMusicTrackForGame(gameSessionId: string): MusicTrack {
 }
 
 class AudioManager {
-  private preloadedEffects = new Map<SoundCue, HTMLAudioElement>();
+  private effectSources = new Map<SoundCue, HTMLAudioElement>();
   private activeEffects = new Set<HTMLAudioElement>();
   private scheduledEffects = new Set<ReturnType<typeof globalThis.setTimeout>>();
   private musicActive = false;
@@ -245,7 +245,6 @@ class AudioManager {
     this.musicActive = true;
     this.musicSessionId = gameSessionId;
     this.musicTrack = backgroundMusicTrackForGame(gameSessionId);
-    this.preloadEffects();
     if (globalThis.document !== undefined) {
       this.visibilityHandler = () => {
         if (!this.musicActive) return;
@@ -345,26 +344,13 @@ class AudioManager {
     else if (cueName === 'PERK') this.duckMusic(2_900);
   }
 
-  private preloadEffects(): void {
-    if (!mediaPlaybackAvailable() || this.preloadedEffects.size > 0) return;
-    for (const [cueName, url] of Object.entries(SOUND_ASSET_URLS) as readonly [
-      SoundCue,
-      string,
-    ][]) {
-      const audio = new Audio(url);
-      audio.preload = 'auto';
-      this.preloadedEffects.set(cueName, audio);
-    }
-  }
-
   private effectSource(cueName: SoundCue): HTMLAudioElement | null {
-    this.preloadEffects();
-    const preloaded = this.preloadedEffects.get(cueName);
-    if (preloaded !== undefined) return preloaded;
+    const existing = this.effectSources.get(cueName);
+    if (existing !== undefined) return existing;
     if (!mediaPlaybackAvailable()) return null;
     const audio = new Audio(SOUND_ASSET_URLS[cueName]);
     audio.preload = 'auto';
-    this.preloadedEffects.set(cueName, audio);
+    this.effectSources.set(cueName, audio);
     return audio;
   }
 

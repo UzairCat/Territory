@@ -125,6 +125,7 @@ export function createTestGameState(phase: GamePhase = 'INITIALIZING'): GameStat
     pendingInteraction: null,
     bonuses: { longestRoadHolderId: null, largestForceHolderId: null },
     winnerId: null,
+    actionSequence: 0,
     actionHistory: [],
     random: createRandomState(config.seed),
     balancedDice: null,

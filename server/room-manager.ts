@@ -230,7 +230,7 @@ function timedStep(state: GameState): TimedStep | null {
           ? `actions-${state.turn.turnNumber}`
           : simultaneousChoice
             ? `choice-${state.turn.turnNumber}-${interaction.purpose}-simultaneous`
-            : `choice-${state.actionHistory.length}-${interaction.purpose}-${interaction.playerId}`,
+            : `choice-${state.actionSequence}-${interaction.purpose}-${interaction.playerId}`,
         durationMs: uncommittedPreview
           ? (state.config.turnTimeSeconds ?? 60) * 1_000
           : interaction.purpose === 'DEFENDER_TIE_DECK'

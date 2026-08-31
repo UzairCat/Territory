@@ -49,6 +49,7 @@ export interface BoardViewportProps {
   readonly resourceFlyovers?: readonly ResourceFlyover[];
   readonly progressCardFlyovers?: readonly ProgressCardFlyover[];
   readonly showKeyboardTargetControls?: boolean;
+  readonly onReady?: () => void;
   readonly onInspect: (target: BoardTarget | null) => void;
   readonly onSelect: (target: BoardTarget, position?: BoardViewportPoint) => void;
 }
@@ -299,6 +300,7 @@ export function BoardViewport({
   showRobberAttention = false,
   resourceFlyovers = [],
   progressCardFlyovers = [],
+  onReady,
   onInspect,
   onSelect,
 }: BoardViewportProps) {
@@ -306,6 +308,7 @@ export function BoardViewport({
   const rendererRef = useRef<TerritoryBoard | null>(null);
   const inspectRef = useRef(onInspect);
   const selectRef = useRef(onSelect);
+  const readyCallbackRef = useRef(onReady);
   const debugRef = useRef(showDebugIds);
   const rendererReadyRef = useRef<Promise<void> | null>(null);
   const appliedRenderInputRef = useRef<{
@@ -444,6 +447,10 @@ export function BoardViewport({
   }, [onSelect]);
 
   useEffect(() => {
+    readyCallbackRef.current = onReady;
+  }, [onReady]);
+
+  useEffect(() => {
     const host = hostRef.current;
     if (host === null) return undefined;
     let cancelled = false;
@@ -457,7 +464,10 @@ export function BoardViewport({
         rendererRef.current = renderer;
         renderer.setDebugIdsVisible(debugRef.current);
         await renderer.mount();
-        if (!cancelled) appliedRenderInputRef.current = initialInput;
+        if (!cancelled) {
+          appliedRenderInputRef.current = initialInput;
+          readyCallbackRef.current?.();
+        }
       })
       .catch((error: unknown) => {
         if (cancelled) return;

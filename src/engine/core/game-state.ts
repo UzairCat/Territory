@@ -281,6 +281,7 @@ export interface BonusState {
 }
 
 export interface ActionHistoryEntry {
+  readonly sequence: number;
   readonly actionType: string;
   readonly actorId: PlayerId | null;
   readonly turnNumber: number;
@@ -343,6 +344,9 @@ export interface GameState {
   readonly pendingInteraction: PendingInteraction;
   readonly bonuses: BonusState;
   readonly winnerId: PlayerId | null;
+  /** Monotonic accepted-action number. Unlike diagnostic history, this never rolls over. */
+  readonly actionSequence: number;
+  /** Recent internal action diagnostics. The player-facing event log is stored separately. */
   readonly actionHistory: readonly ActionHistoryEntry[];
   readonly random: RandomState;
   readonly balancedDice: BalancedDiceState | null;

@@ -1074,15 +1074,33 @@ export class TerritoryBoard {
   // The board moves as one camera-controlled unit. A render group lets Pixi update that
   // transform on the GPU instead of walking every child while the player pans or zooms.
   private readonly world = new Container({ isRenderGroup: true });
+  private readonly coastLayer = new Container();
+  private readonly hexLayer = new Container();
+  private readonly hexControlLayer = new Container();
+  private readonly numberTokenLayer = new Container();
+  private readonly portLayer = new Container();
+  private readonly edgeLayer = new Container();
+  private readonly vertexLayer = new Container();
+  private readonly pieceLayer = new Container();
+  private readonly cueLayer = new Container();
   private readonly debugLayer = new Container();
+  private readonly hexInteractionLayer = new Container();
   private readonly application = new Application();
   private readonly pulsingTargets: Array<{
     readonly display: Container;
+    readonly group: 'controls' | 'numbers';
     readonly phaseOffset: number;
     readonly baseY: number;
     readonly bobDistance: number;
   }> = [];
-  private readonly transientTickerCallbacks = new Set<() => void>();
+  private readonly transientTickerCallbacks = new Map<
+    () => void,
+    'numbers' | 'pieces' | 'terrain'
+  >();
+  private staticVisualSignature = '';
+  private numberVisualSignature = '';
+  private pieceVisualSignature = '';
+  private controlVisualSignature = '';
   private resizeObserver: ResizeObserver | null = null;
   private intersectionObserver: IntersectionObserver | null = null;
   private pageVisible = typeof document === 'undefined' || !document.hidden;
@@ -1120,6 +1138,29 @@ export class TerritoryBoard {
     this.graphicsQuality = options.graphicsQuality ?? 'HIGH';
     this.frameRateLimit = options.frameRateLimit ?? 60;
     this.debugLayer.visible = options.showDebugIds ?? false;
+    for (const layer of [
+      this.coastLayer,
+      this.numberTokenLayer,
+      this.pieceLayer,
+      this.cueLayer,
+      this.debugLayer,
+    ]) {
+      layer.eventMode = 'none';
+      layer.interactiveChildren = false;
+    }
+    this.world.addChild(
+      this.coastLayer,
+      this.hexLayer,
+      this.hexControlLayer,
+      this.numberTokenLayer,
+      this.portLayer,
+      this.edgeLayer,
+      this.vertexLayer,
+      this.pieceLayer,
+      this.cueLayer,
+      this.debugLayer,
+      this.hexInteractionLayer,
+    );
   }
 
   async mount(): Promise<void> {
@@ -1179,6 +1220,8 @@ export class TerritoryBoard {
 
   setDebugIdsVisible(visible: boolean): void {
     this.debugLayer.visible = visible;
+    if (visible && this.debugLayer.children.length === 0) this.drawDebugLayer();
+    if (!visible && this.debugLayer.children.length > 0) this.clearLayer(this.debugLayer);
   }
 
   update(board: BoardState, options: TerritoryBoardOptions): void {
@@ -1192,11 +1235,6 @@ export class TerritoryBoard {
     );
     const nextHexIds = nextModel.hexes.map((hex) => hex.target.id).join('|');
 
-    this.application.ticker.remove(this.animateTargetPulse);
-    for (const callback of this.transientTickerCallbacks) this.application.ticker.remove(callback);
-    this.transientTickerCallbacks.clear();
-    this.pulsingTargets.length = 0;
-    this.targets.clear();
     this.model = nextModel;
     this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
     this.highlightedHexIds = new Set(options.highlightedHexIds);
@@ -1223,16 +1261,38 @@ export class TerritoryBoard {
     this.frameRateLimit = options.frameRateLimit ?? 60;
     this.application.ticker.maxFPS = this.frameRateLimit;
 
-    const oldLayers = this.world.removeChildren();
-    for (const layer of oldLayers) {
-      if (layer === this.debugLayer) {
-        const debugChildren = this.debugLayer.removeChildren();
-        for (const child of debugChildren) child.destroy({ children: true });
-      } else {
-        layer.destroy({ children: true });
-      }
+    const nextStaticSignature = this.createStaticVisualSignature();
+    const nextNumberSignature = this.createNumberVisualSignature();
+    const nextPieceSignature = this.createPieceVisualSignature();
+    const nextControlSignature = this.createControlVisualSignature();
+    const staticChanged = nextStaticSignature !== this.staticVisualSignature;
+    const numbersChanged = staticChanged || nextNumberSignature !== this.numberVisualSignature;
+    const piecesChanged = staticChanged || nextPieceSignature !== this.pieceVisualSignature;
+    const controlsChanged = staticChanged || nextControlSignature !== this.controlVisualSignature;
+
+    if (staticChanged) {
+      this.clearTransientGroup('terrain');
+      this.drawStaticLayers();
     }
-    this.drawBoard();
+    if (numbersChanged) {
+      this.clearTransientGroup('numbers');
+      this.clearPulseGroup('numbers');
+      this.drawNumberTokens();
+    }
+    if (piecesChanged) {
+      this.clearTransientGroup('pieces');
+      this.drawPieces();
+    }
+    if (controlsChanged) {
+      this.clearPulseGroup('controls');
+      this.drawControls();
+    }
+    if (numbersChanged || controlsChanged) this.startTargetPulse();
+
+    this.staticVisualSignature = nextStaticSignature;
+    this.numberVisualSignature = nextNumberSignature;
+    this.pieceVisualSignature = nextPieceSignature;
+    this.controlVisualSignature = nextControlSignature;
     if (previousHexIds !== nextHexIds) this.fitBoard();
   }
 
@@ -1274,7 +1334,7 @@ export class TerritoryBoard {
     }
     if (this.mounted) {
       this.application.ticker.remove(this.animateTargetPulse);
-      for (const callback of this.transientTickerCallbacks) {
+      for (const callback of this.transientTickerCallbacks.keys()) {
         this.application.ticker.remove(callback);
       }
       this.transientTickerCallbacks.clear();
@@ -1286,61 +1346,303 @@ export class TerritoryBoard {
   }
 
   private drawBoard(): void {
-    const coastLayer = new Container();
-    const hexLayer = new Container();
-    // Keep every number token above every terrain tile. When Inventor swaps two tokens, placing
-    // tokens inside the per-hex drawing order lets a later tile cover one token at its origin.
-    const numberTokenLayer = new Container();
-    const portLayer = new Container();
-    const edgeLayer = new Container();
-    const vertexLayer = new Container();
-    const pieceLayer = new Container();
-    const cueLayer = new Container();
-    const hexInteractionLayer = new Container();
-    for (const layer of [coastLayer, numberTokenLayer, pieceLayer, cueLayer, this.debugLayer]) {
-      layer.eventMode = 'none';
-      layer.interactiveChildren = false;
+    this.drawStaticLayers();
+    this.drawNumberTokens();
+    this.drawPieces();
+    this.drawControls();
+    this.startTargetPulse();
+    this.staticVisualSignature = this.createStaticVisualSignature();
+    this.numberVisualSignature = this.createNumberVisualSignature();
+    this.pieceVisualSignature = this.createPieceVisualSignature();
+    this.controlVisualSignature = this.createControlVisualSignature();
+  }
+
+  private createStaticVisualSignature(): string {
+    return [
+      this.model.hexes
+        .map(
+          (hex) =>
+            `${hex.target.id}:${hex.center.x}:${hex.center.y}:${hex.terrainName}:${hex.terrainColor}:${hex.corners.map((corner) => `${corner.x},${corner.y}`).join(';')}`,
+        )
+        .join('|'),
+      this.model.edges
+        .filter((edge) => edge.isBoundary)
+        .map(
+          (edge) =>
+            `${edge.target.id}:${edge.first.x},${edge.first.y}:${edge.second.x},${edge.second.y}`,
+        )
+        .join('|'),
+      this.model.ports
+        .map(
+          (port) =>
+            `${port.target.id}:${port.edgeId}:${port.position.x},${port.position.y}:${port.label}:${port.shoreConnections.map((point) => `${point.x},${point.y}`).join(';')}`,
+        )
+        .join('|'),
+      this.terrainChange === null || this.terrainChange === undefined
+        ? ''
+        : `${this.terrainChange.hexId}:${this.terrainChange.fromResourceId}`,
+      this.reducedMotion ? 'reduced' : 'animated',
+    ].join('~');
+  }
+
+  private createNumberVisualSignature(): string {
+    return [
+      this.model.hexes.map((hex) => `${hex.target.id}:${hex.numberToken ?? ''}`).join('|'),
+      this.inventorSelectionActive ? 'inventor' : '',
+      this.inventorSelectedHexId ?? '',
+      this.inventorPendingHexId ?? '',
+      this.numberTokenSwap?.join('|') ?? '',
+      [...this.madnessHighlightedHexIds].sort().join('|'),
+      [...this.selectableTargetKeys]
+        .filter((key) => key.startsWith('HEX:'))
+        .sort()
+        .join('|'),
+      this.reducedMotion ? 'reduced' : 'animated',
+    ].join('~');
+  }
+
+  private createPieceVisualSignature(): string {
+    return [
+      this.model.hexes
+        .map((hex) => `${hex.target.id}:${hex.hasRobber ? 1 : 0}:${hex.merchantOwnerId ?? ''}`)
+        .join('|'),
+      this.model.edges.map((edge) => `${edge.target.id}:${edge.roadOwnerId ?? ''}`).join('|'),
+      this.model.vertices
+        .map((vertex) => {
+          const building = vertex.building;
+          const knight = vertex.knight;
+          return `${vertex.target.id}:${
+            building === null
+              ? ''
+              : `${building.ownerId},${building.type},${building.hasWall ? 1 : 0},${building.metropolis ?? ''}`
+          }:${
+            knight === null
+              ? ''
+              : `${knight.id},${knight.ownerId},${knight.level},${knight.active ? 1 : 0}`
+          }`;
+        })
+        .join('|'),
+      Object.entries(this.playerColors)
+        .sort(([first], [second]) => first.localeCompare(second))
+        .map(([playerId, color]) => `${playerId}:${color}`)
+        .join('|'),
+      this.animatedTargetKey ?? '',
+      this.robberMove === null ? '' : `${this.robberMove.fromHexId}:${this.robberMove.toHexId}`,
+      this.reducedMotion ? 'reduced' : 'animated',
+    ].join('~');
+  }
+
+  private createControlVisualSignature(): string {
+    return [
+      [...this.selectableTargetKeys].sort().join('|'),
+      [...this.highlightedHexIds].sort().join('|'),
+      [...this.emphasizedVertexIds].sort().join('|'),
+      this.merchantPlacementActive ? 'merchant' : '',
+      this.robberSelectionActive ? 'robber' : '',
+      this.showTargetPulses ? 'pulses' : '',
+      this.reducedMotion ? 'reduced' : 'animated',
+      this.model.hexes.map((hex) => `${hex.target.id}:${hex.hasRobber ? 1 : 0}`).join('|'),
+    ].join('~');
+  }
+
+  private clearLayer(layer: Container): void {
+    for (const child of layer.removeChildren()) child.destroy({ children: true });
+  }
+
+  private drawStaticLayers(): void {
+    this.clearLayer(this.coastLayer);
+    this.clearLayer(this.hexLayer);
+    this.clearLayer(this.portLayer);
+    for (const key of [...this.targets.keys()]) {
+      if (key.startsWith('PORT:')) this.targets.delete(key);
     }
-    this.world.addChild(
-      coastLayer,
-      hexLayer,
-      numberTokenLayer,
-      portLayer,
-      edgeLayer,
-      vertexLayer,
-      pieceLayer,
-      cueLayer,
-      this.debugLayer,
-      hexInteractionLayer,
-    );
 
     for (const edge of this.model.edges) {
       if (!edge.isBoundary) continue;
-      const coast = new Graphics()
-        .moveTo(edge.first.x, edge.first.y)
-        .lineTo(edge.second.x, edge.second.y)
-        .stroke({ color: '#58bfcc', width: 21, alpha: 0.24 })
-        .moveTo(edge.first.x, edge.first.y)
-        .lineTo(edge.second.x, edge.second.y)
-        .stroke({ color: '#b9f0e8', width: 13, alpha: 0.68 })
-        .moveTo(edge.first.x, edge.first.y)
-        .lineTo(edge.second.x, edge.second.y)
-        .stroke({ color: '#f2dda4', width: 6, alpha: 0.94 });
-      coastLayer.addChild(coast);
+      this.coastLayer.addChild(
+        new Graphics()
+          .moveTo(edge.first.x, edge.first.y)
+          .lineTo(edge.second.x, edge.second.y)
+          .stroke({ color: '#58bfcc', width: 21, alpha: 0.24 })
+          .moveTo(edge.first.x, edge.first.y)
+          .lineTo(edge.second.x, edge.second.y)
+          .stroke({ color: '#b9f0e8', width: 13, alpha: 0.68 })
+          .moveTo(edge.first.x, edge.first.y)
+          .lineTo(edge.second.x, edge.second.y)
+          .stroke({ color: '#f2dda4', width: 6, alpha: 0.94 }),
+      );
     }
 
+    const showTerrainDetails = boardRenderProfile(this.graphicsQuality).terrainDetails;
     for (const hex of this.model.hexes) {
-      const highlighted = this.highlightedHexIds.has(hex.target.id);
-      const selectable = this.selectableTargetKeys.has(targetKey(hex.target));
-      const merchantPlacementCue =
-        this.merchantPlacementActive && selectable ? createMerchantPlacementCue(hex) : null;
-      if (merchantPlacementCue !== null) cueLayer.addChild(merchantPlacementCue);
       const polygon = flattenedPoints(hex.corners);
       const shadow = new Graphics()
         .poly(hex.corners.map((corner) => ({ x: corner.x + 3, y: corner.y + 5 })))
         .fill({ color: '#050a07', alpha: 0.42 });
-      const terrain = new Graphics();
-      const drawTerrain = (hovered: boolean) => {
+      const terrain = new Graphics()
+        .poly(polygon)
+        .fill({ color: hex.terrainColor })
+        .stroke({ color: '#101710', width: 3 });
+      terrain.eventMode = 'none';
+      const terrainDetails = showTerrainDetails ? createTerrainDetails(hex) : null;
+      if (terrainDetails === null) this.hexLayer.addChild(shadow, terrain);
+      else this.hexLayer.addChild(shadow, terrain, terrainDetails);
+      this.animateTerrainChange(hex, polygon, this.hexLayer);
+    }
+
+    for (const port of this.model.ports) {
+      const dock = createPortDocks(port);
+      const ship = createPortShip(port);
+      const labelOffset = portRatioOffset(port);
+      const hitTarget = new Graphics()
+        .roundRect(port.position.x - 30, port.position.y - 38, 60, 64, 12)
+        .fill({ color: '#ffffff', alpha: 0.001 })
+        .roundRect(
+          port.position.x + labelOffset.x - 20,
+          port.position.y + labelOffset.y - 11,
+          40,
+          22,
+          8,
+        )
+        .fill({ color: '#ffffff', alpha: 0.001 });
+      hitTarget.eventMode = 'static';
+      hitTarget.cursor = 'pointer';
+      hitTarget.on('pointerover', () => {
+        ship.scale.set(1.08);
+        this.onInspect(port.target);
+      });
+      hitTarget.on('pointerout', () => {
+        ship.scale.set(1);
+        this.onInspect(null);
+      });
+      hitTarget.on('pointertap', () => this.onInspect(port.target));
+      this.targets.set(targetKey(port.target), hitTarget);
+      this.portLayer.addChild(dock, ship, hitTarget);
+    }
+
+    if (this.debugLayer.visible) this.drawDebugLayer();
+  }
+
+  private drawDebugLayer(): void {
+    this.clearLayer(this.debugLayer);
+    for (const hex of this.model.hexes) {
+      const debugText = new Text({
+        text: hex.target.id,
+        style: { fill: '#ffffff', fontFamily: 'monospace', fontSize: 9 },
+      });
+      debugText.anchor.set(0.5);
+      debugText.position.set(hex.center.x, hex.center.y + 43);
+      this.debugLayer.addChild(debugText);
+    }
+  }
+
+  private drawNumberTokens(): void {
+    this.clearLayer(this.numberTokenLayer);
+    for (const hex of this.model.hexes) {
+      const selectable = this.selectableTargetKeys.has(targetKey(hex.target));
+      const numberToken = createNumberToken(
+        hex,
+        this.inventorSelectedHexId === hex.target.id,
+        this.inventorPendingHexId === hex.target.id,
+        this.madnessHighlightedHexIds.has(hex.target.id),
+      );
+      if (numberToken === null) continue;
+      this.numberTokenLayer.addChild(numberToken);
+      if (
+        (this.inventorSelectionActive &&
+          (selectable ||
+            this.inventorSelectedHexId === hex.target.id ||
+            this.inventorPendingHexId === hex.target.id)) ||
+        this.madnessHighlightedHexIds.has(hex.target.id)
+      ) {
+        this.registerPulsingTarget(numberToken, 8, 'numbers');
+      }
+      this.animateNumberTokenSwap(hex.target.id, numberToken);
+    }
+  }
+
+  private drawPieces(): void {
+    this.clearLayer(this.pieceLayer);
+    for (const hex of this.model.hexes) {
+      if (hex.hasRobber) {
+        const robber = createRobber(hex);
+        this.pieceLayer.addChild(robber);
+        this.animateRobberMove(hex.target.id, robber);
+      }
+      if (hex.merchantOwnerId !== null) {
+        this.pieceLayer.addChild(
+          createMerchantToken(hex, this.playerColors[hex.merchantOwnerId] ?? '#f6d77c'),
+        );
+      }
+    }
+
+    for (const edge of this.model.edges) {
+      const ownerId = edge.roadOwnerId;
+      if (ownerId === null) continue;
+      const roadOutline = new Graphics()
+        .moveTo(edge.first.x, edge.first.y)
+        .lineTo(edge.second.x, edge.second.y)
+        .stroke({ color: '#10140f', width: 13, alpha: 0.95 });
+      const road = new Graphics()
+        .moveTo(edge.first.x, edge.first.y)
+        .lineTo(edge.second.x, edge.second.y)
+        .stroke({ color: this.playerColors[ownerId] ?? '#f6f0dc', width: 8 });
+      roadOutline.eventMode = 'none';
+      road.eventMode = 'none';
+      this.pieceLayer.addChild(roadOutline, road);
+      this.animatePlacement(edge.target, [roadOutline, road]);
+    }
+
+    for (const vertex of this.model.vertices) {
+      const building = vertex.building;
+      if (building !== null) {
+        const { x, y } = vertex.position;
+        const color = this.playerColors[building.ownerId] ?? '#f6f0dc';
+        const piece = createBuildingPiece(x, y, color, building.type);
+        this.pieceLayer.addChild(piece);
+        const enhancement = createBuildingEnhancement(
+          x,
+          y,
+          color,
+          building.hasWall === true,
+          building.metropolis,
+        );
+        if (enhancement !== null) this.pieceLayer.addChild(enhancement);
+        this.animatePlacement(vertex.target, [piece]);
+      }
+      if (vertex.knight !== null) {
+        const knight = createKnightPiece(
+          vertex.position.x,
+          vertex.position.y,
+          this.playerColors[vertex.knight.ownerId] ?? '#f6f0dc',
+          vertex.knight.level,
+          vertex.knight.active,
+        );
+        this.pieceLayer.addChild(knight);
+        this.animatePlacement(vertex.target, [knight]);
+      }
+    }
+  }
+
+  private drawControls(): void {
+    this.clearLayer(this.hexControlLayer);
+    this.clearLayer(this.edgeLayer);
+    this.clearLayer(this.vertexLayer);
+    this.clearLayer(this.cueLayer);
+    this.clearLayer(this.hexInteractionLayer);
+    for (const key of [...this.targets.keys()]) {
+      if (!key.startsWith('PORT:')) this.targets.delete(key);
+    }
+
+    for (const hex of this.model.hexes) {
+      const selectable = this.selectableTargetKeys.has(targetKey(hex.target));
+      const highlighted = this.highlightedHexIds.has(hex.target.id);
+      const polygon = flattenedPoints(hex.corners);
+      const merchantPlacementCue =
+        this.merchantPlacementActive && selectable ? createMerchantPlacementCue(hex) : null;
+      if (merchantPlacementCue !== null) this.cueLayer.addChild(merchantPlacementCue);
+      const graphic = new Graphics();
+      const drawHexControl = (hovered: boolean) => {
         const borderColor = hovered
           ? '#fff0b8'
           : selectable
@@ -1349,108 +1651,53 @@ export class TerritoryBoard {
               ? hex.hasRobber
                 ? '#e3777e'
                 : '#e2c26d'
-              : '#101710';
-        terrain
+              : '#ffffff';
+        graphic
           .clear()
           .poly(polygon)
-          .fill({ color: hex.terrainColor })
-          .stroke({ color: borderColor, width: hovered || highlighted || selectable ? 5 : 3 });
+          .fill({ color: '#ffffff', alpha: 0.001 })
+          .stroke({
+            color: borderColor,
+            width: hovered || highlighted || selectable ? 5 : 0,
+            alpha: hovered || highlighted || selectable ? 1 : 0,
+          });
       };
-      drawTerrain(false);
-      terrain.eventMode = 'static';
-      terrain.cursor = selectable ? 'pointer' : 'help';
-      terrain.on('pointerover', () => {
-        drawTerrain(true);
-        if (merchantPlacementCue !== null) merchantPlacementCue.visible = true;
-        this.onInspect(hex.target);
-      });
-      terrain.on('pointerout', () => {
-        drawTerrain(false);
-        if (merchantPlacementCue !== null) merchantPlacementCue.visible = false;
-        this.onInspect(null);
-      });
-      terrain.on('pointertap', (event: FederatedPointerEvent) => {
+      const inspect = (hovered: boolean) => {
+        drawHexControl(hovered);
+        if (merchantPlacementCue !== null) merchantPlacementCue.visible = hovered;
+        this.onInspect(hovered ? hex.target : null);
+      };
+      drawHexControl(false);
+      graphic.eventMode = 'static';
+      graphic.cursor = selectable ? 'pointer' : 'help';
+      graphic.on('pointerover', () => inspect(true));
+      graphic.on('pointerout', () => inspect(false));
+      graphic.on('pointertap', (event: FederatedPointerEvent) => {
         if (selectable) this.onSelect(hex.target, event.global);
         else this.onInspect(hex.target);
       });
-      this.targets.set(targetKey(hex.target), terrain);
-      const terrainDetails = boardRenderProfile(this.graphicsQuality).terrainDetails
-        ? createTerrainDetails(hex)
-        : null;
-      if (terrainDetails === null) hexLayer.addChild(shadow, terrain);
-      else hexLayer.addChild(shadow, terrain, terrainDetails);
-      this.animateTerrainChange(hex, polygon, hexLayer);
+      this.targets.set(targetKey(hex.target), graphic);
+      this.hexControlLayer.addChild(graphic);
 
       if (selectable) {
-        // Robber movement treats the whole tile as one control. Keeping this hit area above tokens,
-        // roads, corners, and pieces prevents those smaller targets from swallowing the click.
         const interactionTarget = new Graphics()
           .poly(polygon)
           .fill({ color: '#ffffff', alpha: 0.001 });
         interactionTarget.eventMode = 'static';
         interactionTarget.cursor = 'pointer';
-        interactionTarget.on('pointerover', () => {
-          drawTerrain(true);
-          if (merchantPlacementCue !== null) merchantPlacementCue.visible = true;
-          this.onInspect(hex.target);
-        });
-        interactionTarget.on('pointerout', () => {
-          drawTerrain(false);
-          if (merchantPlacementCue !== null) merchantPlacementCue.visible = false;
-          this.onInspect(null);
-        });
+        interactionTarget.on('pointerover', () => inspect(true));
+        interactionTarget.on('pointerout', () => inspect(false));
         interactionTarget.on('pointertap', (event: FederatedPointerEvent) =>
           this.onSelect(hex.target, event.global),
         );
-        hexInteractionLayer.addChild(interactionTarget);
+        this.hexInteractionLayer.addChild(interactionTarget);
       }
 
-      const numberToken = createNumberToken(
-        hex,
-        this.inventorSelectedHexId === hex.target.id,
-        this.inventorPendingHexId === hex.target.id,
-        this.madnessHighlightedHexIds.has(hex.target.id),
-      );
-      if (numberToken !== null) {
-        numberTokenLayer.addChild(numberToken);
-        if (
-          (this.inventorSelectionActive &&
-            (selectable ||
-              this.inventorSelectedHexId === hex.target.id ||
-              this.inventorPendingHexId === hex.target.id)) ||
-          this.madnessHighlightedHexIds.has(hex.target.id)
-        ) {
-          this.registerPulsingTarget(numberToken, 8);
-        }
-        this.animateNumberTokenSwap(hex.target.id, numberToken);
+      if (hex.hasRobber && this.robberSelectionActive) {
+        const cue = createRobberAttentionCue(hex);
+        this.registerPulsingTarget(cue, 5, 'controls');
+        this.cueLayer.addChild(cue);
       }
-
-      if (hex.hasRobber) {
-        const robber = createRobber(hex);
-        pieceLayer.addChild(robber);
-        this.animateRobberMove(hex.target.id, robber);
-        if (this.robberSelectionActive) {
-          const cue = createRobberAttentionCue(hex);
-          this.registerPulsingTarget(cue, 5);
-          cueLayer.addChild(cue);
-        }
-      }
-
-      if (hex.merchantOwnerId !== null) {
-        const merchant = createMerchantToken(
-          hex,
-          this.playerColors[hex.merchantOwnerId] ?? '#f6d77c',
-        );
-        pieceLayer.addChild(merchant);
-      }
-
-      const debugText = new Text({
-        text: hex.target.id,
-        style: { fill: '#ffffff', fontFamily: 'monospace', fontSize: 9 },
-      });
-      debugText.anchor.set(0.5);
-      debugText.position.set(hex.center.x, hex.center.y + 43);
-      this.debugLayer.addChild(debugText);
     }
 
     for (const edge of this.model.edges) {
@@ -1461,11 +1708,7 @@ export class TerritoryBoard {
           .clear()
           .moveTo(edge.first.x, edge.first.y)
           .lineTo(edge.second.x, edge.second.y)
-          .stroke({
-            color: '#ffffff',
-            width: 15,
-            alpha: 0.001,
-          });
+          .stroke({ color: '#ffffff', width: 15, alpha: 0.001 });
         if (selectable && (this.showTargetPulses || hovered)) {
           graphic
             .moveTo(edge.first.x, edge.first.y)
@@ -1502,26 +1745,10 @@ export class TerritoryBoard {
           .stroke({ color: '#eef5f1', width: 9, alpha: 0.82 });
         pulse.position.set(midpointX, midpointY);
         pulse.eventMode = 'none';
-        this.registerPulsingTarget(pulse);
-        cueLayer.addChild(pulse);
+        this.registerPulsingTarget(pulse, 0, 'controls');
+        this.cueLayer.addChild(pulse);
       }
-      edgeLayer.addChild(graphic);
-
-      const ownerId = edge.roadOwnerId;
-      if (ownerId !== null) {
-        const roadOutline = new Graphics()
-          .moveTo(edge.first.x, edge.first.y)
-          .lineTo(edge.second.x, edge.second.y)
-          .stroke({ color: '#10140f', width: 13, alpha: 0.95 });
-        const road = new Graphics()
-          .moveTo(edge.first.x, edge.first.y)
-          .lineTo(edge.second.x, edge.second.y)
-          .stroke({ color: this.playerColors[ownerId] ?? '#f6f0dc', width: 8 });
-        roadOutline.eventMode = 'none';
-        road.eventMode = 'none';
-        pieceLayer.addChild(roadOutline, road);
-        this.animatePlacement(edge.target, [roadOutline, road]);
-      }
+      this.edgeLayer.addChild(graphic);
     }
 
     for (const vertex of this.model.vertices) {
@@ -1568,72 +1795,11 @@ export class TerritoryBoard {
         }
         pulse.position.set(vertex.position.x, vertex.position.y);
         pulse.eventMode = 'none';
-        this.registerPulsingTarget(pulse);
-        cueLayer.addChild(pulse);
+        this.registerPulsingTarget(pulse, 0, 'controls');
+        this.cueLayer.addChild(pulse);
       }
-      vertexLayer.addChild(graphic);
-
-      const building = vertex.building;
-      if (building !== null) {
-        const { x, y } = vertex.position;
-        const color = this.playerColors[building.ownerId] ?? '#f6f0dc';
-        const piece = createBuildingPiece(x, y, color, building.type);
-        pieceLayer.addChild(piece);
-        const enhancement = createBuildingEnhancement(
-          x,
-          y,
-          color,
-          building.hasWall === true,
-          building.metropolis,
-        );
-        if (enhancement !== null) pieceLayer.addChild(enhancement);
-        this.animatePlacement(vertex.target, [piece]);
-      }
-
-      if (vertex.knight !== null) {
-        const knight = createKnightPiece(
-          vertex.position.x,
-          vertex.position.y,
-          this.playerColors[vertex.knight.ownerId] ?? '#f6f0dc',
-          vertex.knight.level,
-          vertex.knight.active,
-        );
-        pieceLayer.addChild(knight);
-        this.animatePlacement(vertex.target, [knight]);
-      }
+      this.vertexLayer.addChild(graphic);
     }
-
-    for (const port of this.model.ports) {
-      const dock = createPortDocks(port);
-      const ship = createPortShip(port);
-      const labelOffset = portRatioOffset(port);
-      const hitTarget = new Graphics()
-        .roundRect(port.position.x - 30, port.position.y - 38, 60, 64, 12)
-        .fill({ color: '#ffffff', alpha: 0.001 })
-        .roundRect(
-          port.position.x + labelOffset.x - 20,
-          port.position.y + labelOffset.y - 11,
-          40,
-          22,
-          8,
-        )
-        .fill({ color: '#ffffff', alpha: 0.001 });
-      hitTarget.eventMode = 'static';
-      hitTarget.cursor = 'pointer';
-      hitTarget.on('pointerover', () => {
-        ship.scale.set(1.08);
-        this.onInspect(port.target);
-      });
-      hitTarget.on('pointerout', () => {
-        ship.scale.set(1);
-        this.onInspect(null);
-      });
-      hitTarget.on('pointertap', () => this.onInspect(port.target));
-      this.targets.set(targetKey(port.target), hitTarget);
-      portLayer.addChild(dock, ship, hitTarget);
-    }
-
-    this.startTargetPulse();
   }
 
   private readonly handleVisibilityChange = (): void => {
@@ -1650,13 +1816,33 @@ export class TerritoryBoard {
     }
   }
 
-  private registerPulsingTarget(display: Container, bobDistance = 0): void {
+  private registerPulsingTarget(
+    display: Container,
+    bobDistance = 0,
+    group: 'controls' | 'numbers' = 'controls',
+  ): void {
     this.pulsingTargets.push({
       display,
+      group,
       phaseOffset: this.pulsingTargets.length * 0.22,
       baseY: display.y,
       bobDistance,
     });
+  }
+
+  private clearPulseGroup(group: 'controls' | 'numbers'): void {
+    this.application.ticker.remove(this.animateTargetPulse);
+    for (let index = this.pulsingTargets.length - 1; index >= 0; index -= 1) {
+      if (this.pulsingTargets[index]?.group === group) this.pulsingTargets.splice(index, 1);
+    }
+  }
+
+  private clearTransientGroup(group: 'numbers' | 'pieces' | 'terrain'): void {
+    for (const [callback, callbackGroup] of this.transientTickerCallbacks) {
+      if (callbackGroup !== group) continue;
+      this.application.ticker.remove(callback);
+      this.transientTickerCallbacks.delete(callback);
+    }
   }
 
   private startTargetPulse(): void {
@@ -1714,7 +1900,7 @@ export class TerritoryBoard {
     };
     animate();
     if (globalThis.performance.now() - startedAt >= 1_850) return;
-    this.transientTickerCallbacks.add(animate);
+    this.transientTickerCallbacks.set(animate, 'numbers');
     this.application.ticker.add(animate);
   }
 
@@ -1741,7 +1927,7 @@ export class TerritoryBoard {
       this.application.ticker.remove(tick);
       this.transientTickerCallbacks.delete(tick);
     };
-    this.transientTickerCallbacks.add(tick);
+    this.transientTickerCallbacks.set(tick, 'terrain');
     this.application.ticker.add(tick);
   }
 
@@ -1778,7 +1964,7 @@ export class TerritoryBoard {
       this.application.ticker.remove(tick);
       this.transientTickerCallbacks.delete(tick);
     };
-    this.transientTickerCallbacks.add(tick);
+    this.transientTickerCallbacks.set(tick, 'pieces');
     this.application.ticker.add(tick);
   }
 
@@ -1802,7 +1988,7 @@ export class TerritoryBoard {
         this.transientTickerCallbacks.delete(tick);
       }
     };
-    this.transientTickerCallbacks.add(tick);
+    this.transientTickerCallbacks.set(tick, 'pieces');
     this.application.ticker.add(tick);
   }
 

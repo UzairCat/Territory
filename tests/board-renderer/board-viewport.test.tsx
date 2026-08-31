@@ -136,4 +136,46 @@ describe('board viewport renderer lifecycle', () => {
     expect(rendererProbe.constructed).toBe(2);
     expect(rendererProbe.destroyed).toBe(1);
   });
+
+  it('announces readiness only after the renderer has mounted', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const onReady = vi.fn();
+    const view = render(
+      <BoardViewport
+        board={state.board}
+        players={state.players}
+        knState={state.kn}
+        showDebugIds={false}
+        selectableTargets={[]}
+        highlightedHexIds={[]}
+        animatedTarget={null}
+        robberMove={null}
+        playerColors={{ [TEST_PLAYER_IDS[0]]: '#2864c7' }}
+        onReady={onReady}
+        onInspect={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(onReady).not.toHaveBeenCalled();
+    await waitFor(() => expect(onReady).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <BoardViewport
+        board={state.board}
+        players={state.players}
+        knState={state.kn}
+        showDebugIds={false}
+        selectableTargets={[]}
+        highlightedHexIds={[]}
+        animatedTarget={null}
+        robberMove={null}
+        playerColors={{ [TEST_PLAYER_IDS[0]]: '#2864c7' }}
+        onReady={onReady}
+        onInspect={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(onReady).toHaveBeenCalledOnce();
+  });
 });

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import '../app.css';
+
 import { Button } from '../../ui/components/Button';
 import { MenuBoardArtwork } from '../../ui/components/MenuBoardArtwork';
 import { useOnlineStore } from '../stores/online-store';

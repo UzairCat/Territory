@@ -68,6 +68,33 @@ export interface OnlineRoomView {
   readonly settings: OnlineLobbySettings;
   readonly previousSeed?: string | null;
   readonly game: OnlineGameView | null;
+  /** Per-connection ordering token used to apply compact room patches exactly once. */
+  readonly syncVersion?: number;
+}
+
+export type OnlinePatchOperation =
+  | {
+      readonly type: 'SET';
+      readonly path: readonly string[];
+      readonly value: unknown;
+    }
+  | {
+      readonly type: 'REMOVE';
+      readonly path: readonly string[];
+    }
+  | {
+      /** Reuses the overlapping tail of an array, then appends only its new entries. */
+      readonly type: 'ARRAY_TAIL';
+      readonly path: readonly string[];
+      readonly retainTail: number;
+      readonly append: readonly unknown[];
+    };
+
+export interface OnlineRoomPatch {
+  readonly roomCode: string;
+  readonly baseVersion: number;
+  readonly version: number;
+  readonly operations: readonly OnlinePatchOperation[];
 }
 
 export interface OnlineError {
@@ -82,15 +109,18 @@ export type OnlineAck<T = undefined> =
 
 export interface CreateRoomPayload {
   readonly displayName: string;
+  readonly supportsRoomPatches?: boolean;
 }
 
 export interface JoinRoomPayload {
   readonly roomCode: string;
   readonly displayName: string;
+  readonly supportsRoomPatches?: boolean;
 }
 
 export interface ResumeSessionPayload {
   readonly credentials: OnlineSessionCredentials;
+  readonly supportsRoomPatches?: boolean;
 }
 
 export interface UpdateRoomSettingsPayload {
@@ -137,6 +167,7 @@ export interface ActionAck {
 export interface ServerToClientEvents {
   'session:accepted': (session: SessionAck) => void;
   'room:snapshot': (room: OnlineRoomView) => void;
+  'room:patch': (patch: OnlineRoomPatch) => void;
   'room:error': (error: OnlineError) => void;
 }
 
@@ -187,6 +218,7 @@ export type InterServerEvents = Record<never, never>;
 export interface SocketSessionData {
   roomCode?: string;
   playerId?: PlayerId;
+  supportsRoomPatches?: boolean;
 }
 
 const boundedText = z.string().trim().min(1).max(200);
@@ -197,9 +229,15 @@ const roomCodeSchema = z
   .toUpperCase()
   .regex(new RegExp(`^[A-Z2-9]{${ROOM_CODE_LENGTH}}$`));
 
-export const createRoomPayloadSchema = z.object({ displayName: playerNameSchema }).strict();
+export const createRoomPayloadSchema = z
+  .object({ displayName: playerNameSchema, supportsRoomPatches: z.boolean().optional() })
+  .strict();
 export const joinRoomPayloadSchema = z
-  .object({ roomCode: roomCodeSchema, displayName: playerNameSchema })
+  .object({
+    roomCode: roomCodeSchema,
+    displayName: playerNameSchema,
+    supportsRoomPatches: z.boolean().optional(),
+  })
   .strict();
 export const credentialsSchema = z
   .object({

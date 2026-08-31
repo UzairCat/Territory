@@ -1623,7 +1623,7 @@ export function resolveKNProgressCardSelection(
       );
     }
     const id =
-      `deserter-${activePlayerId}-${state.turn.turnNumber}-${state.actionHistory.length}` as KnightId;
+      `deserter-${activePlayerId}-${state.turn.turnNumber}-${state.actionSequence}` as KnightId;
     const knight: KnightState = {
       id,
       ownerId: activePlayerId,

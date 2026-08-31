@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
+import '../app.css';
+
 import { PLAYER_COLORS } from '../../engine/content/colors';
 import { TERRAINS } from '../../engine/content/resources';
 import type { MapDefinition } from '../../engine/content/types';

@@ -1,13 +1,52 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
-import { GameScreen } from './screens/GameScreen';
-import { LocalLobbyScreen } from './screens/LocalLobbyScreen';
-import { MainMenuScreen } from './screens/MainMenuScreen';
-import { OnlineLobbyScreen } from './screens/OnlineLobbyScreen';
-import { OnlineMenuScreen } from './screens/OnlineMenuScreen';
 import { SettingsModal } from '../ui/settings/SettingsModal';
 import { useAppStore } from './stores/app-store';
+
+const testRoutes =
+  import.meta.env.MODE === 'test'
+    ? await Promise.all([
+        import('./screens/GameScreen'),
+        import('./screens/LocalLobbyScreen'),
+        import('./screens/MainMenuScreen'),
+        import('./screens/OnlineLobbyScreen'),
+        import('./screens/OnlineMenuScreen'),
+      ])
+    : null;
+
+const GameScreen =
+  testRoutes?.[0].GameScreen ??
+  lazy(() => import('./screens/GameScreen').then((module) => ({ default: module.GameScreen })));
+const LocalLobbyScreen =
+  testRoutes?.[1].LocalLobbyScreen ??
+  lazy(() =>
+    import('./screens/LocalLobbyScreen').then((module) => ({ default: module.LocalLobbyScreen })),
+  );
+const MainMenuScreen =
+  testRoutes?.[2].MainMenuScreen ??
+  lazy(() =>
+    import('./screens/MainMenuScreen').then((module) => ({ default: module.MainMenuScreen })),
+  );
+const OnlineLobbyScreen =
+  testRoutes?.[3].OnlineLobbyScreen ??
+  lazy(() =>
+    import('./screens/OnlineLobbyScreen').then((module) => ({ default: module.OnlineLobbyScreen })),
+  );
+const OnlineMenuScreen =
+  testRoutes?.[4].OnlineMenuScreen ??
+  lazy(() =>
+    import('./screens/OnlineMenuScreen').then((module) => ({ default: module.OnlineMenuScreen })),
+  );
+
+function RouteFallback() {
+  return (
+    <main className="route-loading" aria-live="polite" aria-label="Loading Territory">
+      <span aria-hidden="true">⬡</span>
+      <strong>Preparing the table…</strong>
+    </main>
+  );
+}
 
 export function App() {
   const reducedMotion = useAppStore((state) => state.settings.reducedMotion);
@@ -19,14 +58,16 @@ export function App() {
 
   return (
     <>
-      <Routes>
-        <Route path="/" element={<MainMenuScreen />} />
-        <Route path="/lobby" element={<LocalLobbyScreen />} />
-        <Route path="/online" element={<OnlineMenuScreen />} />
-        <Route path="/online/:roomCode" element={<OnlineLobbyScreen />} />
-        <Route path="/game" element={<GameScreen />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<MainMenuScreen />} />
+          <Route path="/lobby" element={<LocalLobbyScreen />} />
+          <Route path="/online" element={<OnlineMenuScreen />} />
+          <Route path="/online/:roomCode" element={<OnlineLobbyScreen />} />
+          <Route path="/game" element={<GameScreen />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
       <SettingsModal />
     </>
   );

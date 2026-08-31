@@ -12,11 +12,13 @@ import type {
   OnlineSessionCredentials,
   SessionAck,
 } from '../../multiplayer/protocol';
+import { applyOnlineRoomPatch } from '../../multiplayer/view-patch';
 import { disconnectOnlineSocket, getOnlineSocket } from '../multiplayer/online-client';
 import { useAppStore } from './app-store';
 
 const SESSION_STORAGE_KEY = 'territory.online-session.v1';
 const ACK_TIMEOUT_MS = 8_000;
+const ROOM_PATCH_CAPABILITY = { supportsRoomPatches: true } as const;
 let volatileCredentials: OnlineSessionCredentials | null = null;
 
 interface OnlineStoreState {
@@ -242,6 +244,22 @@ function installListeners(): void {
     });
     syncRoomToApp(room);
   });
+  socket.on('room:patch', (patch) => {
+    const current = useOnlineStore.getState();
+    const room = current.room === null ? null : applyOnlineRoomPatch(current.room, patch);
+    if (room === null) {
+      void resynchronizeRoom();
+      return;
+    }
+    useOnlineStore.setState({
+      room,
+      ...nextClockState(room, current),
+      error: null,
+      commandPending: false,
+      actionPending: false,
+    });
+    syncRoomToApp(room);
+  });
   socket.on('room:error', (error) => useOnlineStore.setState({ error }));
   socket.on('connect', () => useOnlineStore.setState({ connection: 'CONNECTED' }));
   socket.on('disconnect', () =>
@@ -255,7 +273,7 @@ function installListeners(): void {
     const credentials = useOnlineStore.getState().credentials;
     if (credentials === null) return;
     void emitWithAck<SessionAck>((acknowledge) =>
-      socket.emit('session:resume', { credentials }, acknowledge),
+      socket.emit('session:resume', { credentials, ...ROOM_PATCH_CAPABILITY }, acknowledge),
     ).then((ack) => {
       if (!ack.ok) {
         useOnlineStore.setState({ error: ack.error, connection: 'DISCONNECTED' });
@@ -270,6 +288,28 @@ function installListeners(): void {
       syncRoomToApp(ack.room);
     });
   });
+}
+
+let resyncPromise: Promise<void> | null = null;
+
+function resynchronizeRoom(): Promise<void> {
+  if (resyncPromise !== null) return resyncPromise;
+  const credentials = useOnlineStore.getState().credentials;
+  if (credentials === null) return Promise.resolve();
+  resyncPromise = emitWithAck<SessionAck>((acknowledge) =>
+    getOnlineSocket().emit(
+      'session:resume',
+      { credentials, ...ROOM_PATCH_CAPABILITY },
+      acknowledge,
+    ),
+  )
+    .then((ack) => {
+      if (!acceptSession(ack) && !ack.ok) useOnlineStore.setState({ error: ack.error });
+    })
+    .finally(() => {
+      resyncPromise = null;
+    });
+  return resyncPromise;
 }
 
 function acceptSession(ack: OnlineAck<SessionAck>): boolean {
@@ -308,7 +348,11 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
       return false;
     }
     const ack = await emitWithAck<SessionAck>((acknowledge) =>
-      getOnlineSocket().emit('session:resume', { credentials }, acknowledge),
+      getOnlineSocket().emit(
+        'session:resume',
+        { credentials, ...ROOM_PATCH_CAPABILITY },
+        acknowledge,
+      ),
     );
     if (!ack.ok && ack.error.code === 'SESSION_EXPIRED') {
       persistCredentials(null);
@@ -334,7 +378,11 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
       }
       return acceptSession(
         await emitWithAck<SessionAck>((acknowledge) =>
-          getOnlineSocket().emit('room:create', { displayName }, acknowledge),
+          getOnlineSocket().emit(
+            'room:create',
+            { displayName, ...ROOM_PATCH_CAPABILITY },
+            acknowledge,
+          ),
         ),
       );
     } catch {
@@ -363,7 +411,11 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
       }
       return acceptSession(
         await emitWithAck<SessionAck>((acknowledge) =>
-          getOnlineSocket().emit('room:join', { roomCode, displayName }, acknowledge),
+          getOnlineSocket().emit(
+            'room:join',
+            { roomCode, displayName, ...ROOM_PATCH_CAPABILITY },
+            acknowledge,
+          ),
         ),
       );
     } catch {

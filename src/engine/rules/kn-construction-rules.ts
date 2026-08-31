@@ -124,7 +124,7 @@ export function buildKnight(
   }
   const vertex = state.board.vertices[action.vertexId]!;
   const instanceId = createKnightId(
-    `knight-${action.actorId}-${state.turn.turnNumber}-${state.actionHistory.length}`,
+    `knight-${action.actorId}-${state.turn.turnNumber}-${state.actionSequence}`,
   );
   const knight: KnightState = {
     id: instanceId,

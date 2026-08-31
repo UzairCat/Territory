@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 
+import '../app.css';
+
 import { Button } from '../../ui/components/Button';
 import { MenuBoardArtwork } from '../../ui/components/MenuBoardArtwork';
 import { useAppStore } from '../stores/app-store';

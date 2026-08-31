@@ -80,6 +80,11 @@ describe('online room sessions', () => {
   it('keeps an accepted lobby room when no game clock exists yet', async () => {
     await expect(useOnlineStore.getState().createRoom('Alex')).resolves.toBe(true);
 
+    expect(socket.emit).toHaveBeenCalledWith(
+      'room:create',
+      { displayName: 'Alex', supportsRoomPatches: true },
+      expect.any(Function),
+    );
     expect(useOnlineStore.getState()).toMatchObject({
       credentials: session.credentials,
       room: session.room,
