@@ -273,6 +273,12 @@ class AudioManager {
     }
     for (const timer of this.scheduledEffects) globalThis.clearTimeout(timer);
     this.scheduledEffects.clear();
+    for (const effect of this.activeEffects) {
+      effect.pause();
+      effect.removeAttribute('src');
+      effect.load();
+    }
+    this.activeEffects.clear();
   }
 
   private scheduleCue(

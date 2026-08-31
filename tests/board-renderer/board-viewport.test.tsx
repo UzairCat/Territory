@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BoardViewport, type BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
+import { hexId } from '../../src/engine/core/ids';
 import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 const rendererProbe = vi.hoisted(() => ({ constructed: 0, mounted: 0, updated: 0, destroyed: 0 }));
@@ -98,8 +99,41 @@ describe('board viewport renderer lifecycle', () => {
     expect(rendererProbe.destroyed).toBe(0);
 
     view.rerender(<BoardViewport {...baseProps} board={{ ...state.board }} />);
+    expect(rendererProbe.updated).toBe(0);
+
+    view.rerender(
+      <BoardViewport
+        {...baseProps}
+        board={{ ...state.board, robberHexId: hexId('visual-change') }}
+      />,
+    );
     await waitFor(() => expect(rendererProbe.updated).toBe(1));
     expect(rendererProbe.mounted).toBe(1);
     expect(rendererProbe.destroyed).toBe(0);
+  });
+
+  it('recreates the canvas only when renderer quality changes', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const baseProps: BoardViewportProps = {
+      board: state.board,
+      players: state.players,
+      knState: state.kn,
+      showDebugIds: false,
+      selectableTargets: [],
+      highlightedHexIds: [],
+      animatedTarget: null,
+      robberMove: null,
+      playerColors: { [TEST_PLAYER_IDS[0]]: '#2864c7' },
+      onInspect: vi.fn(),
+      onSelect: vi.fn(),
+    };
+    const view = render(<BoardViewport {...baseProps} graphicsQuality="HIGH" />);
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+
+    view.rerender(<BoardViewport {...baseProps} graphicsQuality="PERFORMANCE" />);
+    await waitFor(() => expect(rendererProbe.mounted).toBe(2));
+
+    expect(rendererProbe.constructed).toBe(2);
+    expect(rendererProbe.destroyed).toBe(1);
   });
 });

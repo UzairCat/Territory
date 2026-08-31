@@ -23,6 +23,12 @@ import {
   type LocalLobbyPlayer,
 } from '../lobby/lobby-model';
 import { hasAdminDisplayName } from '../../multiplayer/admin-access';
+import {
+  BOARD_FRAME_RATE_LIMITS,
+  BOARD_GRAPHICS_QUALITIES,
+  type BoardFrameRateLimit,
+  type BoardGraphicsQuality,
+} from '../../board-renderer/performance';
 
 export type AnimationSpeed = 'NORMAL' | 'FAST';
 
@@ -33,6 +39,8 @@ export interface AppSettings {
   readonly timerSounds: boolean;
   readonly reducedMotion: boolean;
   readonly animationSpeed: AnimationSpeed;
+  readonly graphicsQuality: BoardGraphicsQuality;
+  readonly frameRateLimit: BoardFrameRateLimit;
 }
 
 export type BeginGameResult =
@@ -99,14 +107,78 @@ function randomUnitInterval(): number {
   return (randomValue[0] ?? 0) / 4_294_967_296;
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const APP_SETTINGS_STORAGE_KEY = 'territory.settings.v1';
+
+export const DEFAULT_SETTINGS: AppSettings = {
   masterVolume: 80,
   sfxVolume: 80,
   musicVolume: 34,
   timerSounds: true,
   reducedMotion: false,
   animationSpeed: 'NORMAL',
+  graphicsQuality: 'HIGH',
+  frameRateLimit: 60,
 };
+
+function settingsStorage(): Storage | null {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function validVolume(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+export function readStoredAppSettings(): AppSettings {
+  const storage = settingsStorage();
+  if (storage === null) return DEFAULT_SETTINGS;
+  try {
+    const parsed = JSON.parse(
+      storage.getItem(APP_SETTINGS_STORAGE_KEY) ?? 'null',
+    ) as Partial<AppSettings> | null;
+    if (parsed === null || typeof parsed !== 'object') return DEFAULT_SETTINGS;
+    return {
+      masterVolume: validVolume(parsed.masterVolume)
+        ? parsed.masterVolume
+        : DEFAULT_SETTINGS.masterVolume,
+      sfxVolume: validVolume(parsed.sfxVolume) ? parsed.sfxVolume : DEFAULT_SETTINGS.sfxVolume,
+      musicVolume: validVolume(parsed.musicVolume)
+        ? parsed.musicVolume
+        : DEFAULT_SETTINGS.musicVolume,
+      timerSounds:
+        typeof parsed.timerSounds === 'boolean' ? parsed.timerSounds : DEFAULT_SETTINGS.timerSounds,
+      reducedMotion:
+        typeof parsed.reducedMotion === 'boolean'
+          ? parsed.reducedMotion
+          : DEFAULT_SETTINGS.reducedMotion,
+      animationSpeed:
+        parsed.animationSpeed === 'NORMAL' || parsed.animationSpeed === 'FAST'
+          ? parsed.animationSpeed
+          : DEFAULT_SETTINGS.animationSpeed,
+      graphicsQuality: BOARD_GRAPHICS_QUALITIES.includes(
+        parsed.graphicsQuality as BoardGraphicsQuality,
+      )
+        ? (parsed.graphicsQuality as BoardGraphicsQuality)
+        : DEFAULT_SETTINGS.graphicsQuality,
+      frameRateLimit: BOARD_FRAME_RATE_LIMITS.includes(parsed.frameRateLimit as BoardFrameRateLimit)
+        ? (parsed.frameRateLimit as BoardFrameRateLimit)
+        : DEFAULT_SETTINGS.frameRateLimit,
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function persistAppSettings(settings: AppSettings): void {
+  try {
+    settingsStorage()?.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Settings still apply to this session when browser storage is blocked or full.
+  }
+}
 
 function initialState() {
   return {
@@ -117,7 +189,7 @@ function initialState() {
     gameEventHistory: [],
     gamePaused: false,
     adminMode: false,
-    settings: DEFAULT_SETTINGS,
+    settings: readStoredAppSettings(),
     settingsOpen: false,
   };
 }
@@ -349,9 +421,19 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     })),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
-  updateSettings: (settings) => set((state) => ({ settings: { ...state.settings, ...settings } })),
+  updateSettings: (settings) =>
+    set((state) => {
+      const nextSettings = { ...state.settings, ...settings };
+      persistAppSettings(nextSettings);
+      return { settings: nextSettings };
+    }),
 }));
 
 export function resetAppStoreForTests(): void {
+  try {
+    settingsStorage()?.removeItem(APP_SETTINGS_STORAGE_KEY);
+  } catch {
+    // Tests still receive the in-memory defaults when storage is unavailable.
+  }
   useAppStore.setState(initialState());
 }

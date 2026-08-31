@@ -56,13 +56,16 @@ const socket = vi.hoisted(() => ({
       }) => void,
     ) => {
       if (event === 'room:create') acknowledge?.({ ok: true, ...session });
+      else acknowledge?.({ ok: true } as never);
     },
   ),
 }));
 
+const disconnectOnlineSocket = vi.hoisted(() => vi.fn());
+
 vi.mock('../../src/app/multiplayer/online-client', () => ({
   getOnlineSocket: () => socket,
-  disconnectOnlineSocket: vi.fn(),
+  disconnectOnlineSocket,
 }));
 
 import { resetOnlineStoreForTests, useOnlineStore } from '../../src/app/stores/online-store';
@@ -81,6 +84,18 @@ describe('online room sessions', () => {
       room: session.room,
       commandPending: false,
       error: null,
+    });
+  });
+
+  it('closes the idle transport after leaving a room', async () => {
+    await expect(useOnlineStore.getState().createRoom('Alex')).resolves.toBe(true);
+    await useOnlineStore.getState().leaveRoom();
+
+    expect(disconnectOnlineSocket).toHaveBeenCalledOnce();
+    expect(useOnlineStore.getState()).toMatchObject({
+      connection: 'DISCONNECTED',
+      credentials: null,
+      room: null,
     });
   });
 });

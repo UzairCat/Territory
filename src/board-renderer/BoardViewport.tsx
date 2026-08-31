@@ -12,6 +12,8 @@ import type {
   ResourceFlyover,
 } from './render-model';
 import type { TerritoryBoard, TerritoryBoardOptions } from './TerritoryBoard';
+import type { BoardFrameRateLimit, BoardGraphicsQuality } from './performance';
+import { boardVisualKey } from './board-visual-key';
 import { Button } from '../ui/components/Button';
 import { resourceGlyph } from '../ui/game/game-icons';
 
@@ -40,6 +42,8 @@ export interface BoardViewportProps {
   } | null;
   readonly playerColors: Readonly<Record<string, string>>;
   readonly reducedMotion?: boolean;
+  readonly graphicsQuality?: BoardGraphicsQuality;
+  readonly frameRateLimit?: BoardFrameRateLimit;
   readonly showTargetPulses?: boolean;
   readonly showRobberAttention?: boolean;
   readonly resourceFlyovers?: readonly ResourceFlyover[];
@@ -259,6 +263,17 @@ function useStableByKey<T>(value: T, key: string): T {
   return useMemo(() => value, [key]);
 }
 
+const PLAYED_FLYOVER_HISTORY_LIMIT = 256;
+
+function rememberPlayedFlyover(history: Set<string>, id: string): void {
+  history.add(id);
+  while (history.size > PLAYED_FLYOVER_HISTORY_LIMIT) {
+    const oldestId = history.values().next().value;
+    if (oldestId === undefined) return;
+    history.delete(oldestId);
+  }
+}
+
 export function BoardViewport({
   board,
   players = {},
@@ -278,6 +293,8 @@ export function BoardViewport({
   robberMove,
   playerColors,
   reducedMotion = false,
+  graphicsQuality = 'HIGH',
+  frameRateLimit = 60,
   showTargetPulses = true,
   showRobberAttention = false,
   resourceFlyovers = [],
@@ -297,6 +314,8 @@ export function BoardViewport({
   } | null>(null);
   const playedFlyoverIdsRef = useRef(new Set<string>());
   const activeFlyoverElementsRef = useRef(new Set<HTMLElement>());
+  const visualBoardKey = useMemo(() => boardVisualKey(board), [board]);
+  const stableBoard = useStableByKey(board, visualBoardKey);
   const currentKnights = Object.values(players).flatMap((player) => player.knights);
   const stableKnights = useStableByKey(
     currentKnights,
@@ -325,6 +344,19 @@ export function BoardViewport({
     madnessHighlightedHexIds,
     madnessHighlightedHexIds.join('|'),
   );
+  const stableNumberTokenSwap = useStableByKey(numberTokenSwap, numberTokenSwap?.join('|') ?? '');
+  const stableTerrainChange = useStableByKey(
+    terrainChange,
+    terrainChange === null ? '' : `${terrainChange.hexId}:${terrainChange.fromResourceId}`,
+  );
+  const stableAnimatedTarget = useStableByKey(
+    animatedTarget,
+    animatedTarget === null ? '' : `${animatedTarget.kind}:${animatedTarget.id}`,
+  );
+  const stableRobberMove = useStableByKey(
+    robberMove,
+    robberMove === null ? '' : `${robberMove.fromHexId}:${robberMove.toHexId}`,
+  );
   const stablePlayerColors = useStableByKey(
     playerColors,
     Object.entries(playerColors)
@@ -334,7 +366,7 @@ export function BoardViewport({
   );
   const renderInput = useMemo(
     () => ({
-      board,
+      board: stableBoard,
       options: {
         onInspect: (target: BoardTarget | null) => inspectRef.current(target),
         onSelect: (target: BoardTarget, point: BoardViewportPoint) => {
@@ -349,14 +381,16 @@ export function BoardViewport({
         inventorSelectionActive,
         inventorSelectedHexId,
         inventorPendingHexId,
-        numberTokenSwap,
+        numberTokenSwap: stableNumberTokenSwap,
         madnessHighlightedHexIds: stableMadnessHighlightedHexIds,
-        terrainChange,
+        terrainChange: stableTerrainChange,
         merchantPlacementActive,
-        animatedTarget,
-        robberMove,
+        animatedTarget: stableAnimatedTarget,
+        robberMove: stableRobberMove,
         playerColors: stablePlayerColors,
         reducedMotion,
+        graphicsQuality,
+        frameRateLimit,
         showTargetPulses,
         showRobberAttention,
         knights: stableKnights,
@@ -364,15 +398,13 @@ export function BoardViewport({
       } satisfies TerritoryBoardOptions,
     }),
     [
-      animatedTarget,
-      board,
+      frameRateLimit,
+      graphicsQuality,
       inventorPendingHexId,
       inventorSelectedHexId,
       inventorSelectionActive,
       merchantPlacementActive,
-      numberTokenSwap,
       reducedMotion,
-      robberMove,
       showRobberAttention,
       showTargetPulses,
       stableEmphasizedVertexIds,
@@ -380,9 +412,13 @@ export function BoardViewport({
       stableKnights,
       stableMadnessHighlightedHexIds,
       stableMerchant,
+      stableNumberTokenSwap,
       stablePlayerColors,
+      stableRobberMove,
       stableSelectableTargets,
-      terrainChange,
+      stableTerrainChange,
+      stableAnimatedTarget,
+      stableBoard,
     ],
   );
   const renderInputRef = useRef(renderInput);
@@ -438,7 +474,7 @@ export function BoardViewport({
       if (appliedRenderInputRef.current !== null) appliedRenderInputRef.current = null;
       renderer?.destroy();
     };
-  }, []);
+  }, [graphicsQuality]);
 
   useEffect(() => {
     const ready = rendererReadyRef.current;
@@ -474,13 +510,13 @@ export function BoardViewport({
       const motionDisabled =
         reducedMotion || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       for (const flyover of pendingResourceFlyovers) {
-        playedFlyoverIdsRef.current.add(flyover.id);
+        rememberPlayedFlyover(playedFlyoverIdsRef.current, flyover.id);
         if (!motionDisabled) {
           playResourceFlyover(renderer, host, flyover, activeFlyoverElementsRef.current);
         }
       }
       for (const flyover of pendingProgressCardFlyovers) {
-        playedFlyoverIdsRef.current.add(flyover.id);
+        rememberPlayedFlyover(playedFlyoverIdsRef.current, flyover.id);
         if (!motionDisabled) {
           playProgressCardFlyover(flyover, activeFlyoverElementsRef.current);
         }

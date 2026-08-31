@@ -12,7 +12,7 @@ import type {
   OnlineSessionCredentials,
   SessionAck,
 } from '../../multiplayer/protocol';
-import { getOnlineSocket } from '../multiplayer/online-client';
+import { disconnectOnlineSocket, getOnlineSocket } from '../multiplayer/online-client';
 import { useAppStore } from './app-store';
 
 const SESSION_STORAGE_KEY = 'territory.online-session.v1';
@@ -495,6 +495,7 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
     }
     persistCredentials(null);
     set({
+      connection: 'DISCONNECTED',
       credentials: null,
       room: null,
       clockOffsetMs: 0,
@@ -504,11 +505,13 @@ export const useOnlineStore = create<OnlineStoreState>((set, get) => ({
       actionPending: false,
     });
     useAppStore.getState().clearGame();
+    disconnectOnlineSocket();
   },
   clearError: () => set({ error: null }),
 }));
 
 export function resetOnlineStoreForTests(): void {
+  disconnectOnlineSocket();
   persistCredentials(null);
   useOnlineStore.setState({
     connection: 'DISCONNECTED',

@@ -18,6 +18,11 @@ import {
   type RenderHex,
   type RenderPort,
 } from './render-model';
+import {
+  boardRenderProfile,
+  type BoardFrameRateLimit,
+  type BoardGraphicsQuality,
+} from './performance';
 
 export interface TerritoryBoardOptions {
   readonly onInspect: (target: BoardTarget | null) => void;
@@ -44,6 +49,8 @@ export interface TerritoryBoardOptions {
   readonly showTargetPulses?: boolean;
   readonly showRobberAttention?: boolean;
   readonly reducedMotion?: boolean;
+  readonly graphicsQuality?: BoardGraphicsQuality;
+  readonly frameRateLimit?: BoardFrameRateLimit;
   readonly showDebugIds?: boolean;
   readonly knights?: readonly KnightState[];
   readonly merchant?: KNState['merchant'];
@@ -1062,6 +1069,8 @@ export class TerritoryBoard {
   private showTargetPulses: boolean;
   private robberSelectionActive: boolean;
   private reducedMotion: boolean;
+  private readonly graphicsQuality: BoardGraphicsQuality;
+  private frameRateLimit: BoardFrameRateLimit;
   // The board moves as one camera-controlled unit. A render group lets Pixi update that
   // transform on the GPU instead of walking every child while the player pans or zooms.
   private readonly world = new Container({ isRenderGroup: true });
@@ -1108,16 +1117,19 @@ export class TerritoryBoard {
     this.showTargetPulses = options.showTargetPulses ?? true;
     this.robberSelectionActive = options.showRobberAttention ?? false;
     this.reducedMotion = options.reducedMotion ?? false;
+    this.graphicsQuality = options.graphicsQuality ?? 'HIGH';
+    this.frameRateLimit = options.frameRateLimit ?? 60;
     this.debugLayer.visible = options.showDebugIds ?? false;
   }
 
   async mount(): Promise<void> {
+    const profile = boardRenderProfile(this.graphicsQuality);
     await this.application.init({
-      antialias: true,
+      antialias: profile.antialias,
       autoDensity: true,
       backgroundAlpha: 0,
       powerPreference: 'high-performance',
-      resolution: Math.min(globalThis.devicePixelRatio || 1, 2),
+      resolution: Math.min(globalThis.devicePixelRatio || 1, profile.maximumResolution),
       resizeTo: this.host,
     });
 
@@ -1127,6 +1139,7 @@ export class TerritoryBoard {
     }
 
     this.mounted = true;
+    this.application.ticker.maxFPS = this.frameRateLimit;
     this.application.canvas.className = 'board-canvas';
     this.application.canvas.setAttribute('role', 'img');
     this.application.canvas.setAttribute(
@@ -1207,6 +1220,8 @@ export class TerritoryBoard {
     this.showTargetPulses = options.showTargetPulses ?? true;
     this.robberSelectionActive = options.showRobberAttention ?? false;
     this.reducedMotion = options.reducedMotion ?? false;
+    this.frameRateLimit = options.frameRateLimit ?? 60;
+    this.application.ticker.maxFPS = this.frameRateLimit;
 
     const oldLayers = this.world.removeChildren();
     for (const layer of oldLayers) {
@@ -1359,8 +1374,11 @@ export class TerritoryBoard {
         else this.onInspect(hex.target);
       });
       this.targets.set(targetKey(hex.target), terrain);
-      const terrainDetails = createTerrainDetails(hex);
-      hexLayer.addChild(shadow, terrain, terrainDetails);
+      const terrainDetails = boardRenderProfile(this.graphicsQuality).terrainDetails
+        ? createTerrainDetails(hex)
+        : null;
+      if (terrainDetails === null) hexLayer.addChild(shadow, terrain);
+      else hexLayer.addChild(shadow, terrain, terrainDetails);
       this.animateTerrainChange(hex, polygon, hexLayer);
 
       if (selectable) {

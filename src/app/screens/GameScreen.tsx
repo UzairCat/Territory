@@ -3174,11 +3174,14 @@ export function GameScreen() {
             robberMove={robberMove}
             playerColors={playerColors}
             reducedMotion={settings.reducedMotion}
+            graphicsQuality={settings.graphicsQuality}
+            frameRateLimit={settings.frameRateLimit}
             showTargetPulses={
-              gameState.turn.phase !== 'ACTION_PHASE' ||
-              constructionType !== null ||
-              knBoardAction !== null ||
-              knightCommand !== null
+              settings.graphicsQuality !== 'PERFORMANCE' &&
+              (gameState.turn.phase !== 'ACTION_PHASE' ||
+                constructionType !== null ||
+                knBoardAction !== null ||
+                knightCommand !== null)
             }
             showRobberAttention={
               gameState.turn.phase === 'MOVE_ROBBER' || knBoardChoice?.purpose === 'BISHOP_HEX'

@@ -2,7 +2,13 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { resetAppStoreForTests, useAppStore } from '../../src/app/stores/app-store';
+import {
+  APP_SETTINGS_STORAGE_KEY,
+  DEFAULT_SETTINGS,
+  readStoredAppSettings,
+  resetAppStoreForTests,
+  useAppStore,
+} from '../../src/app/stores/app-store';
 import { PLAYER_COLORS } from '../../src/engine/content/colors';
 import { PLAYER_AVATARS } from '../../src/engine/content/avatars';
 import { KN_PROGRESS_CARDS } from '../../src/engine/content/kn-progress-cards';
@@ -26,6 +32,35 @@ describe('application session store', () => {
       'Alex',
       'Sam',
     ]);
+  });
+
+  it('persists performance settings and safely rejects invalid stored values', () => {
+    useAppStore.getState().updateSettings({
+      graphicsQuality: 'PERFORMANCE',
+      frameRateLimit: 30,
+      reducedMotion: true,
+    });
+
+    expect(JSON.parse(localStorage.getItem(APP_SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
+      graphicsQuality: 'PERFORMANCE',
+      frameRateLimit: 30,
+      reducedMotion: true,
+    });
+    expect(readStoredAppSettings()).toMatchObject({
+      graphicsQuality: 'PERFORMANCE',
+      frameRateLimit: 30,
+      reducedMotion: true,
+    });
+
+    localStorage.setItem(
+      APP_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ graphicsQuality: 'ULTRA', frameRateLimit: 500, masterVolume: -4 }),
+    );
+    expect(readStoredAppSettings()).toMatchObject({
+      graphicsQuality: DEFAULT_SETTINGS.graphicsQuality,
+      frameRateLimit: DEFAULT_SETTINGS.frameRateLimit,
+      masterVolume: DEFAULT_SETTINGS.masterVolume,
+    });
   });
 
   it('randomly assigns unused preset portraits to new local players', () => {

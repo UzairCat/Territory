@@ -1,4 +1,5 @@
 import { useAppStore, type AnimationSpeed } from '../../app/stores/app-store';
+import type { BoardFrameRateLimit, BoardGraphicsQuality } from '../../board-renderer/performance';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 
@@ -69,6 +70,40 @@ export function SettingsModal() {
             <option value="NORMAL">Normal</option>
             <option value="FAST">Fast</option>
           </select>
+        </label>
+
+        <label className="field" htmlFor="graphics-quality">
+          <span>Board detail</span>
+          <select
+            id="graphics-quality"
+            value={settings.graphicsQuality}
+            onChange={(event) =>
+              update({ graphicsQuality: event.target.value as BoardGraphicsQuality })
+            }
+          >
+            <option value="HIGH">High</option>
+            <option value="BALANCED">Balanced</option>
+            <option value="PERFORMANCE">Performance</option>
+          </select>
+          <small>
+            Performance mode lowers canvas resolution and removes decorative tile detail.
+          </small>
+        </label>
+
+        <label className="field" htmlFor="frame-rate-limit">
+          <span>Board frame limit</span>
+          <select
+            id="frame-rate-limit"
+            value={settings.frameRateLimit}
+            onChange={(event) =>
+              update({ frameRateLimit: Number(event.target.value) as BoardFrameRateLimit })
+            }
+          >
+            <option value="60">60 FPS</option>
+            <option value="45">45 FPS</option>
+            <option value="30">30 FPS</option>
+          </select>
+          <small>Lower values reduce GPU usage, especially on large maps and laptops.</small>
         </label>
 
         <label className="check-field" htmlFor="timer-sounds">

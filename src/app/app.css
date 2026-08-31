@@ -5980,6 +5980,15 @@ input[type='checkbox'] {
   transition-duration: 0.01ms !important;
 }
 
+.app-reduced-motion *,
+.app-reduced-motion *::before,
+.app-reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
 .game-action-bar {
   display: grid;
   height: 100%;

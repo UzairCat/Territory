@@ -41,9 +41,50 @@ function createStartedRoom(kNMode = false) {
 afterEach(() => {
   for (const manager of managers.splice(0)) manager.shutdown();
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe('authoritative online rooms', () => {
+  it('reclaims a started room after every player remains disconnected', () => {
+    vi.useFakeTimers();
+    const manager = new RoomManager({
+      onRoomChanged: () => undefined,
+      inactiveRoomTtlMs: 1_000,
+    });
+    managers.push(manager);
+    const host = manager.create('Host', 'inactive-host-socket');
+    expect(host.ok).toBe(true);
+    if (!host.ok) throw new Error(host.error.message);
+    const guest = manager.join(host.credentials.roomCode, 'Guest', 'inactive-guest-socket');
+    expect(guest.ok).toBe(true);
+    if (!guest.ok) throw new Error(guest.error.message);
+    expect(manager.start(host.credentials)).toEqual({ ok: true });
+    const room = manager.rooms.get(host.credentials.roomCode);
+    if (room === undefined) throw new Error('Inactive room fixture disappeared before disconnect.');
+
+    manager.disconnect('inactive-host-socket');
+    manager.disconnect('inactive-guest-socket');
+    expect(room.timer).toBeNull();
+    expect(room.deadlineAt).toBeNull();
+    vi.advanceTimersByTime(999);
+    expect(manager.rooms.has(host.credentials.roomCode)).toBe(true);
+
+    vi.advanceTimersByTime(1);
+    expect(manager.rooms.has(host.credentials.roomCode)).toBe(false);
+  });
+
+  it('suspends abandoned match timers and restarts them when a player reconnects', () => {
+    const { manager, room, host } = createStartedRoom();
+    manager.disconnect('host-socket');
+    manager.disconnect('guest-socket');
+
+    expect(room.timer).toBeNull();
+    expect(room.deadlineAt).toBeNull();
+    expect(manager.resume(host, 'resumed-host-socket')).toMatchObject({ ok: true });
+    expect(room.timer).not.toBeNull();
+    expect(room.deadlineAt).toBeGreaterThan(Date.now());
+  });
+
   it('randomly assigns different preset portraits to joining online guests', () => {
     const manager = new RoomManager({ onRoomChanged: () => undefined });
     managers.push(manager);

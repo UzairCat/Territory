@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { GameScreen } from './screens/GameScreen';
@@ -6,8 +7,16 @@ import { MainMenuScreen } from './screens/MainMenuScreen';
 import { OnlineLobbyScreen } from './screens/OnlineLobbyScreen';
 import { OnlineMenuScreen } from './screens/OnlineMenuScreen';
 import { SettingsModal } from '../ui/settings/SettingsModal';
+import { useAppStore } from './stores/app-store';
 
 export function App() {
+  const reducedMotion = useAppStore((state) => state.settings.reducedMotion);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('app-reduced-motion', reducedMotion);
+    return () => document.documentElement.classList.remove('app-reduced-motion');
+  }, [reducedMotion]);
+
   return (
     <>
       <Routes>
