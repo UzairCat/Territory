@@ -211,7 +211,7 @@ describe('application flow', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens the avatar gallery from a local guest portrait and saves the profile', async () => {
+  it('applies local profile gallery choices immediately and keeps them when closed', async () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(screen.getByRole('button', { name: 'Local game' }));
@@ -232,13 +232,18 @@ describe('application flow', () => {
       within(gallery).getByRole('button', { name: 'Choose Courier profile picture' }),
     );
     await user.click(within(gallery).getByRole('button', { name: 'Choose Emerald' }));
-    await user.click(within(gallery).getByRole('button', { name: 'Use this profile' }));
 
     expect(useAppStore.getState().lobby.players[0]).toMatchObject({
       name: 'Alex',
       avatarId: 'courier',
       colorId: 'emerald',
     });
+    expect(within(gallery).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(
+      within(gallery).queryByRole('button', { name: 'Use this profile' }),
+    ).not.toBeInTheDocument();
+    await user.click(within(gallery).getByRole('button', { name: 'Close profile gallery' }));
+
     expect(screen.queryByRole('dialog', { name: 'Alex’s profile' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Alex profile picture: Courier')).toBeInTheDocument();
   });

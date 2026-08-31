@@ -152,9 +152,15 @@ describe('online entry and lobby presentation', () => {
     await user.click(
       within(gallery).getByRole('button', { name: 'Choose Navigator profile picture' }),
     );
+    expect(updateProfile).toHaveBeenLastCalledWith({ avatarId: 'navigator', colorId: 'cobalt' });
     await user.click(within(gallery).getByRole('button', { name: 'Choose Onyx' }));
-    await user.click(within(gallery).getByRole('button', { name: 'Use this profile' }));
-    expect(updateProfile).toHaveBeenCalledWith({ avatarId: 'navigator', colorId: 'onyx' });
+    expect(updateProfile).toHaveBeenLastCalledWith({ avatarId: 'navigator', colorId: 'onyx' });
+    expect(within(gallery).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(
+      within(gallery).queryByRole('button', { name: 'Use this profile' }),
+    ).not.toBeInTheDocument();
+    await user.click(within(gallery).getByRole('button', { name: 'Close profile gallery' }));
+    expect(screen.queryByRole('dialog', { name: 'Alex’s profile' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Select K+N mode' }));
     expect(updateSettings).toHaveBeenCalledWith(

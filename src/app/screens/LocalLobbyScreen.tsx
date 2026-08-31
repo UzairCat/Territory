@@ -826,9 +826,8 @@ export function LocalLobbyScreen() {
             .filter((player) => player.id !== profilePlayer.id)
             .map((player) => player.colorId)}
           onClose={() => setProfilePlayerId(null)}
-          onSave={(avatarId, colorId) => {
+          onChange={(avatarId, colorId) => {
             setLobbyPlayerProfile(profilePlayer.id, avatarId, colorId);
-            setProfilePlayerId(null);
           }}
         />
       )}

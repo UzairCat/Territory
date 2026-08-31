@@ -975,13 +975,10 @@ export function OnlineLobbyScreen() {
           unavailableColorIds={room.players
             .filter((player) => player.id !== viewerPlayer.id)
             .map((player) => player.colorId)}
-          saving={commandPending}
           errorMessage={error?.message ?? null}
           onClose={() => setProfileGalleryOpen(false)}
-          onSave={(avatarId, colorId) => {
-            void updateProfile({ avatarId, colorId }).then((saved) => {
-              if (saved) setProfileGalleryOpen(false);
-            });
+          onChange={(avatarId, colorId) => {
+            void updateProfile({ avatarId, colorId });
           }}
         />
       )}

@@ -7,7 +7,6 @@ import {
 } from '../../engine/content/avatars';
 import { PLAYER_COLORS } from '../../engine/content/colors';
 import type { ColorId } from '../../engine/core/ids';
-import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { getPlayerAvatarImageSrc } from '../components/player-avatar-assets';
 
@@ -17,10 +16,9 @@ interface ProfileGalleryModalProps {
   readonly avatarId?: PlayerAvatarId | undefined;
   readonly colorId: ColorId;
   readonly unavailableColorIds?: readonly ColorId[];
-  readonly saving?: boolean;
   readonly errorMessage?: string | null | undefined;
   readonly onClose: () => void;
-  readonly onSave: (avatarId: PlayerAvatarId, colorId: ColorId) => void;
+  readonly onChange: (avatarId: PlayerAvatarId, colorId: ColorId) => void;
 }
 
 export function ProfileGalleryModal({
@@ -29,23 +27,20 @@ export function ProfileGalleryModal({
   avatarId,
   colorId,
   unavailableColorIds = [],
-  saving = false,
   errorMessage = null,
   onClose,
-  onSave,
+  onChange,
 }: ProfileGalleryModalProps) {
   if (!open) return null;
   return (
     <ProfileGalleryForm
-      key={`${playerName}-${avatarId ?? DEFAULT_PLAYER_AVATAR_ID}-${colorId}`}
       playerName={playerName}
       avatarId={avatarId ?? DEFAULT_PLAYER_AVATAR_ID}
       colorId={colorId}
       unavailableColorIds={unavailableColorIds}
-      saving={saving}
       errorMessage={errorMessage}
       onClose={onClose}
-      onSave={onSave}
+      onChange={onChange}
     />
   );
 }
@@ -59,10 +54,9 @@ function ProfileGalleryForm({
   avatarId,
   colorId,
   unavailableColorIds,
-  saving,
   errorMessage,
   onClose,
-  onSave,
+  onChange,
 }: ProfileGalleryFormProps) {
   const [selectedAvatarId, setSelectedAvatarId] = useState(avatarId);
   const [selectedColorId, setSelectedColorId] = useState(colorId);
@@ -73,8 +67,8 @@ function ProfileGalleryForm({
       open
       className="modal--wide profile-gallery-modal"
       title={`${playerName}’s profile`}
-      description="Choose an original preset portrait and your player color."
-      dismissible={!saving}
+      description="Choose a preset portrait and player color. Changes apply immediately."
+      closeLabel="Close profile gallery"
       onClose={onClose}
     >
       <section className="profile-gallery" aria-labelledby="profile-gallery-portraits">
@@ -94,7 +88,11 @@ function ProfileGalleryForm({
               aria-label={`Choose ${avatar.displayName} profile picture`}
               aria-pressed={selectedAvatarId === avatar.id}
               data-modal-autofocus={selectedAvatarId === avatar.id ? true : undefined}
-              onClick={() => setSelectedAvatarId(avatar.id)}
+              onClick={() => {
+                if (avatar.id === selectedAvatarId) return;
+                setSelectedAvatarId(avatar.id);
+                onChange(avatar.id, selectedColorId);
+              }}
             >
               <img
                 src={getPlayerAvatarImageSrc(avatar.id)}
@@ -124,7 +122,11 @@ function ProfileGalleryForm({
                 aria-pressed={selectedColorId === color.id}
                 disabled={unavailable}
                 title={unavailable ? `${color.displayName} is already taken` : color.displayName}
-                onClick={() => setSelectedColorId(color.id)}
+                onClick={() => {
+                  if (color.id === selectedColorId) return;
+                  setSelectedColorId(color.id);
+                  onChange(selectedAvatarId, color.id);
+                }}
               >
                 <span style={{ backgroundColor: color.hex }} />
                 <small>{color.displayName}</small>
@@ -139,19 +141,6 @@ function ProfileGalleryForm({
           {errorMessage}
         </p>
       )}
-
-      <footer className="modal__actions">
-        <Button variant="ghost" disabled={saving} onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          disabled={saving}
-          onClick={() => onSave(selectedAvatarId, selectedColorId)}
-        >
-          {saving ? 'Saving…' : 'Use this profile'}
-        </Button>
-      </footer>
     </Modal>
   );
 }
