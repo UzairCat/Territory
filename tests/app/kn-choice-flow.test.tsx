@@ -795,7 +795,7 @@ describe('K+N compact choice flows', () => {
     );
 
     expect(screen.getByText('00:55')).toBeInTheDocument();
-    expect(screen.getByText('Alex is placing the Merchant')).toBeInTheDocument();
+    expect(screen.getByText('Alex is taking actions')).toBeInTheDocument();
     expect(screen.getByTestId('merchant-placement')).toHaveTextContent('active');
   });
 
@@ -1406,11 +1406,23 @@ describe('K+N compact choice flows', () => {
 
     await user.click(screen.getByRole('button', { name: 'Play Reclamation' }));
     expect(screen.getByRole('button', { name: 'Cancel Reclamation' })).toBeInTheDocument();
+    expect(document.querySelector('.turn-timer-prompt')).toHaveTextContent(
+      'Alex is taking actions',
+    );
+    expect(
+      within(screen.getByLabelText('Alex, player 1')).getByText('Taking actions'),
+    ).toBeVisible();
     await user.click(screen.getByRole('button', { name: `Select HEX ${targetHex.id}` }));
     expect(useAppStore.getState().gameState?.pendingInteraction).toMatchObject({
       purpose: 'RECLAMATION_RESOURCE',
       canCancel: true,
     });
+    expect(document.querySelector('.turn-timer-prompt')).toHaveTextContent(
+      'Alex is taking actions',
+    );
+    expect(
+      within(screen.getByLabelText('Alex, player 1')).getByText('Taking actions'),
+    ).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Cancel Reclamation' }));
 
     expect(useAppStore.getState().gameState?.pendingInteraction).toBeNull();

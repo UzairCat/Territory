@@ -250,6 +250,18 @@ function activitySentence(
   return `${subject} ${names.length === 1 ? 'is' : 'are'} ${activityLabel[0]?.toLocaleLowerCase() ?? ''}${activityLabel.slice(1)}`;
 }
 
+function isUncommittedKNCardPreview(
+  state: GameState,
+  interaction: KNSelectionInteraction,
+): boolean {
+  return (
+    state.turn.phase === 'CARD_RESOLUTION' &&
+    interaction.sourceCardId !== undefined &&
+    interaction.canCancel &&
+    interaction.context.committed !== true
+  );
+}
+
 function pendingPlayerActivities(state: GameState): Readonly<Record<string, string>> {
   const interaction = state.pendingInteraction;
   if (interaction === null) return {};
@@ -258,7 +270,9 @@ function pendingPlayerActivities(state: GameState): Readonly<Record<string, stri
   }
   if (interaction.type === 'KN_SELECTION') {
     const players = interaction.simultaneous === true ? interaction.queue : [interaction.playerId];
-    const label = knSelectionActivityLabel(interaction.purpose);
+    const label = isUncommittedKNCardPreview(state, interaction)
+      ? 'Taking actions'
+      : knSelectionActivityLabel(interaction.purpose);
     return Object.fromEntries(players.map((playerId) => [playerId, label]));
   }
   if (interaction.type === 'TRADE_RESPONSES') {
@@ -2963,10 +2977,7 @@ export function GameScreen() {
         });
   const setupBuildingType = getSetupBuildingType(gameState);
   const uncommittedKNPreview =
-    gameState.turn.phase === 'CARD_RESOLUTION' &&
-    knChoiceInteraction?.sourceCardId !== undefined &&
-    knChoiceInteraction.canCancel &&
-    knChoiceInteraction.context.committed !== true;
+    knChoiceInteraction !== null && isUncommittedKNCardPreview(gameState, knChoiceInteraction);
   const recentActionBoostsTimer = recentGameEvents.some((event) =>
     TIMER_BOOST_EVENT_TYPES.has(event.type),
   );
@@ -3058,7 +3069,7 @@ export function GameScreen() {
                     ? {
                         duration: gameState.config.turnTimeSeconds ?? 60,
                         key: `actions-${gameState.turn.turnNumber}`,
-                        prompt: knChoiceStatusPrompt ?? actionModePrompt,
+                        prompt: actionModePrompt,
                         actorId: gameState.turn.activePlayerId,
                       }
                     : {
