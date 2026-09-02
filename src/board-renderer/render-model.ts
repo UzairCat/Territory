@@ -228,6 +228,8 @@ export function createBoardRenderModel(
   knights: readonly KnightState[] = [],
   merchant: KNState['merchant'] = null,
 ): BoardRenderModel {
+  const knightById = new Map(knights.map((knight) => [knight.id, knight] as const));
+  const knightByVertexId = new Map(knights.map((knight) => [knight.vertexId, knight] as const));
   const positions = vertexPositions(board, hexSize);
   const hexes = Object.values(board.hexes).map((hex) =>
     renderHex(hex, positions, board.robberHexId, merchant, hexSize),
@@ -243,7 +245,14 @@ export function createBoardRenderModel(
       target: { kind: 'VERTEX', id: vertex.id },
       position,
       building: vertex.building,
-      knight: knights.find((knight) => knight.id === vertex.knightId) ?? null,
+      // KnightState carries its authoritative board location. The reverse link is retained as a
+      // fallback so a compact online update can never make a valid Knight disappear.
+      knight:
+        knightByVertexId.get(vertex.id) ??
+        (vertex.knightId === null || vertex.knightId === undefined
+          ? undefined
+          : knightById.get(vertex.knightId)) ??
+        null,
     };
   });
   const ports = Object.values(board.ports).map((port) =>

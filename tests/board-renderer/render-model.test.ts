@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { createBoardRenderModel } from '../../src/board-renderer/render-model';
 import { generateBaseBoard, generateBoard } from '../../src/engine/board/generate-board';
-import type { BoardState } from '../../src/engine/core/game-state';
-import { playerId } from '../../src/engine/core/ids';
+import type { BoardState, KnightState } from '../../src/engine/core/game-state';
+import { knightId, playerId } from '../../src/engine/core/ids';
 import { createRandomState } from '../../src/engine/core/random';
 import { MAPS } from '../../src/engine/maps/maps';
 
@@ -115,6 +115,29 @@ describe('board render model', () => {
       type: 'HOUSE',
     });
     expect(model.edges.find((target) => target.target.id === edge.id)?.roadOwnerId).toBe(ownerId);
+  });
+
+  it('renders a Knight from its authoritative vertex location even before the reverse link lands', () => {
+    const { board } = modelFor('render-knight');
+    const vertex = Object.values(board.vertices)[0];
+    if (vertex === undefined) throw new Error('Generated board has no target vertex.');
+    const knight: KnightState = {
+      id: knightId('render-knight-piece'),
+      ownerId: playerId('knight-owner'),
+      vertexId: vertex.id,
+      level: 1,
+      active: false,
+      placedTurn: 2,
+      activeSinceTurn: null,
+      lastActionTurn: null,
+      upgradedTurn: null,
+    };
+
+    const renderedVertex = createBoardRenderModel(board, 70, [knight]).vertices.find(
+      (candidate) => candidate.target.id === vertex.id,
+    );
+
+    expect(renderedVertex?.knight).toBe(knight);
   });
 
   it.each(MAPS)('points every $displayName port away from its own shoreline', (map) => {

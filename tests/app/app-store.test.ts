@@ -39,27 +39,36 @@ describe('application session store', () => {
       graphicsQuality: 'PERFORMANCE',
       frameRateLimit: 30,
       reducedMotion: true,
+      interfaceSize: 'LARGE',
     });
 
     expect(JSON.parse(localStorage.getItem(APP_SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
       graphicsQuality: 'PERFORMANCE',
       frameRateLimit: 30,
       reducedMotion: true,
+      interfaceSize: 'LARGE',
     });
     expect(readStoredAppSettings()).toMatchObject({
       graphicsQuality: 'PERFORMANCE',
       frameRateLimit: 30,
       reducedMotion: true,
+      interfaceSize: 'LARGE',
     });
 
     localStorage.setItem(
       APP_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ graphicsQuality: 'ULTRA', frameRateLimit: 500, masterVolume: -4 }),
+      JSON.stringify({
+        graphicsQuality: 'ULTRA',
+        frameRateLimit: 500,
+        masterVolume: -4,
+        interfaceSize: 'HUGE',
+      }),
     );
     expect(readStoredAppSettings()).toMatchObject({
       graphicsQuality: DEFAULT_SETTINGS.graphicsQuality,
       frameRateLimit: DEFAULT_SETTINGS.frameRateLimit,
       masterVolume: DEFAULT_SETTINGS.masterVolume,
+      interfaceSize: DEFAULT_SETTINGS.interfaceSize,
     });
   });
 

@@ -327,6 +327,43 @@ describe('trading application flow', () => {
     expect(screen.getByText(/Alex and Sam completed a player trade/)).toBeInTheDocument();
   });
 
+  it('lets the proposer edit an open request and asks every opponent to respond again', async () => {
+    const user = userEvent.setup();
+    renderGame(tradingState());
+
+    await user.click(screen.getByRole('button', { name: 'Trade' }));
+    let composer = screen.getByRole('dialog', { name: 'Trade' });
+    await user.click(screen.getByRole('button', { name: /Select Wood for your trade offer/ }));
+    await user.click(
+      within(composer).getByRole('button', { name: 'Add Brick to trade request, 19 in bank' }),
+    );
+    await user.click(within(composer).getByRole('button', { name: 'Send trade request' }));
+
+    let response = screen.getByRole('dialog', { name: 'Trade offer from Alex' });
+    await user.click(within(response).getByRole('button', { name: 'Sam accept trade' }));
+    expect(within(response).getByText('Accepted · proposer may confirm')).toBeInTheDocument();
+
+    await user.click(within(response).getByRole('button', { name: 'Edit trade offer' }));
+    composer = screen.getByRole('dialog', { name: 'Edit trade' });
+    expect(within(composer).getByRole('button', { name: 'Update trade request' })).toBeEnabled();
+    expect(within(composer).getAllByRole('button', { name: 'Return offered Wood' })).toHaveLength(
+      1,
+    );
+    await user.click(screen.getByRole('button', { name: /Select Wood for your trade offer/ }));
+    await user.click(within(composer).getByRole('button', { name: 'Update trade request' }));
+
+    response = screen.getByRole('dialog', { name: 'Trade offer from Alex' });
+    expect(within(response).getAllByTitle('Wood')).toHaveLength(2);
+    expect(within(response).queryByText('Accepted · proposer may confirm')).not.toBeInTheDocument();
+    expect(within(response).getByRole('button', { name: 'Sam accept trade' })).toBeEnabled();
+    expect(Object.values(useAppStore.getState().gameState?.tradeOffers ?? {})[0]).toMatchObject({
+      revision: 2,
+      offered: { [RESOURCE_IDS.wood]: 2 },
+      responses: { [TEST_PLAYER_IDS[1]]: 'PENDING' },
+    });
+    expect(screen.getByText(/Alex updated their trade offer/)).toBeInTheDocument();
+  });
+
   it('explains an unaffordable offer and closes when its only opponent rejects it', async () => {
     const user = userEvent.setup();
     renderGame(tradingState(0));

@@ -147,6 +147,7 @@ export interface TradeOffer {
   readonly requested: ResourceBundle;
   readonly status: TradeOfferStatus;
   readonly createdTurn: number;
+  readonly revision: number;
   readonly acceptedByPlayerId: PlayerId | null;
 }
 

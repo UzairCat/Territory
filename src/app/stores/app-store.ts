@@ -31,6 +31,7 @@ import {
 } from '../../board-renderer/performance';
 
 export type AnimationSpeed = 'NORMAL' | 'FAST';
+export type InterfaceSize = 'STANDARD' | 'COMFORTABLE' | 'LARGE';
 
 export interface AppSettings {
   readonly masterVolume: number;
@@ -39,6 +40,7 @@ export interface AppSettings {
   readonly timerSounds: boolean;
   readonly reducedMotion: boolean;
   readonly animationSpeed: AnimationSpeed;
+  readonly interfaceSize: InterfaceSize;
   readonly graphicsQuality: BoardGraphicsQuality;
   readonly frameRateLimit: BoardFrameRateLimit;
 }
@@ -116,6 +118,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   timerSounds: true,
   reducedMotion: false,
   animationSpeed: 'NORMAL',
+  interfaceSize: 'COMFORTABLE',
   graphicsQuality: 'HIGH',
   frameRateLimit: 60,
 };
@@ -158,6 +161,12 @@ export function readStoredAppSettings(): AppSettings {
         parsed.animationSpeed === 'NORMAL' || parsed.animationSpeed === 'FAST'
           ? parsed.animationSpeed
           : DEFAULT_SETTINGS.animationSpeed,
+      interfaceSize:
+        parsed.interfaceSize === 'STANDARD' ||
+        parsed.interfaceSize === 'COMFORTABLE' ||
+        parsed.interfaceSize === 'LARGE'
+          ? parsed.interfaceSize
+          : DEFAULT_SETTINGS.interfaceSize,
       graphicsQuality: BOARD_GRAPHICS_QUALITIES.includes(
         parsed.graphicsQuality as BoardGraphicsQuality,
       )

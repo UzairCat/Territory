@@ -111,6 +111,12 @@ describe('application flow', () => {
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     const timerSounds = screen.getByRole('checkbox', { name: /Timer warning sounds/i });
     expect(screen.getByRole('slider', { name: /Medieval music/i })).toHaveValue('34');
+    const interfaceSize = screen.getByRole('combobox', { name: /Interface size/i });
+    expect(interfaceSize).toHaveValue('COMFORTABLE');
+    expect(document.documentElement).toHaveAttribute('data-interface-size', 'comfortable');
+    await user.selectOptions(interfaceSize, 'LARGE');
+    expect(useAppStore.getState().settings.interfaceSize).toBe('LARGE');
+    expect(document.documentElement).toHaveAttribute('data-interface-size', 'large');
     expect(timerSounds).toBeChecked();
     await user.click(timerSounds);
     expect(useAppStore.getState().settings.timerSounds).toBe(false);

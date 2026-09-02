@@ -896,12 +896,15 @@ function createMerchantPlacementCue(hex: RenderHex): Container {
 const PORT_RESOURCE_STYLE: Readonly<
   Record<string, { readonly glyph: string; readonly color: string; readonly fontSize: number }>
 > = {
-  wood: { glyph: '🌲', color: '#2c6a3d', fontSize: 15 },
-  brick: { glyph: '🧱', color: '#b85943', fontSize: 15 },
-  grain: { glyph: '🌾', color: '#d9a92f', fontSize: 16 },
-  livestock: { glyph: '🐑', color: '#7ca64f', fontSize: 15 },
-  ore: { glyph: '🪨', color: '#707a87', fontSize: 15 },
+  wood: { glyph: '🌲', color: '#2c6a3d', fontSize: 18 },
+  brick: { glyph: '🧱', color: '#b85943', fontSize: 18 },
+  grain: { glyph: '🌾', color: '#d9a92f', fontSize: 19 },
+  livestock: { glyph: '🐑', color: '#7ca64f', fontSize: 18 },
+  ore: { glyph: '🪨', color: '#707a87', fontSize: 18 },
 };
+
+const PORT_BASE_SCALE = 1.1;
+const PORT_HOVER_SCALE = 1.28;
 
 function portRatioOffset(port: RenderPort): { readonly x: number; readonly y: number } {
   const midpoint = {
@@ -911,9 +914,9 @@ function portRatioOffset(port: RenderPort): { readonly x: number; readonly y: nu
   const outwardX = port.position.x - midpoint.x;
   const outwardY = port.position.y - midpoint.y;
 
-  if (outwardY > Math.abs(outwardX) * 0.45) return { x: 0, y: 37 };
+  if (outwardY > Math.abs(outwardX) * 0.45) return { x: 0, y: 40 };
   const side = outwardX === 0 ? (port.position.x < 0 ? -1 : 1) : Math.sign(outwardX);
-  return { x: side * 42, y: 10 };
+  return { x: side * 44, y: 10 };
 }
 
 function createPortShip(port: RenderPort): Container {
@@ -922,11 +925,11 @@ function createPortShip(port: RenderPort): Container {
   ship.eventMode = 'none';
   const resourceStyle =
     port.resourceId === null
-      ? { glyph: '★', color: '#7c69a3', fontSize: 13 }
+      ? { glyph: '★', color: '#69518f', fontSize: 17 }
       : (PORT_RESOURCE_STYLE[port.resourceId] ?? {
           glyph: '🪨',
           color: '#707a87',
-          fontSize: 15,
+          fontSize: 18,
         });
 
   const water = new Graphics()
@@ -957,9 +960,9 @@ function createPortShip(port: RenderPort): Container {
     .poly([1, -32, 13, -29, 1, -25])
     .fill({ color: resourceStyle.color });
   const badge = new Graphics()
-    .circle(0, 12, 10.5)
-    .fill({ color: '#fff4d4' })
-    .stroke({ color: resourceStyle.color, width: 3 });
+    .circle(0, 12, 12.5)
+    .fill({ color: '#fff8df' })
+    .stroke({ color: resourceStyle.color, width: 3.2 });
   const glyph = new Text({
     text: resourceStyle.glyph,
     style: {
@@ -976,21 +979,24 @@ function createPortShip(port: RenderPort): Container {
   glyph.position.set(0, 11.5);
   const labelOffset = portRatioOffset(port);
   const ratioBackground = new Graphics()
-    .roundRect(labelOffset.x - 18, labelOffset.y - 9, 36, 18, 7)
-    .fill({ color: '#fff4d4' })
+    .roundRect(labelOffset.x - 23, labelOffset.y - 12, 46, 24, 8)
+    .fill({ color: '#fff9e5' })
+    .stroke({ color: '#30291e', width: 3 })
+    .roundRect(labelOffset.x - 21, labelOffset.y - 10, 42, 20, 6)
     .stroke({ color: resourceStyle.color, width: 2 });
   const ratio = new Text({
     text: `${port.tradeRatio}:1`,
     style: {
-      fill: '#272a23',
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 11.5,
-      fontWeight: '800',
+      fill: '#171b17',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      fontSize: 14.5,
+      fontWeight: '900',
     },
   });
   ratio.anchor.set(0.5);
   ratio.position.set(labelOffset.x, labelOffset.y);
   ship.addChild(water, hullShadow, hull, mastAndSails, badge, glyph, ratioBackground, ratio);
+  ship.scale.set(PORT_BASE_SCALE);
   return ship;
 }
 
@@ -1315,6 +1321,15 @@ export class TerritoryBoard {
     );
   }
 
+  zoomBy(factor: number): void {
+    if (!this.mounted || this.destroyed || !Number.isFinite(factor) || factor <= 0) return;
+    this.zoomAt(
+      this.application.screen.width / 2,
+      this.application.screen.height / 2,
+      this.world.scale.x * factor,
+    );
+  }
+
   getHexScreenPosition(hexId: HexId): BoardViewportPoint | null {
     if (!this.mounted || this.destroyed) return null;
     const hex = this.model.hexes.find((candidate) => candidate.target.id === hexId);
@@ -1495,24 +1510,24 @@ export class TerritoryBoard {
       const ship = createPortShip(port);
       const labelOffset = portRatioOffset(port);
       const hitTarget = new Graphics()
-        .roundRect(port.position.x - 30, port.position.y - 38, 60, 64, 12)
+        .roundRect(port.position.x - 35, port.position.y - 44, 70, 76, 12)
         .fill({ color: '#ffffff', alpha: 0.001 })
         .roundRect(
-          port.position.x + labelOffset.x - 20,
-          port.position.y + labelOffset.y - 11,
-          40,
-          22,
+          port.position.x + labelOffset.x * PORT_BASE_SCALE - 27,
+          port.position.y + labelOffset.y * PORT_BASE_SCALE - 15,
+          54,
+          30,
           8,
         )
         .fill({ color: '#ffffff', alpha: 0.001 });
       hitTarget.eventMode = 'static';
       hitTarget.cursor = 'pointer';
       hitTarget.on('pointerover', () => {
-        ship.scale.set(1.08);
+        ship.scale.set(PORT_HOVER_SCALE);
         this.onInspect(port.target);
       });
       hitTarget.on('pointerout', () => {
-        ship.scale.set(1);
+        ship.scale.set(PORT_BASE_SCALE);
         this.onInspect(null);
       });
       hitTarget.on('pointertap', () => this.onInspect(port.target));
@@ -1619,7 +1634,9 @@ export class TerritoryBoard {
           vertex.knight.active,
         );
         this.pieceLayer.addChild(knight);
-        this.animatePlacement(vertex.target, [knight]);
+        // The Knight itself must never depend on the animation ticker for visibility. A stopped
+        // ticker (for example during an intersection/visibility transition) used to leave a newly
+        // constructed Knight at alpha 0 indefinitely.
       }
     }
   }
@@ -2025,11 +2042,19 @@ export class TerritoryBoard {
 
   private readonly handleWheel = (event: WheelEvent) => {
     event.preventDefault();
-    const oldScale = this.world.scale.x;
-    const nextScale = Math.max(0.08, Math.min(1.8, oldScale * (event.deltaY < 0 ? 1.1 : 0.9)));
-    const localX = (event.offsetX - this.world.x) / oldScale;
-    const localY = (event.offsetY - this.world.y) / oldScale;
-    this.world.scale.set(nextScale);
-    this.world.position.set(event.offsetX - localX * nextScale, event.offsetY - localY * nextScale);
+    this.zoomAt(
+      event.offsetX,
+      event.offsetY,
+      this.world.scale.x * (event.deltaY < 0 ? 1.12 : 0.89),
+    );
   };
+
+  private zoomAt(screenX: number, screenY: number, requestedScale: number): void {
+    const oldScale = this.world.scale.x;
+    const nextScale = Math.max(0.08, Math.min(2.2, requestedScale));
+    const localX = (screenX - this.world.x) / oldScale;
+    const localY = (screenY - this.world.y) / oldScale;
+    this.world.scale.set(nextScale);
+    this.world.position.set(screenX - localX * nextScale, screenY - localY * nextScale);
+  }
 }

@@ -18,6 +18,7 @@ interface TradeModalProps {
   readonly maximumRequestAmount: number;
   readonly offered: ResourceBundle;
   readonly requested: ResourceBundle;
+  readonly editingPlayerTrade?: boolean;
   readonly errorMessage: string | null;
   readonly onClose: () => void;
   readonly onBankTrade: (offered: ResourceBundle, requested: ResourceBundle) => void;
@@ -90,6 +91,7 @@ export function TradeModal({
   maximumRequestAmount,
   offered,
   requested,
+  editingPlayerTrade = false,
   errorMessage,
   onClose,
   onBankTrade,
@@ -122,6 +124,7 @@ export function TradeModal({
   );
   const bankSelectionOverlaps = offeredKinds.some((resource) => (requested[resource.id] ?? 0) > 0);
   const canCompleteBankTrade =
+    !editingPlayerTrade &&
     offeredTotal > 0 &&
     requestedTotal > 0 &&
     requestedKinds.length > 0 &&
@@ -152,10 +155,11 @@ export function TradeModal({
           ⇄
         </span>
         <div>
-          <strong id="trade-tray-title">Trade</strong>
+          <strong id="trade-tray-title">{editingPlayerTrade ? 'Edit trade' : 'Trade'}</strong>
           <small id="trade-tray-description">
-            Select one shared offer, then use Bank for an immediate exchange or Players to send it
-            to {opponents.length} opponent{opponents.length === 1 ? '' : 's'}.
+            {editingPlayerTrade
+              ? 'Change either side of the offer, then update it for every opponent.'
+              : `Select one shared offer, then use Bank for an immediate exchange or Players to send it to ${opponents.length} opponent${opponents.length === 1 ? '' : 's'}.`}
           </small>
         </div>
       </header>
@@ -237,9 +241,11 @@ export function TradeModal({
           className="trade-tray__mode--bank"
           aria-label="Complete bank trade"
           title={
-            canCompleteBankTrade
-              ? 'Complete this bank or port exchange'
-              : 'Choose a valid bank or port exchange first'
+            editingPlayerTrade
+              ? 'Finish editing before making a bank trade'
+              : canCompleteBankTrade
+                ? 'Complete this bank or port exchange'
+                : 'Choose a valid bank or port exchange first'
           }
           variant="primary"
           disabled={!canCompleteBankTrade}
@@ -250,14 +256,18 @@ export function TradeModal({
         </Button>
         <Button
           className="trade-tray__mode--players"
-          aria-label="Send trade request"
-          title="Send this request to the other players"
+          aria-label={editingPlayerTrade ? 'Update trade request' : 'Send trade request'}
+          title={
+            editingPlayerTrade
+              ? 'Replace the open offer and ask every player to respond again'
+              : 'Send this request to the other players'
+          }
           variant="primary"
           disabled={!canOfferPlayerTrade}
           onClick={() => onCreateTrade(offered, requested)}
         >
           <span aria-hidden="true">♟♟</span>
-          <small>Players</small>
+          <small>{editingPlayerTrade ? 'Update' : 'Players'}</small>
         </Button>
         <Button variant="danger" aria-label="Done" onClick={onClose}>
           <span aria-hidden="true">×</span>

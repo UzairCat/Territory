@@ -250,7 +250,7 @@ function tradeTimedStep(state: GameState): TimedStep | null {
   const trade = state.tradeOffers[state.pendingInteraction.tradeId];
   if (trade === undefined || trade.status !== 'OPEN') return null;
   return {
-    key: `trade-${trade.id}`,
+    key: `trade-${trade.id}-${trade.revision}`,
     durationMs: PLAYER_TRADE_OFFER_DURATION_MS,
     actorId: trade.fromPlayerId,
     kind: 'EXPIRE_TRADE',

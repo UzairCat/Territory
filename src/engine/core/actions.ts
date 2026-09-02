@@ -55,6 +55,11 @@ export type GameAction =
       readonly offered: ResourceBundle;
       readonly requested: ResourceBundle;
     })
+  | (ActionBase<'UPDATE_TRADE'> & {
+      readonly tradeId: TradeId;
+      readonly offered: ResourceBundle;
+      readonly requested: ResourceBundle;
+    })
   | (ActionBase<'RESPOND_TO_TRADE'> & { readonly tradeId: TradeId; readonly accepted: boolean })
   | (ActionBase<'CONFIRM_TRADE'> & { readonly tradeId: TradeId; readonly recipientId: PlayerId })
   | (ActionBase<'CANCEL_TRADE'> & { readonly tradeId: TradeId })

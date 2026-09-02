@@ -282,6 +282,7 @@ export function createTradeOffer(
     requested,
     status: 'OPEN',
     createdTurn: state.turn.turnNumber,
+    revision: 1,
     acceptedByPlayerId: null,
   };
   const nextState: GameState = {
@@ -299,9 +300,89 @@ export function createTradeOffer(
       tradeId: trade.id,
       playerId: action.actorId,
       recipientIds,
+      offered,
+      requested,
     },
   ];
   return acceptAction(state, action, nextState, events);
+}
+
+export function updateTradeOffer(
+  state: GameState,
+  action: Extract<GameAction, { readonly type: 'UPDATE_TRADE' }>,
+): DispatchResult {
+  if (state.turn.activePlayerId !== action.actorId) {
+    return rejectAction(state, 'NOT_YOUR_TURN', 'Only the active player can update this trade.');
+  }
+  if (state.turn.phase !== 'ACTION_PHASE') {
+    return rejectAction(
+      state,
+      'WRONG_PHASE',
+      'Player trades can only be updated during action phase.',
+    );
+  }
+  const interaction = state.pendingInteraction;
+  if (interaction?.type !== 'TRADE_RESPONSES' || interaction.tradeId !== action.tradeId) {
+    return rejectAction(
+      state,
+      'PENDING_INTERACTION_REQUIRED',
+      'This trade offer is not waiting for responses.',
+    );
+  }
+  const trade = state.tradeOffers[action.tradeId];
+  if (trade === undefined) {
+    return rejectAction(state, 'TRADE_NOT_FOUND', 'The trade offer could not be found.');
+  }
+  if (trade.status !== 'OPEN' || trade.fromPlayerId !== action.actorId) {
+    return rejectAction(state, 'TRADE_STALE', 'Only the proposer can update an open trade offer.');
+  }
+  const offered = normalizeTradeBundle(state, action.offered);
+  const requested = normalizeTradeBundle(state, action.requested);
+  if (offered === null || requested === null || bundlesOverlap(state, offered, requested)) {
+    return rejectAction(
+      state,
+      'INVALID_TRADE',
+      'Offer and request at least one card, using different valid resource types.',
+    );
+  }
+  const proposer = state.players[action.actorId];
+  if (proposer === undefined) {
+    return rejectAction(state, 'INVALID_TARGET', 'The trading player does not exist.');
+  }
+  if (!canAfford(playerHand(proposer), offered)) {
+    return rejectAction(
+      state,
+      'INSUFFICIENT_RESOURCES',
+      'You no longer own every resource included in this offer.',
+    );
+  }
+
+  const nextState: GameState = {
+    ...state,
+    tradeOffers: {
+      ...state.tradeOffers,
+      [trade.id]: {
+        ...trade,
+        offered,
+        requested,
+        responses: Object.fromEntries(
+          trade.recipientIds.map((recipientId) => [recipientId, 'PENDING' as const]),
+        ),
+        revision: trade.revision + 1,
+        acceptedByPlayerId: null,
+      },
+    },
+  };
+  return acceptAction(state, action, nextState, [
+    {
+      type: 'TRADE_UPDATED',
+      tradeId: trade.id,
+      playerId: action.actorId,
+      recipientIds: trade.recipientIds,
+      offered,
+      requested,
+    },
+  ]);
 }
 
 export interface TradeAcceptance {

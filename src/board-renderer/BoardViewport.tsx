@@ -546,13 +546,33 @@ export function BoardViewport({
   return (
     <section className="board-shell" aria-label="Territory board">
       <div ref={hostRef} className="board-viewport" />
-      <div className="board-controls">
+      <div className="board-controls" role="group" aria-label="Board zoom controls">
         <Button
+          className="board-controls__zoom"
+          variant="ghost"
+          aria-label="Zoom board out"
+          title="Zoom out"
+          onClick={() => rendererRef.current?.zoomBy(0.82)}
+        >
+          <span aria-hidden="true">−</span>
+        </Button>
+        <Button
+          className="board-controls__fit"
           variant="ghost"
           aria-label="Fit screen"
+          title="Fit the entire board"
           onClick={() => rendererRef.current?.fitBoard()}
         >
-          Fit screen
+          Fit
+        </Button>
+        <Button
+          className="board-controls__zoom"
+          variant="ghost"
+          aria-label="Zoom board in"
+          title="Zoom in"
+          onClick={() => rendererRef.current?.zoomBy(1.22)}
+        >
+          <span aria-hidden="true">+</span>
         </Button>
       </div>
     </section>

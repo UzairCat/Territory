@@ -233,6 +233,8 @@ describe('game audio design', () => {
           tradeId: offerId,
           playerId: TEST_PLAYER_IDS[0],
           recipientIds: [TEST_PLAYER_IDS[1]],
+          offered: resourceBundle([[RESOURCE_IDS.wood, 1]]),
+          requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
         },
       ]),
     ).toEqual(['TRADE']);

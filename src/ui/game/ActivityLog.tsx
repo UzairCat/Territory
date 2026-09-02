@@ -401,22 +401,27 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
         },
       ];
     case 'TRADE_OFFERED': {
-      const trade = state.tradeOffers[event.tradeId];
       const recipients =
         event.recipientIds.length === 1
           ? playerName(event.recipientIds[0]!)
           : `${event.recipientIds.length} opponents`;
-      const terms =
-        trade === undefined
-          ? ''
-          : `: ${bundleLabel(trade.offered)} for ${bundleLabel(trade.requested)}`;
       return [
         {
           icon: '⇄',
-          message: `${playerName(event.playerId)} offered ${recipients} a trade${terms}.`,
-          ...(trade === undefined
-            ? {}
-            : { resources: trade.offered, secondaryResources: trade.requested }),
+          message: `${playerName(event.playerId)} offered ${recipients} a trade: ${bundleLabel(event.offered)} for ${bundleLabel(event.requested)}.`,
+          resources: event.offered,
+          secondaryResources: event.requested,
+        },
+      ];
+    }
+    case 'TRADE_UPDATED': {
+      return [
+        {
+          icon: '↻',
+          message: `${playerName(event.playerId)} updated their trade offer: ${bundleLabel(event.offered)} for ${bundleLabel(event.requested)}.`,
+          tone: 'accent',
+          resources: event.offered,
+          secondaryResources: event.requested,
         },
       ];
     }

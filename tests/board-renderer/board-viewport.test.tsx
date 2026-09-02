@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BoardViewport, type BoardViewportProps } from '../../src/board-renderer/BoardViewport';
@@ -14,6 +15,8 @@ const rendererProbe = vi.hoisted(() => ({
   mounted: 0,
   updated: 0,
   destroyed: 0,
+  fitCalls: 0,
+  zoomFactors: [] as number[],
   updatedBoards: [] as unknown[],
 }));
 
@@ -39,7 +42,13 @@ vi.mock('../../src/board-renderer/TerritoryBoard', () => ({
       rendererProbe.destroyed += 1;
     }
 
-    fitBoard(): void {}
+    fitBoard(): void {
+      rendererProbe.fitCalls += 1;
+    }
+
+    zoomBy(factor: number): void {
+      rendererProbe.zoomFactors.push(factor);
+    }
 
     getHexScreenPosition(): null {
       return null;
@@ -53,6 +62,8 @@ describe('board viewport renderer lifecycle', () => {
     rendererProbe.mounted = 0;
     rendererProbe.updated = 0;
     rendererProbe.destroyed = 0;
+    rendererProbe.fitCalls = 0;
+    rendererProbe.zoomFactors.length = 0;
     rendererProbe.updatedBoards.length = 0;
   });
 
@@ -252,5 +263,33 @@ describe('board viewport renderer lifecycle', () => {
       />,
     );
     expect(onReady).toHaveBeenCalledOnce();
+  });
+
+  it('provides visible controls for zooming and refitting the board', async () => {
+    const user = userEvent.setup();
+    const state = createTestGameState('ACTION_PHASE');
+    render(
+      <BoardViewport
+        board={state.board}
+        players={state.players}
+        knState={state.kn}
+        showDebugIds={false}
+        selectableTargets={[]}
+        highlightedHexIds={[]}
+        animatedTarget={null}
+        robberMove={null}
+        playerColors={{ [TEST_PLAYER_IDS[0]]: '#2864c7' }}
+        onInspect={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+
+    await user.click(screen.getByRole('button', { name: 'Zoom board in' }));
+    await user.click(screen.getByRole('button', { name: 'Zoom board out' }));
+    await user.click(screen.getByRole('button', { name: 'Fit screen' }));
+
+    expect(rendererProbe.zoomFactors).toEqual([1.22, 0.82]);
+    expect(rendererProbe.fitCalls).toBe(1);
   });
 });

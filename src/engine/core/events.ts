@@ -131,6 +131,16 @@ export type GameEvent =
       readonly tradeId: TradeId;
       readonly playerId: PlayerId;
       readonly recipientIds: readonly PlayerId[];
+      readonly offered: ResourceBundle;
+      readonly requested: ResourceBundle;
+    }
+  | {
+      readonly type: 'TRADE_UPDATED';
+      readonly tradeId: TradeId;
+      readonly playerId: PlayerId;
+      readonly recipientIds: readonly PlayerId[];
+      readonly offered: ResourceBundle;
+      readonly requested: ResourceBundle;
     }
   | {
       readonly type: 'TRADE_ACCEPTED';

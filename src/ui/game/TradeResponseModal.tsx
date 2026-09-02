@@ -23,6 +23,7 @@ interface TradeResponsePanelProps {
   readonly errorMessage: string | null;
   readonly onRespond: (playerId: PlayerId, accepted: boolean) => void;
   readonly onConfirm: (playerId: PlayerId) => void;
+  readonly onEdit: () => void;
   readonly onCancel: () => void;
   readonly onExpire: () => void;
   readonly includeCommodities?: boolean;
@@ -73,6 +74,7 @@ export function TradeResponsePanel({
   errorMessage,
   onRespond,
   onConfirm,
+  onEdit,
   onCancel,
   onExpire,
   includeCommodities = false,
@@ -122,9 +124,19 @@ export function TradeResponsePanel({
         </div>
         <time aria-label={`${remainingSeconds} seconds remaining`}>{remainingSeconds}s</time>
         {viewerPlayerId === null || viewerPlayerId === proposer.id ? (
-          <Button variant="ghost" aria-label="Cancel trade offer" onClick={onCancel}>
-            ×
-          </Button>
+          <div className="trade-offer-panel__owner-actions">
+            <Button
+              variant="ghost"
+              aria-label="Edit trade offer"
+              title="Edit offer"
+              onClick={onEdit}
+            >
+              ✎
+            </Button>
+            <Button variant="ghost" aria-label="Cancel trade offer" onClick={onCancel}>
+              ×
+            </Button>
+          </div>
         ) : null}
       </header>
 

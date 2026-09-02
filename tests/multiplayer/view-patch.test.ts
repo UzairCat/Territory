@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createOnlineGameView } from '../../src/multiplayer/projection';
 import type { OnlineRoomView } from '../../src/multiplayer/protocol';
 import { applyOnlineRoomPatch, createOnlineRoomPatch } from '../../src/multiplayer/view-patch';
-import { colorId, mapId, modeId } from '../../src/engine/core/ids';
+import { colorId, knightId, mapId, modeId, vertexId } from '../../src/engine/core/ids';
 import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 function roomView(syncVersion = 0): OnlineRoomView {
@@ -98,6 +98,74 @@ describe('online room patches', () => {
     expect(applyOnlineRoomPatch(withHistory, patch)?.game?.eventHistory).toEqual(
       next.game?.eventHistory,
     );
+  });
+
+  it('delivers a newly built Knight and its board occupancy in one applied room update', () => {
+    const base = roomView();
+    if (base.game === null) throw new Error('Expected a game fixture.');
+    const targetVertexId = vertexId('online-knight-vertex');
+    const vertex = {
+      id: targetVertexId,
+      adjacentHexIds: [],
+      connectedEdgeIds: [],
+      adjacentVertexIds: [],
+      building: null,
+      knightId: null,
+      portId: null,
+    };
+    const previous: OnlineRoomView = {
+      ...base,
+      game: {
+        ...base.game,
+        state: {
+          ...base.game.state,
+          board: {
+            ...base.game.state.board,
+            vertices: { ...base.game.state.board.vertices, [targetVertexId]: vertex },
+          },
+        },
+      },
+    };
+    const previousGame = previous.game;
+    if (previousGame === null) throw new Error('Expected the prepared game fixture.');
+    const player = previousGame.state.players[TEST_PLAYER_IDS[0]]!;
+    const knight = {
+      id: knightId('online-new-knight'),
+      ownerId: player.id,
+      vertexId: vertex.id,
+      level: 1 as const,
+      active: false,
+      placedTurn: previousGame.state.turn.turnNumber,
+      activeSinceTurn: null,
+      lastActionTurn: null,
+      upgradedTurn: null,
+    };
+    const next: OnlineRoomView = {
+      ...previous,
+      game: {
+        ...previousGame,
+        revision: 2,
+        state: {
+          ...previousGame.state,
+          players: {
+            ...previousGame.state.players,
+            [player.id]: { ...player, knights: [...player.knights, knight] },
+          },
+          board: {
+            ...previousGame.state.board,
+            vertices: {
+              ...previousGame.state.board.vertices,
+              [vertex.id]: { ...vertex, knightId: knight.id },
+            },
+          },
+        },
+      },
+    };
+
+    const applied = applyOnlineRoomPatch(previous, createOnlineRoomPatch(previous, next, 0));
+
+    expect(applied?.game?.state.players[player.id]?.knights).toContainEqual(knight);
+    expect(applied?.game?.state.board.vertices[vertex.id]?.knightId).toBe(knight.id);
   });
 
   it('rejects stale, skipped, or unsafe patches', () => {

@@ -39,6 +39,51 @@ describe('active player hand', () => {
     expect(Number.parseFloat(stack.style.getPropertyValue('--stack-width'))).toBeGreaterThan(4.8);
   });
 
+  it('warns when the visible hand exceeds its configured safe limit', () => {
+    const original = createTestGameState('ACTION_PHASE');
+    const originalPlayer = original.players[TEST_PLAYER_IDS[0]]!;
+    const player = {
+      ...originalPlayer,
+      resources: resourceBundle([[RESOURCE_IDS.wood, 8]]),
+    };
+    const state = {
+      ...original,
+      players: { ...original.players, [player.id]: player },
+    };
+
+    const view = render(
+      <HandTray
+        state={state}
+        player={player}
+        animateResources={false}
+        onPlayProgressCard={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Unsafe 8/7');
+    expect(screen.getByLabelText('Active player resource hand')).toHaveClass('hand-tray--unsafe');
+
+    const safeState = {
+      ...state,
+      config: {
+        ...state.config,
+        rules: { ...state.config.rules, discardThreshold: 8 },
+      },
+    };
+    view.rerender(
+      <HandTray
+        state={safeState}
+        player={player}
+        animateResources={false}
+        onPlayProgressCard={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Active player resource hand')).not.toHaveClass(
+      'hand-tray--unsafe',
+    );
+  });
+
   it('explains a disabled progress card on hover', () => {
     const cardId = cardInstanceId('hover-road-building');
     const original = createTestGameState('ACTION_PHASE');

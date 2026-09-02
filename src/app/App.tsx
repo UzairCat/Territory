@@ -50,11 +50,19 @@ function RouteFallback() {
 
 export function App() {
   const reducedMotion = useAppStore((state) => state.settings.reducedMotion);
+  const interfaceSize = useAppStore((state) => state.settings.interfaceSize);
 
   useEffect(() => {
     document.documentElement.classList.toggle('app-reduced-motion', reducedMotion);
     return () => document.documentElement.classList.remove('app-reduced-motion');
   }, [reducedMotion]);
+
+  useEffect(() => {
+    document.documentElement.dataset.interfaceSize = interfaceSize.toLowerCase();
+    return () => {
+      delete document.documentElement.dataset.interfaceSize;
+    };
+  }, [interfaceSize]);
 
   return (
     <>

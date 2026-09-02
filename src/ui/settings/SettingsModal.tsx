@@ -1,4 +1,4 @@
-import { useAppStore, type AnimationSpeed } from '../../app/stores/app-store';
+import { useAppStore, type AnimationSpeed, type InterfaceSize } from '../../app/stores/app-store';
 import type { BoardFrameRateLimit, BoardGraphicsQuality } from '../../board-renderer/performance';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
@@ -70,6 +70,20 @@ export function SettingsModal() {
             <option value="NORMAL">Normal</option>
             <option value="FAST">Fast</option>
           </select>
+        </label>
+
+        <label className="field" htmlFor="interface-size">
+          <span>Interface size</span>
+          <select
+            id="interface-size"
+            value={settings.interfaceSize}
+            onChange={(event) => update({ interfaceSize: event.target.value as InterfaceSize })}
+          >
+            <option value="STANDARD">Standard · 100%</option>
+            <option value="COMFORTABLE">Comfortable · 110%</option>
+            <option value="LARGE">Large · 120%</option>
+          </select>
+          <small>Enlarges menus, cards, labels, player panels, and other interface text.</small>
         </label>
 
         <label className="field" htmlFor="graphics-quality">

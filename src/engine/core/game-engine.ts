@@ -16,6 +16,7 @@ import {
   createTradeOffer,
   expireTrade,
   respondToTrade,
+  updateTradeOffer,
 } from '../rules/trade-rules';
 import { endTurn, rollDice } from '../rules/turn-rules';
 import { resolveTimeout } from '../rules/timeout-rules';
@@ -165,6 +166,7 @@ export function dispatch(
   else if (action.type === 'BUY_IMPROVEMENT') result = buyImprovement(state, action);
   else if (action.type === 'BANK_TRADE') result = bankTrade(state, action);
   else if (action.type === 'CREATE_TRADE') result = createTradeOffer(state, action);
+  else if (action.type === 'UPDATE_TRADE') result = updateTradeOffer(state, action);
   else if (action.type === 'RESPOND_TO_TRADE') result = respondToTrade(state, action);
   else if (action.type === 'CONFIRM_TRADE') result = confirmTrade(state, action);
   else if (action.type === 'CANCEL_TRADE') result = cancelTrade(state, action);

@@ -33,6 +33,14 @@ html {
   background: #0d1410;
 }
 
+html[data-interface-size='comfortable'] {
+  font-size: 110%;
+}
+
+html[data-interface-size='large'] {
+  font-size: 120%;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;

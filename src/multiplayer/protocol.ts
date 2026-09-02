@@ -362,6 +362,15 @@ const gameActionSchema = z.discriminatedUnion('type', [
   z
     .object({
       ...actionBase,
+      type: z.literal('UPDATE_TRADE'),
+      tradeId: boundedText,
+      offered: resourceBundleSchema,
+      requested: resourceBundleSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...actionBase,
       type: z.literal('RESPOND_TO_TRADE'),
       tradeId: boundedText,
       accepted: z.boolean(),

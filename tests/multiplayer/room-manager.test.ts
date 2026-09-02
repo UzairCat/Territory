@@ -461,6 +461,25 @@ describe('authoritative online rooms', () => {
       }),
     ).toMatchObject({ ok: true });
     expect(room.deadlineAt).toBe(turnDeadline);
+    room.tradeDeadlineAt = Date.now() + 3_000;
+
+    expect(
+      manager.submit(activeCredentials, room.revision, {
+        id: actionId('update-independent-timed-trade'),
+        type: 'UPDATE_TRADE',
+        actorId: activePlayerId,
+        tradeId: offerId,
+        offered: resourceBundle([[RESOURCE_IDS.wood, 2]]),
+        requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(room.state?.tradeOffers[offerId]).toMatchObject({
+      revision: 2,
+      responses: { [recipientId]: 'PENDING' },
+    });
+    expect(room.tradeDeadlineAt).toBeGreaterThan(Date.now() + 23_000);
+    expect(room.tradeDeadlineAt).toBeLessThanOrEqual(Date.now() + 25_000);
+    expect(room.deadlineAt).toBe(turnDeadline);
   });
 
   it('raises a low action timer only to the twenty-second floor', () => {

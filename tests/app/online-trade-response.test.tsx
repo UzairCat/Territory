@@ -62,6 +62,7 @@ describe('online trade responses', () => {
         serverAuthoritative
         onRespond={onRespond}
         onConfirm={vi.fn()}
+        onEdit={vi.fn()}
         onCancel={vi.fn()}
         onExpire={vi.fn()}
       />,

@@ -29,6 +29,7 @@ import type {
   HexId,
   KnightId,
   ResourceId,
+  TradeId,
   VertexId,
 } from '../../engine/core/ids';
 import { hasAdminDisplayName } from '../../multiplayer/admin-access';
@@ -965,6 +966,15 @@ function recentEventMessage(events: readonly GameEvent[], state: GameState): str
     return `${playerName} offered a trade to ${tradeOffered.recipientIds.length} opponent${tradeOffered.recipientIds.length === 1 ? '' : 's'}.`;
   }
 
+  const tradeUpdated = events.find(
+    (event): event is Extract<GameEvent, { readonly type: 'TRADE_UPDATED' }> =>
+      event.type === 'TRADE_UPDATED',
+  );
+  if (tradeUpdated !== undefined) {
+    const playerName = state.players[tradeUpdated.playerId]?.name ?? 'A player';
+    return `${playerName} updated the trade offer. Every opponent must respond again.`;
+  }
+
   const cardResolved = events.find(
     (event): event is Extract<GameEvent, { readonly type: 'PROGRESS_CARD_RESOLVED' }> =>
       event.type === 'PROGRESS_CARD_RESOLVED',
@@ -1105,6 +1115,7 @@ export function GameScreen() {
   const [tradeModalTurnKey, setTradeModalTurnKey] = useState<string | null>(null);
   const [tradeOffered, setTradeOffered] = useState<ResourceBundle>(resourceBundle([]));
   const [tradeRequested, setTradeRequested] = useState<ResourceBundle>(resourceBundle([]));
+  const [editingTradeId, setEditingTradeId] = useState<TradeId | null>(null);
   const [progressCardIntentId, setProgressCardIntentId] = useState<CardInstanceId | null>(null);
   const [knProgressCardIntentId, setKNProgressCardIntentId] = useState<CardInstanceId | null>(null);
   const [knBoardAction, setKNBoardAction] = useState<KNBoardAction | null>(null);
@@ -1674,6 +1685,13 @@ export function GameScreen() {
       const player = gameState.players[playerId];
       return player === undefined ? [] : [player];
     }) ?? [];
+  const canEditResponseTrade =
+    responseTrade !== undefined &&
+    responseTrade.status === 'OPEN' &&
+    gameState.turn.phase === 'ACTION_PHASE' &&
+    gameState.turn.activePlayerId === responseTrade.fromPlayerId &&
+    (!isOnlineMatch || onlineViewerPlayerId === responseTrade.fromPlayerId) &&
+    !onlineActionPending;
   const progressChoiceInteraction =
     gameState.pendingInteraction?.type === 'SELECT_RESOURCES' ||
     gameState.pendingInteraction?.type === 'SELECT_RESOURCE_TYPE'
@@ -1910,7 +1928,10 @@ export function GameScreen() {
       setKnightCommand(null);
       setKNBoardAction(null);
       if (!keepConstructionMode) setConstructionType(null);
-      if (!keepTradeModal) setTradeModalTurnKey(null);
+      if (!keepTradeModal) {
+        setTradeModalTurnKey(null);
+        setEditingTradeId(null);
+      }
     }
   };
 
@@ -2171,7 +2192,11 @@ export function GameScreen() {
     setActionError(null);
   };
 
-  const prepareTradeModal = (offered: ResourceBundle = resourceBundle([])) => {
+  const prepareTradeModal = (
+    offered: ResourceBundle = resourceBundle([]),
+    requested: ResourceBundle = resourceBundle([]),
+    tradeToEdit: TradeId | null = null,
+  ) => {
     setConstructionType(null);
     setBoardBuildMenu(null);
     setKnightBoardMenu(null);
@@ -2179,7 +2204,8 @@ export function GameScreen() {
     setInspectedTarget(null);
     setActionError(null);
     setTradeOffered(offered);
-    setTradeRequested(resourceBundle([]));
+    setTradeRequested(requested);
+    setEditingTradeId(tradeToEdit);
     setTradeModalTurnKey(currentTradeTurnKey);
     setKNBoardAction(null);
   };
@@ -2189,7 +2215,12 @@ export function GameScreen() {
       setTradeModalTurnKey(null);
       setTradeOffered(resourceBundle([]));
       setTradeRequested(resourceBundle([]));
+      setEditingTradeId(null);
       setActionError(null);
+      return;
+    }
+    if (canEditResponseTrade && responseTrade !== undefined) {
+      prepareTradeModal(responseTrade.offered, responseTrade.requested, responseTrade.id);
       return;
     }
     prepareTradeModal();
@@ -2249,6 +2280,7 @@ export function GameScreen() {
     setKnightBoardMenu(null);
     setKnightCommand(null);
     setTradeModalTurnKey(null);
+    setEditingTradeId(null);
     setActionError(null);
   };
 
@@ -2329,6 +2361,7 @@ export function GameScreen() {
     if (result?.ok) {
       setTradeOffered(resourceBundle([]));
       setTradeRequested(resourceBundle([]));
+      setEditingTradeId(null);
     }
     handleActionResult(result);
   };
@@ -2340,6 +2373,23 @@ export function GameScreen() {
       : (activePlayer.resources[resourceId] ?? 0);
     if (owned < 1) return;
     if (!tradeModalOpen) {
+      if (canEditResponseTrade && responseTrade !== undefined) {
+        if ((responseTrade.requested[resourceId] ?? 0) > 0) {
+          prepareTradeModal(responseTrade.offered, responseTrade.requested, responseTrade.id);
+          setActionError('A card type cannot be offered and requested in the same trade.');
+          audioManager.playInvalid(settings.masterVolume, settings.sfxVolume);
+          return;
+        }
+        const selected = responseTrade.offered[resourceId] ?? 0;
+        prepareTradeModal(
+          selected >= owned
+            ? responseTrade.offered
+            : { ...responseTrade.offered, [resourceId]: selected + 1 },
+          responseTrade.requested,
+          responseTrade.id,
+        );
+        return;
+      }
       prepareTradeModal(resourceBundle([[resourceId, 1]]));
       return;
     }
@@ -2377,19 +2427,30 @@ export function GameScreen() {
   const createPlayerTrade = (offered: ResourceBundle, requested: ResourceBundle) => {
     const actorId = gameState.turn.activePlayerId;
     if (actorId === null) return;
-    const result = dispatchGameAction({
-      id: actionId(`local-${globalThis.crypto.randomUUID()}`),
-      type: 'CREATE_TRADE',
-      actorId,
-      tradeId: tradeId(`local-${globalThis.crypto.randomUUID()}`),
-      recipientIds: tradeOpponents.map((opponent) => opponent.id),
-      offered,
-      requested,
-    });
+    const result =
+      editingTradeId === null
+        ? dispatchGameAction({
+            id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+            type: 'CREATE_TRADE',
+            actorId,
+            tradeId: tradeId(`local-${globalThis.crypto.randomUUID()}`),
+            recipientIds: tradeOpponents.map((opponent) => opponent.id),
+            offered,
+            requested,
+          })
+        : dispatchGameAction({
+            id: actionId(`local-${globalThis.crypto.randomUUID()}`),
+            type: 'UPDATE_TRADE',
+            actorId,
+            tradeId: editingTradeId,
+            offered,
+            requested,
+          });
     if (result?.ok) {
       setTradeModalTurnKey(null);
       setTradeOffered(resourceBundle([]));
       setTradeRequested(resourceBundle([]));
+      setEditingTradeId(null);
     }
     handleActionResult(result);
   };
@@ -2422,6 +2483,8 @@ export function GameScreen() {
 
   const closePlayerTradeOffer = (expired: boolean) => {
     if (responseTrade === undefined) return;
+    setTradeModalTurnKey(null);
+    setEditingTradeId(null);
     const result = dispatchGameAction({
       id: actionId(`local-${globalThis.crypto.randomUUID()}`),
       type: expired ? 'EXPIRE_TRADE' : 'CANCEL_TRADE',
@@ -2846,6 +2909,7 @@ export function GameScreen() {
     !onlineActionPending &&
     gameState.turn.phase === 'ACTION_PHASE' &&
     gameState.pendingInteraction === null;
+  const canComposeTrade = canUseTurnActions || canEditResponseTrade;
   const boardBuildChoices: readonly BoardBuildChoice[] =
     boardBuildMenu === null
       ? []
@@ -3243,7 +3307,7 @@ export function GameScreen() {
           )}
           {responseTrade === undefined || responseProposer === undefined ? null : (
             <TradeResponsePanel
-              key={responseTrade.id}
+              key={`${responseTrade.id}:${responseTrade.revision}`}
               state={gameState}
               trade={responseTrade}
               proposer={responseProposer}
@@ -3257,6 +3321,9 @@ export function GameScreen() {
               errorMessage={actionError}
               onRespond={respondToPlayerTrade}
               onConfirm={confirmPlayerTrade}
+              onEdit={() =>
+                prepareTradeModal(responseTrade.offered, responseTrade.requested, responseTrade.id)
+              }
               onCancel={() => closePlayerTradeOffer(false)}
               onExpire={() => {
                 if (!isOnlineMatch) closePlayerTradeOffer(true);
@@ -3415,7 +3482,7 @@ export function GameScreen() {
         </aside>
 
         <footer className="game-dock" aria-label="Active player resource hand">
-          {!tradeModalOpen || !canUseTurnActions || activePlayer === undefined ? null : (
+          {!tradeModalOpen || !canComposeTrade || activePlayer === undefined ? null : (
             <TradeModal
               player={activePlayer}
               opponents={tradeOpponents}
@@ -3425,11 +3492,13 @@ export function GameScreen() {
               maximumRequestAmount={gameState.config.rules.bankCardsPerResource}
               offered={tradeOffered}
               requested={tradeRequested}
+              editingPlayerTrade={editingTradeId !== null}
               errorMessage={actionError}
               onClose={() => {
                 setTradeModalTurnKey(null);
                 setTradeOffered(resourceBundle([]));
                 setTradeRequested(resourceBundle([]));
+                setEditingTradeId(null);
                 setActionError(null);
               }}
               onBankTrade={completeBankTrade}
@@ -3479,22 +3548,25 @@ export function GameScreen() {
                       : activePlayer))
             }
             animateResources={animateResourceHand}
+            ignoreUnsafeHandLimit={adminMode}
             tooltipResetSignal={progressTooltipResetSignal}
             discardSelection={selectedDiscardResources}
             {...(controlledDiscardPlayer === undefined
               ? {}
               : { onSelectResourceForDiscard: selectResourceForDiscard })}
-            {...(canUseTurnActions &&
+            {...(canComposeTrade &&
             tradeOpponents.length > 0 &&
             discardPlayer === undefined &&
             knDirectHandChoice === null
               ? {
                   selectedHandResources: tradeModalOpen ? tradeOffered : resourceBundle([]),
                   handResourceSelectionName: !tradeModalOpen
-                    ? 'to start a trade'
+                    ? canEditResponseTrade
+                      ? 'to edit your trade offer'
+                      : 'to start a trade'
                     : 'for your trade offer',
                   onSelectHandResource: selectResourceForTrade,
-                  resourceSelectionStartsPlayerTrade: !tradeModalOpen,
+                  resourceSelectionStartsPlayerTrade: !tradeModalOpen && !canEditResponseTrade,
                 }
               : {})}
             {...(knDirectHandChoice === null || knDirectHandChoice.purpose === 'PROGRESS_DISCARD'
@@ -3625,11 +3697,13 @@ export function GameScreen() {
                 className="game-action-button"
                 variant="ghost"
                 aria-label="Trade"
-                disabled={!canUseTurnActions}
+                disabled={!canComposeTrade}
                 title={
-                  canUseTurnActions
-                    ? 'Trade with the bank or another player'
-                    : 'Trade during your action phase'
+                  canEditResponseTrade
+                    ? 'Edit your open trade offer'
+                    : canUseTurnActions
+                      ? 'Trade with the bank or another player'
+                      : 'Trade during your action phase'
                 }
                 aria-pressed={tradeModalOpen}
                 onClick={toggleTradeModal}

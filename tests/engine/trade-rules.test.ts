@@ -366,6 +366,7 @@ describe('trading rules', () => {
       requested: resourceBundle([[RESOURCE_IDS.brick, 1]]),
       status: 'OPEN',
       createdTurn: state.turn.turnNumber,
+      revision: 1,
       acceptedByPlayerId: null,
     });
     expect(created.state.pendingInteraction).toEqual({
@@ -440,6 +441,52 @@ describe('trading rules', () => {
     expect(confirmed.state.pendingInteraction).toBeNull();
     expect(confirmed.events.map((event) => event.type)).toEqual(['TRADE_COMPLETED']);
     expect(isJsonSerializable(confirmed.state)).toBe(true);
+  });
+
+  it('lets the proposer update an open offer and clears every previous response', () => {
+    const created = createOffer(tradeState(), tradeId('editable-offer'));
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const accepted = dispatch(created.state, {
+      id: actionId('accept-before-edit'),
+      type: 'RESPOND_TO_TRADE',
+      actorId: TEST_PLAYER_IDS[1],
+      tradeId: tradeId('editable-offer'),
+      accepted: true,
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+
+    const updated = dispatch(accepted.state, {
+      id: actionId('update-open-trade'),
+      type: 'UPDATE_TRADE',
+      actorId: TEST_PLAYER_IDS[0],
+      tradeId: tradeId('editable-offer'),
+      offered: resourceBundle([[RESOURCE_IDS.wood, 3]]),
+      requested: resourceBundle([[RESOURCE_IDS.ore, 1]]),
+    });
+
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(updated.state.tradeOffers[tradeId('editable-offer')]).toMatchObject({
+      offered: { [RESOURCE_IDS.wood]: 3 },
+      requested: { [RESOURCE_IDS.ore]: 1 },
+      responses: { [TEST_PLAYER_IDS[1]]: 'PENDING' },
+      revision: 2,
+      status: 'OPEN',
+      acceptedByPlayerId: null,
+    });
+    expect(updated.state.pendingInteraction).toEqual(created.state.pendingInteraction);
+    expect(updated.events).toEqual([
+      {
+        type: 'TRADE_UPDATED',
+        tradeId: tradeId('editable-offer'),
+        playerId: TEST_PLAYER_IDS[0],
+        recipientIds: [TEST_PLAYER_IDS[1]],
+        offered: resourceBundle([[RESOURCE_IDS.wood, 3]]),
+        requested: resourceBundle([[RESOURCE_IDS.ore, 1]]),
+      },
+    ]);
   });
 
   it('lets the intended opponent reject an offer without transferring resources', () => {
