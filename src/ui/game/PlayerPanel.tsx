@@ -129,6 +129,8 @@ export function PlayerPanel({
   const knightPowerGlows =
     holdsLargestForce || (cityCount > 0 && activeKnightStrength >= cityCount);
   const safeHandLimit = discardThreshold + wallCount * 2;
+  const handCount = resourceCount + commodityCount;
+  const unsafeHand = handCount > safeHandLimit;
   const progressCount =
     publicCardInfo?.progressCards ??
     (kNMode ? player.knProgressCardIds.length : player.progressCardIds.length);
@@ -210,7 +212,12 @@ export function PlayerPanel({
               <dt className="visually-hidden">Resource and commodity cards</dt>
               <dd className="game-player__info-card game-player__info-card--resources">
                 <span aria-hidden="true">?</span>
-                <strong>{resourceCount + commodityCount}</strong>
+                <strong
+                  className={unsafeHand ? 'is-unsafe' : undefined}
+                  title={unsafeHand ? `Over safe hand limit of ${safeHandLimit}` : undefined}
+                >
+                  {handCount}
+                </strong>
               </dd>
             </div>
             <div title={visibleProgressFamilies.length === 0 ? 'Progress cards' : undefined}>
@@ -373,7 +380,12 @@ export function PlayerPanel({
             <dt className="visually-hidden">Resource cards</dt>
             <dd className="game-player__info-card game-player__info-card--resources">
               <span aria-hidden="true">?</span>
-              <strong>{resourceCount + commodityCount}</strong>
+              <strong
+                className={unsafeHand ? 'is-unsafe' : undefined}
+                title={unsafeHand ? `Over safe hand limit of ${safeHandLimit}` : undefined}
+              >
+                {handCount}
+              </strong>
             </dd>
           </div>
           <div className="game-player__stat game-player__stat--progress" title="Progress cards">

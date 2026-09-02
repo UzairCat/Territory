@@ -2247,6 +2247,37 @@ describe('K+N compact choice flows', () => {
     );
   });
 
+  it('shows an unsafe public hand count in red to every online viewer', () => {
+    const state = knActionState();
+    const player = state.players[TEST_PLAYER_IDS[1]]!;
+    const view = render(
+      <PlayerPanel
+        player={player}
+        position={2}
+        active={false}
+        score={2}
+        longestRoadLength={0}
+        robberCount={0}
+        holdsLongestRoad={false}
+        holdsLargestForce={false}
+        winner={false}
+        kNMode
+        discardThreshold={7}
+        publicCardInfo={{
+          resourceCards: 6,
+          commodityCards: 2,
+          progressCards: 0,
+          progressFamilies: { SCIENCE: 0, TRADE: 0, POLITICS: 0 },
+        }}
+      />,
+    );
+
+    const publicCount = view.container.querySelector('.game-player__info-card--resources > strong');
+    expect(publicCount).toHaveTextContent('8');
+    expect(publicCount).toHaveClass('is-unsafe');
+    expect(publicCount).toHaveAttribute('title', 'Over safe hand limit of 7');
+  });
+
   it('counts down an absent online seat beneath its profile picture', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-31T10:00:00.000Z'));

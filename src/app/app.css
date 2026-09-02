@@ -4679,6 +4679,15 @@ input[type='checkbox'] {
   background: #285c9e;
 }
 
+.game-player__info-card > strong.is-unsafe {
+  border-color: #ff9a9f;
+  color: #ff737b;
+  background: #3d1118;
+  box-shadow:
+    0 0 0 1px rgb(255 76 87 / 24%),
+    0 0 0.52rem rgb(218 43 54 / 42%);
+}
+
 .game-player__stat--robber dd,
 .game-player__stat--bridge dd {
   align-content: end;
