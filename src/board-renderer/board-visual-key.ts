@@ -11,8 +11,8 @@ export function boardVisualKey(board: BoardState): string {
     const building = vertex.building;
     parts.push(
       building === null
-        ? `v:${vertex.id}:empty:${vertex.portId ?? ''}`
-        : `v:${vertex.id}:${building.ownerId}:${building.type}:${building.hasWall ? 1 : 0}:${building.metropolis ?? ''}:${vertex.portId ?? ''}`,
+        ? `v:${vertex.id}:empty:${vertex.knightId ?? ''}:${vertex.portId ?? ''}`
+        : `v:${vertex.id}:${building.ownerId}:${building.type}:${building.hasWall ? 1 : 0}:${building.metropolis ?? ''}:${vertex.knightId ?? ''}:${vertex.portId ?? ''}`,
     );
   }
   for (const edge of Object.values(board.edges)) {

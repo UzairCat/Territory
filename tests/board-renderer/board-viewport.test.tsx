@@ -5,10 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BoardViewport, type BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
-import { hexId } from '../../src/engine/core/ids';
+import type { BoardState, KnightState } from '../../src/engine/core/game-state';
+import { hexId, knightId, vertexId } from '../../src/engine/core/ids';
 import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
-const rendererProbe = vi.hoisted(() => ({ constructed: 0, mounted: 0, updated: 0, destroyed: 0 }));
+const rendererProbe = vi.hoisted(() => ({
+  constructed: 0,
+  mounted: 0,
+  updated: 0,
+  destroyed: 0,
+  updatedBoards: [] as unknown[],
+}));
 
 vi.mock('../../src/board-renderer/TerritoryBoard', () => ({
   TerritoryBoard: class {
@@ -23,8 +30,9 @@ vi.mock('../../src/board-renderer/TerritoryBoard', () => ({
       return Promise.resolve();
     }
 
-    update(): void {
+    update(board: unknown): void {
       rendererProbe.updated += 1;
+      rendererProbe.updatedBoards.push(board);
     }
 
     destroy(): void {
@@ -45,6 +53,7 @@ describe('board viewport renderer lifecycle', () => {
     rendererProbe.mounted = 0;
     rendererProbe.updated = 0;
     rendererProbe.destroyed = 0;
+    rendererProbe.updatedBoards.length = 0;
   });
 
   afterEach(cleanup);
@@ -135,6 +144,72 @@ describe('board viewport renderer lifecycle', () => {
 
     expect(rendererProbe.constructed).toBe(2);
     expect(rendererProbe.destroyed).toBe(1);
+  });
+
+  it('passes fresh vertex occupancy to the renderer when a Knight is placed', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const player = state.players[TEST_PLAYER_IDS[0]]!;
+    const targetVertexId = vertexId('visible-new-knight-vertex');
+    const vertex: BoardState['vertices'][string] = {
+      id: targetVertexId,
+      adjacentHexIds: [],
+      connectedEdgeIds: [],
+      adjacentVertexIds: [],
+      building: null,
+      knightId: null,
+      portId: null,
+    };
+    const board: BoardState = {
+      ...state.board,
+      vertices: { ...state.board.vertices, [targetVertexId]: vertex },
+    };
+    const placedKnight: KnightState = {
+      id: knightId('visible-new-knight'),
+      ownerId: player.id,
+      vertexId: targetVertexId,
+      level: 1,
+      active: false,
+      placedTurn: state.turn.turnNumber,
+      activeSinceTurn: null,
+      lastActionTurn: null,
+      upgradedTurn: null,
+    };
+    const baseProps: BoardViewportProps = {
+      board,
+      players: state.players,
+      knState: state.kn,
+      showDebugIds: false,
+      selectableTargets: [],
+      highlightedHexIds: [],
+      animatedTarget: null,
+      robberMove: null,
+      playerColors: { [player.id]: '#2864c7' },
+      onInspect: vi.fn(),
+      onSelect: vi.fn(),
+    };
+    const view = render(<BoardViewport {...baseProps} />);
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+
+    view.rerender(
+      <BoardViewport
+        {...baseProps}
+        board={{
+          ...board,
+          vertices: {
+            ...board.vertices,
+            [targetVertexId]: { ...vertex, knightId: placedKnight.id },
+          },
+        }}
+        players={{
+          ...state.players,
+          [player.id]: { ...player, knights: [...player.knights, placedKnight] },
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(rendererProbe.updated).toBe(1));
+    const updatedBoard = rendererProbe.updatedBoards[0] as BoardState;
+    expect(updatedBoard.vertices[targetVertexId]?.knightId).toBe(placedKnight.id);
   });
 
   it('announces readiness only after the renderer has mounted', async () => {

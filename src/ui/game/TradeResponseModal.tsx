@@ -7,8 +7,11 @@ import type { GameState, PlayerState, TradeOffer } from '../../engine/core/game-
 import type { PlayerId } from '../../engine/core/ids';
 import { canAfford, playerHand } from '../../engine/rules/resource-rules';
 import { getTradeAcceptance } from '../../engine/rules/trade-rules';
+import { PLAYER_TRADE_OFFER_DURATION_MS } from '../../multiplayer/protocol';
 import { Button } from '../components/Button';
 import { ResourceArtwork } from './ResourceArtwork';
+
+const PLAYER_TRADE_OFFER_DURATION_SECONDS = PLAYER_TRADE_OFFER_DURATION_MS / 1_000;
 
 interface TradeResponsePanelProps {
   readonly state: GameState;
@@ -56,7 +59,7 @@ function BundleCards({
 
 function remainingForDeadline(deadlineAt: number | null, clockOffsetMs: number): number {
   return deadlineAt === null
-    ? 15
+    ? PLAYER_TRADE_OFFER_DURATION_SECONDS
     : Math.max(0, Math.ceil((deadlineAt - (Date.now() + clockOffsetMs)) / 1_000));
 }
 

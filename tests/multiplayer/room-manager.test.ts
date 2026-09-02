@@ -404,7 +404,7 @@ describe('authoritative online rooms', () => {
     expect(room.deadlineAt).toBeGreaterThan(Date.now());
   });
 
-  it('keeps the turn deadline while a separate fifteen-second trade deadline runs', () => {
+  it('keeps the turn deadline while a separate twenty-five-second trade deadline runs', () => {
     const { manager, room, host, guest } = createStartedRoom();
     const activePlayerId = room.state!.turn.activePlayerId;
     if (activePlayerId === null) throw new Error('No active player.');
@@ -445,8 +445,8 @@ describe('authoritative online rooms', () => {
     ).toMatchObject({ ok: true });
 
     expect(room.deadlineAt).toBe(turnDeadline);
-    expect(room.tradeDeadlineAt).toBeGreaterThan(Date.now() + 13_000);
-    expect(room.tradeDeadlineAt).toBeLessThanOrEqual(Date.now() + 15_000);
+    expect(room.tradeDeadlineAt).toBeGreaterThan(Date.now() + 23_000);
+    expect(room.tradeDeadlineAt).toBeLessThanOrEqual(Date.now() + 25_000);
     expect(manager.view(room, activePlayerId).game).toMatchObject({
       deadlineAt: turnDeadline,
       tradeDeadlineAt: room.tradeDeadlineAt,

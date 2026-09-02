@@ -30,6 +30,7 @@ import { createOnlineGameView } from '../src/multiplayer/projection';
 import {
   ONLINE_PROTOCOL_VERSION,
   MATCH_DISCONNECT_GRACE_MS,
+  PLAYER_TRADE_OFFER_DURATION_MS,
   RECONNECT_GRACE_MS,
   type ActionAck,
   type OnlineAck,
@@ -250,7 +251,7 @@ function tradeTimedStep(state: GameState): TimedStep | null {
   if (trade === undefined || trade.status !== 'OPEN') return null;
   return {
     key: `trade-${trade.id}`,
-    durationMs: 15_000,
+    durationMs: PLAYER_TRADE_OFFER_DURATION_MS,
     actorId: trade.fromPlayerId,
     kind: 'EXPIRE_TRADE',
     tradeId: trade.id,

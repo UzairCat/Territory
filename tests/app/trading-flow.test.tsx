@@ -398,7 +398,7 @@ describe('trading application flow', () => {
     expect(screen.queryByRole('dialog', { name: 'Trade' })).not.toBeInTheDocument();
   });
 
-  it('expires an unanswered player offer after fifteen seconds', async () => {
+  it('expires an unanswered player offer after twenty-five seconds', async () => {
     const state = tradingState();
     const created = dispatch(state, {
       id: actionId('create-expiring-offer'),
@@ -414,8 +414,10 @@ describe('trading application flow', () => {
     vi.useFakeTimers();
     renderGame(created.state);
 
-    expect(screen.getByLabelText('15 seconds remaining')).toBeInTheDocument();
+    expect(screen.getByLabelText('25 seconds remaining')).toBeInTheDocument();
     await act(() => vi.advanceTimersByTime(15_000));
+    expect(screen.getByRole('dialog', { name: 'Trade offer from Alex' })).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTime(10_000));
 
     expect(screen.queryByRole('dialog', { name: 'Trade offer from Alex' })).not.toBeInTheDocument();
     expect(useAppStore.getState().gameState?.tradeOffers[tradeId('expiring-offer')]?.status).toBe(
