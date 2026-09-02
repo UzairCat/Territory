@@ -9,7 +9,7 @@ import {
 
 import type { BoardState, KnightState, KNState } from '../engine/core/game-state';
 import { TERRAINS } from '../engine/content/resources';
-import type { HexId, ResourceId, VertexId } from '../engine/core/ids';
+import type { EdgeId, HexId, ResourceId, VertexId } from '../engine/core/ids';
 import {
   createBoardRenderModel,
   type BoardRenderModel,
@@ -29,11 +29,13 @@ export interface TerritoryBoardOptions {
   readonly onSelect: (target: BoardTarget, position: BoardViewportPoint) => void;
   readonly selectableTargets: readonly BoardTarget[];
   readonly highlightedHexIds: readonly HexId[];
+  readonly emphasizedEdgeIds?: readonly EdgeId[];
   readonly emphasizedVertexIds?: readonly VertexId[];
   readonly inventorSelectionActive?: boolean;
   readonly inventorSelectedHexId?: HexId | null;
   readonly inventorPendingHexId?: HexId | null;
   readonly numberTokenSwap?: readonly [HexId, HexId] | null;
+  readonly numberTokenSwapKey?: string | null;
   readonly madnessHighlightedHexIds?: readonly HexId[];
   readonly terrainChange?: {
     readonly hexId: HexId;
@@ -1060,12 +1062,15 @@ export class TerritoryBoard {
   private readonly onSelect: TerritoryBoardOptions['onSelect'];
   private selectableTargetKeys: ReadonlySet<string>;
   private highlightedHexIds: ReadonlySet<HexId>;
+  private emphasizedEdgeIds: ReadonlySet<EdgeId>;
   private emphasizedVertexIds: ReadonlySet<VertexId>;
   private inventorSelectionActive: boolean;
   private inventorSelectedHexId: HexId | null;
   private inventorPendingHexId: HexId | null;
   private numberTokenSwap: readonly [HexId, HexId] | null;
+  private numberTokenSwapKey: string | null;
   private numberTokenSwapStartedAt: number | null;
+  private completedNumberTokenSwapKey: string | null = null;
   private madnessHighlightedHexIds: ReadonlySet<HexId>;
   private terrainChange: TerritoryBoardOptions['terrainChange'];
   private merchantPlacementActive: boolean;
@@ -1087,6 +1092,7 @@ export class TerritoryBoard {
   private readonly portLayer = new Container();
   private readonly edgeLayer = new Container();
   private readonly vertexLayer = new Container();
+  private readonly roadHighlightLayer = new Container();
   private readonly pieceLayer = new Container();
   private readonly cueLayer = new Container();
   private readonly debugLayer = new Container();
@@ -1124,11 +1130,13 @@ export class TerritoryBoard {
     this.onSelect = options.onSelect;
     this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
     this.highlightedHexIds = new Set(options.highlightedHexIds);
+    this.emphasizedEdgeIds = new Set(options.emphasizedEdgeIds ?? []);
     this.emphasizedVertexIds = new Set(options.emphasizedVertexIds ?? []);
     this.inventorSelectionActive = options.inventorSelectionActive ?? false;
     this.inventorSelectedHexId = options.inventorSelectedHexId ?? null;
     this.inventorPendingHexId = options.inventorPendingHexId ?? null;
     this.numberTokenSwap = options.numberTokenSwap ?? null;
+    this.numberTokenSwapKey = options.numberTokenSwapKey ?? this.numberTokenSwap?.join('|') ?? null;
     this.numberTokenSwapStartedAt =
       this.numberTokenSwap === null ? null : globalThis.performance.now();
     this.madnessHighlightedHexIds = new Set(options.madnessHighlightedHexIds ?? []);
@@ -1147,6 +1155,7 @@ export class TerritoryBoard {
     for (const layer of [
       this.coastLayer,
       this.numberTokenLayer,
+      this.roadHighlightLayer,
       this.pieceLayer,
       this.cueLayer,
       this.debugLayer,
@@ -1162,6 +1171,7 @@ export class TerritoryBoard {
       this.portLayer,
       this.edgeLayer,
       this.vertexLayer,
+      this.roadHighlightLayer,
       this.pieceLayer,
       this.cueLayer,
       this.debugLayer,
@@ -1233,6 +1243,7 @@ export class TerritoryBoard {
   update(board: BoardState, options: TerritoryBoardOptions): void {
     if (!this.mounted || this.destroyed) return;
     const previousHexIds = this.model.hexes.map((hex) => hex.target.id).join('|');
+    const previousRoadHighlightKey = [...this.emphasizedEdgeIds].sort().join('|');
     const nextModel = createBoardRenderModel(
       board,
       70,
@@ -1244,16 +1255,20 @@ export class TerritoryBoard {
     this.model = nextModel;
     this.selectableTargetKeys = new Set(options.selectableTargets.map(targetKey));
     this.highlightedHexIds = new Set(options.highlightedHexIds);
+    this.emphasizedEdgeIds = new Set(options.emphasizedEdgeIds ?? []);
     this.emphasizedVertexIds = new Set(options.emphasizedVertexIds ?? []);
     this.inventorSelectionActive = options.inventorSelectionActive ?? false;
     this.inventorSelectedHexId = options.inventorSelectedHexId ?? null;
     this.inventorPendingHexId = options.inventorPendingHexId ?? null;
     const nextNumberTokenSwap = options.numberTokenSwap ?? null;
-    if (nextNumberTokenSwap?.join('|') !== this.numberTokenSwap?.join('|')) {
+    const nextNumberTokenSwapKey =
+      options.numberTokenSwapKey ?? nextNumberTokenSwap?.join('|') ?? null;
+    if (nextNumberTokenSwapKey !== this.numberTokenSwapKey) {
       this.numberTokenSwapStartedAt =
         nextNumberTokenSwap === null ? null : globalThis.performance.now();
     }
     this.numberTokenSwap = nextNumberTokenSwap;
+    this.numberTokenSwapKey = nextNumberTokenSwapKey;
     this.madnessHighlightedHexIds = new Set(options.madnessHighlightedHexIds ?? []);
     this.terrainChange = options.terrainChange ?? null;
     this.merchantPlacementActive = options.merchantPlacementActive ?? false;
@@ -1275,6 +1290,8 @@ export class TerritoryBoard {
     const numbersChanged = staticChanged || nextNumberSignature !== this.numberVisualSignature;
     const piecesChanged = staticChanged || nextPieceSignature !== this.pieceVisualSignature;
     const controlsChanged = staticChanged || nextControlSignature !== this.controlVisualSignature;
+    const roadHighlightsChanged =
+      staticChanged || [...this.emphasizedEdgeIds].sort().join('|') !== previousRoadHighlightKey;
 
     if (staticChanged) {
       this.clearTransientGroup('terrain');
@@ -1289,6 +1306,7 @@ export class TerritoryBoard {
       this.clearTransientGroup('pieces');
       this.drawPieces();
     }
+    if (roadHighlightsChanged) this.drawRoadHighlights();
     if (controlsChanged) {
       this.clearPulseGroup('controls');
       this.drawControls();
@@ -1363,6 +1381,7 @@ export class TerritoryBoard {
   private drawBoard(): void {
     this.drawStaticLayers();
     this.drawNumberTokens();
+    this.drawRoadHighlights();
     this.drawPieces();
     this.drawControls();
     this.startTargetPulse();
@@ -1406,7 +1425,7 @@ export class TerritoryBoard {
       this.inventorSelectionActive ? 'inventor' : '',
       this.inventorSelectedHexId ?? '',
       this.inventorPendingHexId ?? '',
-      this.numberTokenSwap?.join('|') ?? '',
+      this.numberTokenSwapKey ?? '',
       [...this.madnessHighlightedHexIds].sort().join('|'),
       [...this.selectableTargetKeys]
         .filter((key) => key.startsWith('HEX:'))
@@ -1576,6 +1595,22 @@ export class TerritoryBoard {
     }
   }
 
+  private drawRoadHighlights(): void {
+    this.clearLayer(this.roadHighlightLayer);
+    for (const edge of this.model.edges) {
+      if (!this.emphasizedEdgeIds.has(edge.target.id) || edge.roadOwnerId === null) continue;
+      const glow = new Graphics()
+        .moveTo(edge.first.x, edge.first.y)
+        .lineTo(edge.second.x, edge.second.y)
+        .stroke({ color: '#ffd86a', width: 28, alpha: 0.24 })
+        .moveTo(edge.first.x, edge.first.y)
+        .lineTo(edge.second.x, edge.second.y)
+        .stroke({ color: '#ffe59a', width: 18, alpha: 0.9 });
+      glow.eventMode = 'none';
+      this.roadHighlightLayer.addChild(glow);
+    }
+  }
+
   private drawPieces(): void {
     this.clearLayer(this.pieceLayer);
     for (const hex of this.model.hexes) {
@@ -1739,7 +1774,7 @@ export class TerritoryBoard {
       };
       drawEdge(false);
       graphic.eventMode = 'static';
-      graphic.cursor = selectable ? 'pointer' : 'default';
+      graphic.cursor = selectable ? 'pointer' : edge.roadOwnerId === null ? 'default' : 'help';
       graphic.on('pointerover', () => {
         if (selectable) drawEdge(true);
         this.onInspect(edge.target);
@@ -1883,12 +1918,21 @@ export class TerritoryBoard {
 
   private animateNumberTokenSwap(destinationHexId: HexId, token: Container): void {
     const swap = this.numberTokenSwap;
-    if (swap === null || (!swap.includes(destinationHexId) && swap.length === 2)) return;
+    const animationKey = this.numberTokenSwapKey;
+    if (
+      swap === null ||
+      animationKey === null ||
+      this.completedNumberTokenSwapKey === animationKey ||
+      !swap.includes(destinationHexId)
+    ) {
+      return;
+    }
     const originHexId = destinationHexId === swap[0] ? swap[1] : swap[0];
     const origin = this.model.hexes.find((hex) => hex.target.id === originHexId);
     const destination = this.model.hexes.find((hex) => hex.target.id === destinationHexId);
     if (origin === undefined || destination === undefined) return;
     if (this.reducedMotion || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      this.completedNumberTokenSwapKey = animationKey;
       return;
     }
 
@@ -1912,6 +1956,7 @@ export class TerritoryBoard {
       token.position.set(endX, endY);
       token.rotation = 0;
       token.scale.set(1);
+      this.completedNumberTokenSwapKey = animationKey;
       this.application.ticker.remove(animate);
       this.transientTickerCallbacks.delete(animate);
     };

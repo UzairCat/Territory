@@ -142,6 +142,10 @@ function projectEvents(
     }
     if (event.type === 'KN_PROGRESS_CARD_RESOLVED') {
       const definition = getKNProgressCardDefinition(event.cardDefinitionId);
+      // Inventor changes two public board tokens, so every viewer needs the target hexes
+      // in order to play the same swap animation. Other card targets can contain private
+      // player or hand information and remain redacted below.
+      if (definition?.effect === 'INVENTOR') return event;
       if (definition?.effect === 'MASTER_MERCHANT') {
         const targetPlayerId = event.targetIds?.[0];
         return event.playerId === viewerPlayerId || targetPlayerId === viewerPlayerId

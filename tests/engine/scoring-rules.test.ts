@@ -12,6 +12,7 @@ import {
   calculateBonusHolders,
   calculateLongestRoadLength,
   calculatePublicScore,
+  calculateRoadChainThroughEdge,
   calculateScore,
   calculateScoreBreakdown,
 } from '../../src/engine/rules/scoring-rules';
@@ -108,6 +109,46 @@ describe('central scoring and awards', () => {
       2: { ownerId: TEST_PLAYER_IDS[1], type: 'HOUSE' },
     });
     expect(calculateLongestRoadLength(blocked, TEST_PLAYER_IDS[0])).toBe(2);
+  });
+
+  it('finds the longest legal road chain through the inspected road', () => {
+    const separated = graphState([
+      ...ownedLine(0, 4, TEST_PLAYER_IDS[0]),
+      ...ownedLine(10, 2, TEST_PLAYER_IDS[0]),
+      { first: 20, second: 21, ownerId: null },
+      ...ownedLine(30, 2, TEST_PLAYER_IDS[1]),
+    ]);
+
+    expect(calculateRoadChainThroughEdge(separated, edgeId('score-e1'))).toEqual([
+      edgeId('score-e0'),
+      edgeId('score-e1'),
+      edgeId('score-e2'),
+      edgeId('score-e3'),
+    ]);
+    expect(calculateRoadChainThroughEdge(separated, edgeId('score-e4'))).toEqual([
+      edgeId('score-e4'),
+      edgeId('score-e5'),
+    ]);
+    expect(calculateRoadChainThroughEdge(separated, edgeId('score-e6'))).toEqual([]);
+    expect(calculateRoadChainThroughEdge(separated, edgeId('score-e7'))).toEqual([
+      edgeId('score-e7'),
+      edgeId('score-e8'),
+    ]);
+
+    const branch = graphState([
+      { first: 0, second: 1, ownerId: TEST_PLAYER_IDS[0] },
+      { first: 1, second: 2, ownerId: TEST_PLAYER_IDS[0] },
+      { first: 2, second: 3, ownerId: TEST_PLAYER_IDS[0] },
+      { first: 2, second: 4, ownerId: TEST_PLAYER_IDS[0] },
+    ]);
+    const branchChain = calculateRoadChainThroughEdge(branch, edgeId('score-e3'));
+    expect(branchChain).toHaveLength(3);
+    expect(branchChain).toContain(edgeId('score-e3'));
+
+    const blocked = graphState(ownedLine(0, 4, TEST_PLAYER_IDS[0]), {
+      2: { ownerId: TEST_PLAYER_IDS[1], type: 'HOUSE' },
+    });
+    expect(calculateRoadChainThroughEdge(blocked, edgeId('score-e0'))).toHaveLength(2);
   });
 
   it('treats an opponent Knight as a K+N road-network blocker', () => {

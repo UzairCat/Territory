@@ -3410,6 +3410,123 @@ input[type='checkbox'] {
   background: rgb(45 72 58 / 96%);
 }
 
+.road-chain-peek {
+  position: absolute;
+  z-index: 9;
+  top: 1.15rem;
+  left: 1.15rem;
+  display: grid;
+  min-width: 10.5rem;
+  padding: 0.42rem 0.55rem 0.42rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--road-chain-color) 62%, #f3dc8a);
+  border-radius: 0.72rem;
+  align-items: center;
+  grid-template-columns: 2.5rem 1fr auto;
+  gap: 0.45rem;
+  color: #f4eee0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--road-chain-color) 18%, transparent),
+      transparent
+    ),
+    rgb(6 24 24 / 91%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 7%),
+    0 0.55rem 1.25rem rgb(0 0 0 / 34%);
+  animation: road-chain-peek-in 140ms ease-out both;
+  backdrop-filter: blur(0.45rem);
+}
+
+.road-chain-peek__route {
+  position: relative;
+  width: 2.5rem;
+  height: 1.8rem;
+  filter: drop-shadow(0 0.15rem 0.12rem rgb(0 0 0 / 42%));
+}
+
+.road-chain-peek__route i {
+  position: absolute;
+  top: 0.66rem;
+  left: 0.08rem;
+  width: 1.08rem;
+  height: 0.36rem;
+  border: 1px solid color-mix(in srgb, var(--road-chain-color) 42%, #15221c);
+  border-radius: 999px;
+  background: linear-gradient(#fff1ba, color-mix(in srgb, var(--road-chain-color) 82%, #d8a943));
+  box-shadow: 0 0 0.32rem rgb(255 216 106 / 52%);
+  transform: rotate(-27deg);
+}
+
+.road-chain-peek__route i:nth-child(2) {
+  top: 0.91rem;
+  left: 0.76rem;
+  transform: rotate(27deg);
+}
+
+.road-chain-peek__route i:nth-child(3) {
+  top: 0.54rem;
+  left: 1.43rem;
+}
+
+.road-chain-peek > span:nth-child(2) {
+  display: grid;
+  gap: 0.02rem;
+}
+
+.road-chain-peek > span:nth-child(2) small {
+  overflow: hidden;
+  color: #b9c9c1;
+  font-size: 0.56rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.road-chain-peek > span:nth-child(2) strong {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.76rem;
+}
+
+.road-chain-peek > b {
+  display: grid;
+  min-width: 2.15rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid rgb(235 220 160 / 20%);
+  color: #ffe79a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.18rem;
+  line-height: 0.85;
+  text-align: center;
+}
+
+.road-chain-peek > b small {
+  margin-top: 0.18rem;
+  color: #c7d2cc;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@keyframes road-chain-peek-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.game-screen--reduced-motion .road-chain-peek {
+  animation: none;
+}
+
 .board-inspector {
   min-width: 0;
   min-height: 1.3rem;

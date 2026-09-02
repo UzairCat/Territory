@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BoardViewport, type BoardViewportProps } from '../../src/board-renderer/BoardViewport';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import type { BoardState, KnightState } from '../../src/engine/core/game-state';
-import { hexId, knightId, vertexId } from '../../src/engine/core/ids';
+import { edgeId, hexId, knightId, vertexId } from '../../src/engine/core/ids';
 import { createTestGameState, TEST_PLAYER_IDS } from '../helpers/game-state';
 
 const rendererProbe = vi.hoisted(() => ({
@@ -18,6 +18,7 @@ const rendererProbe = vi.hoisted(() => ({
   fitCalls: 0,
   zoomFactors: [] as number[],
   updatedBoards: [] as unknown[],
+  updatedOptions: [] as unknown[],
 }));
 
 vi.mock('../../src/board-renderer/TerritoryBoard', () => ({
@@ -33,9 +34,10 @@ vi.mock('../../src/board-renderer/TerritoryBoard', () => ({
       return Promise.resolve();
     }
 
-    update(board: unknown): void {
+    update(board: unknown, options: unknown): void {
       rendererProbe.updated += 1;
       rendererProbe.updatedBoards.push(board);
+      rendererProbe.updatedOptions.push(options);
     }
 
     destroy(): void {
@@ -65,6 +67,7 @@ describe('board viewport renderer lifecycle', () => {
     rendererProbe.fitCalls = 0;
     rendererProbe.zoomFactors.length = 0;
     rendererProbe.updatedBoards.length = 0;
+    rendererProbe.updatedOptions.length = 0;
   });
 
   afterEach(cleanup);
@@ -155,6 +158,67 @@ describe('board viewport renderer lifecycle', () => {
 
     expect(rendererProbe.constructed).toBe(2);
     expect(rendererProbe.destroyed).toBe(1);
+  });
+
+  it('updates only the renderer options when a hovered road chain is emphasized', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const hoveredChain = [edgeId('chain-a'), edgeId('chain-b')];
+    const baseProps: BoardViewportProps = {
+      board: state.board,
+      players: state.players,
+      knState: state.kn,
+      showDebugIds: false,
+      selectableTargets: [],
+      highlightedHexIds: [],
+      animatedTarget: null,
+      robberMove: null,
+      playerColors: { [TEST_PLAYER_IDS[0]]: '#2864c7' },
+      onInspect: vi.fn(),
+      onSelect: vi.fn(),
+    };
+    const view = render(<BoardViewport {...baseProps} />);
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+
+    view.rerender(<BoardViewport {...baseProps} emphasizedEdgeIds={hoveredChain} />);
+
+    await waitFor(() => expect(rendererProbe.updated).toBe(1));
+    expect(rendererProbe.constructed).toBe(1);
+    expect(rendererProbe.updatedBoards[0]).toBe(state.board);
+    expect(rendererProbe.updatedOptions[0]).toMatchObject({ emphasizedEdgeIds: hoveredChain });
+  });
+
+  it('forwards a unique event key when the same number-token pair is swapped again', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const swap = [hexId('swap-a'), hexId('swap-b')] as const;
+    const baseProps: BoardViewportProps = {
+      board: state.board,
+      players: state.players,
+      knState: state.kn,
+      showDebugIds: false,
+      selectableTargets: [],
+      highlightedHexIds: [],
+      animatedTarget: null,
+      robberMove: null,
+      playerColors: { [TEST_PLAYER_IDS[0]]: '#2864c7' },
+      onInspect: vi.fn(),
+      onSelect: vi.fn(),
+    };
+    const view = render(<BoardViewport {...baseProps} />);
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+
+    view.rerender(
+      <BoardViewport {...baseProps} numberTokenSwap={swap} numberTokenSwapKey="swap-one" />,
+    );
+    await waitFor(() => expect(rendererProbe.updated).toBe(1));
+    view.rerender(
+      <BoardViewport {...baseProps} numberTokenSwap={swap} numberTokenSwapKey="swap-two" />,
+    );
+    await waitFor(() => expect(rendererProbe.updated).toBe(2));
+
+    expect(rendererProbe.updatedOptions).toMatchObject([
+      { numberTokenSwap: swap, numberTokenSwapKey: 'swap-one' },
+      { numberTokenSwap: swap, numberTokenSwapKey: 'swap-two' },
+    ]);
   });
 
   it('passes fresh vertex occupancy to the renderer when a Knight is placed', async () => {

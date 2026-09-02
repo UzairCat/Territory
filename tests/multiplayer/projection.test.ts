@@ -236,6 +236,47 @@ describe('online player projection', () => {
     expect(hiddenObserverView.recentEvents[0]).toMatchObject({ resources: {}, targetIds: [] });
   });
 
+  it('keeps resolved Inventor hexes public so every player can animate the swap', () => {
+    const state = createKNState();
+    const actorId = TEST_PLAYER_IDS[0];
+    const observerId = TEST_PLAYER_IDS[1];
+    const definition = KN_PROGRESS_CARDS.find((card) => card.effect === 'INVENTOR');
+    const numberedHexes = Object.values(state.board.hexes).filter(
+      (hex) => hex.numberToken !== null,
+    );
+    const firstHex = numberedHexes[0];
+    const secondHex = numberedHexes[1];
+    if (definition === undefined || firstHex === undefined || secondHex === undefined) {
+      throw new Error('Inventor projection fixture is incomplete.');
+    }
+    const event: GameEvent = {
+      type: 'KN_PROGRESS_CARD_RESOLVED',
+      playerId: actorId,
+      cardInstanceId: cardInstanceId('resolved-inventor'),
+      cardDefinitionId: definition.id,
+      targetIds: [firstHex.id, secondHex.id],
+    };
+
+    const observerView = createOnlineGameView(
+      state,
+      observerId,
+      2,
+      [event],
+      [event],
+      false,
+      false,
+      null,
+      null,
+    );
+
+    expect(observerView.recentEvents[0]).toMatchObject({
+      targetIds: [firstHex.id, secondHex.id],
+    });
+    expect(observerView.eventHistory[0]).toMatchObject({
+      targetIds: [firstHex.id, secondHex.id],
+    });
+  });
+
   it('projects a simultaneous reward as each queued viewer’s own private choice', () => {
     const original = createKNState(3);
     const firstId = TEST_PLAYER_IDS[0];

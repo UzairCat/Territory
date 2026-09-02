@@ -4,7 +4,7 @@ import { HAND_GOODS } from '../engine/content/commodities';
 import { getKNProgressCardDefinition } from '../engine/content/kn-progress-cards';
 import { PROGRESS_CARDS } from '../engine/content/progress-cards';
 import type { BoardState, GameState, KNState } from '../engine/core/game-state';
-import type { HexId, ResourceId, VertexId } from '../engine/core/ids';
+import type { EdgeId, HexId, ResourceId, VertexId } from '../engine/core/ids';
 import type {
   BoardTarget,
   BoardViewportPoint,
@@ -24,11 +24,13 @@ export interface BoardViewportProps {
   readonly showDebugIds: boolean;
   readonly selectableTargets: readonly BoardTarget[];
   readonly highlightedHexIds: readonly HexId[];
+  readonly emphasizedEdgeIds?: readonly EdgeId[];
   readonly emphasizedVertexIds?: readonly VertexId[];
   readonly inventorSelectionActive?: boolean;
   readonly inventorSelectedHexId?: HexId | null;
   readonly inventorPendingHexId?: HexId | null;
   readonly numberTokenSwap?: readonly [HexId, HexId] | null;
+  readonly numberTokenSwapKey?: string | null;
   readonly madnessHighlightedHexIds?: readonly HexId[];
   readonly terrainChange?: {
     readonly hexId: HexId;
@@ -282,11 +284,13 @@ export function BoardViewport({
   showDebugIds,
   selectableTargets,
   highlightedHexIds,
+  emphasizedEdgeIds = [],
   emphasizedVertexIds = [],
   inventorSelectionActive = false,
   inventorSelectedHexId = null,
   inventorPendingHexId = null,
   numberTokenSwap = null,
+  numberTokenSwapKey = null,
   madnessHighlightedHexIds = [],
   terrainChange = null,
   merchantPlacementActive = false,
@@ -339,6 +343,7 @@ export function BoardViewport({
     selectableTargets.map((target) => `${target.kind}:${target.id}`).join('|'),
   );
   const stableHighlightedHexIds = useStableByKey(highlightedHexIds, highlightedHexIds.join('|'));
+  const stableEmphasizedEdgeIds = useStableByKey(emphasizedEdgeIds, emphasizedEdgeIds.join('|'));
   const stableEmphasizedVertexIds = useStableByKey(
     emphasizedVertexIds,
     emphasizedVertexIds.join('|'),
@@ -380,11 +385,13 @@ export function BoardViewport({
         },
         selectableTargets: stableSelectableTargets,
         highlightedHexIds: stableHighlightedHexIds,
+        emphasizedEdgeIds: stableEmphasizedEdgeIds,
         emphasizedVertexIds: stableEmphasizedVertexIds,
         inventorSelectionActive,
         inventorSelectedHexId,
         inventorPendingHexId,
         numberTokenSwap: stableNumberTokenSwap,
+        numberTokenSwapKey,
         madnessHighlightedHexIds: stableMadnessHighlightedHexIds,
         terrainChange: stableTerrainChange,
         merchantPlacementActive,
@@ -407,9 +414,11 @@ export function BoardViewport({
       inventorSelectedHexId,
       inventorSelectionActive,
       merchantPlacementActive,
+      numberTokenSwapKey,
       reducedMotion,
       showRobberAttention,
       showTargetPulses,
+      stableEmphasizedEdgeIds,
       stableEmphasizedVertexIds,
       stableHighlightedHexIds,
       stableKnights,

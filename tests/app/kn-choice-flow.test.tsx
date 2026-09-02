@@ -37,6 +37,7 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
   BoardViewport: ({
     board,
     selectableTargets,
+    emphasizedEdgeIds = [],
     emphasizedVertexIds = [],
     resourceFlyovers = [],
     progressCardFlyovers = [],
@@ -57,6 +58,7 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
     boardRenderProbe.numberTokenSwaps.push(numberTokenSwap);
     boardRenderProbe.merchantPlacementActive.push(merchantPlacementActive);
     const firstHexId = Object.values(board.hexes)[0]?.id;
+    const firstRoadEdge = Object.values(board.edges).find((edge) => edge.roadOwnerId !== null);
     return (
       <section aria-label="Territory board">
         <button
@@ -84,6 +86,7 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
           )}
         </output>
         <output data-testid="emphasized-vertices">{emphasizedVertexIds.join('|')}</output>
+        <output data-testid="emphasized-road-chain">{emphasizedEdgeIds.join('|')}</output>
         <output data-testid="inventor-selection">
           {inventorSelectionActive ? `active:${inventorSelectedHexId ?? 'none'}` : 'inactive'}
         </output>
@@ -92,6 +95,16 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
         <output data-testid="merchant-placement">
           {merchantPlacementActive ? 'active' : 'inactive'}
         </output>
+        {firstRoadEdge === undefined ? null : (
+          <button
+            type="button"
+            aria-label={`Inspect road ${firstRoadEdge.id}`}
+            onMouseEnter={() => onInspect({ kind: 'EDGE', id: firstRoadEdge.id })}
+            onMouseLeave={() => onInspect(null)}
+          >
+            Inspect road
+          </button>
+        )}
         {selectableTargets.map((target) => (
           <button
             key={`${target.kind}:${target.id}`}
@@ -132,6 +145,32 @@ function renderGame(state: GameState, recentGameEvents: readonly GameEvent[] = [
       <App />
     </MemoryRouter>,
   );
+}
+
+function findBoardEdgePath(board: GameState['board'], length: number) {
+  const walk = (
+    vertexId: (typeof board.vertices)[string]['id'],
+    trail: readonly (typeof board.edges)[string]['id'][],
+  ): readonly (typeof board.edges)[string]['id'][] | null => {
+    if (trail.length === length) return trail;
+    const vertex = board.vertices[vertexId];
+    if (vertex === undefined) return null;
+    for (const nextEdgeId of vertex.connectedEdgeIds) {
+      if (trail.includes(nextEdgeId)) continue;
+      const edge = board.edges[nextEdgeId];
+      if (edge === undefined) continue;
+      const nextVertexId = edge.vertexAId === vertexId ? edge.vertexBId : edge.vertexAId;
+      const result = walk(nextVertexId, [...trail, nextEdgeId]);
+      if (result !== null) return result;
+    }
+    return null;
+  };
+
+  for (const vertex of Object.values(board.vertices)) {
+    const path = walk(vertex.id, []);
+    if (path !== null) return path;
+  }
+  throw new Error(`Could not find a ${length}-edge board path.`);
 }
 
 describe('K+N compact choice flows', () => {
@@ -1346,21 +1385,31 @@ describe('K+N compact choice flows', () => {
       playerId: TEST_PLAYER_IDS[0],
       dice: [3, 4],
     };
-    const fullHistory = [fillerEvent, swapEvent, ...Array<GameEvent>(98).fill(fillerEvent)];
+    const fullHistory = [swapEvent, ...Array<GameEvent>(99).fill(fillerEvent)];
     renderGame(state, fullHistory);
 
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(screen.getByTestId('number-token-swap')).toHaveTextContent(
       `${firstHex.id}|${secondHex.id}`,
     );
-    await act(() => vi.advanceTimersByTimeAsync(2_350));
-    expect(screen.getByTestId('number-token-swap')).toHaveTextContent('');
+
+    await act(() => vi.advanceTimersByTimeAsync(500));
 
     act(() => {
       useAppStore.setState((current) => ({
         recentGameEvents: [fillerEvent],
         gameEventHistory: [...current.gameEventHistory, fillerEvent].slice(-100),
       }));
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_850));
+
+    expect(screen.getByTestId('number-token-swap')).toHaveTextContent('');
+
+    act(() => {
+      useAppStore.setState({
+        recentGameEvents: [swapEvent],
+        gameEventHistory: [swapEvent],
+      });
     });
     await act(() => vi.advanceTimersByTimeAsync(0));
 
@@ -1440,6 +1489,42 @@ describe('K+N compact choice flows', () => {
     await user.hover(screen.getByRole('button', { name: 'Inspect map' }));
 
     expect(boardRenderProbe.emphasizedVertexRefs.at(-1)).toBe(beforeHover);
+  });
+
+  it('highlights and counts the legal road chain passing through a hovered road', async () => {
+    const user = userEvent.setup();
+    const original = knActionState();
+    const roadPath = findBoardEdgePath(original.board, 3);
+    const roadIds = new Set(roadPath);
+    const state: GameState = {
+      ...original,
+      board: {
+        ...original.board,
+        edges: Object.fromEntries(
+          Object.values(original.board.edges).map((edge) => [
+            edge.id,
+            roadIds.has(edge.id) ? { ...edge, roadOwnerId: TEST_PLAYER_IDS[0] } : edge,
+          ]),
+        ),
+      },
+    };
+    renderGame(state);
+    const inspectRoad = screen.getByRole('button', { name: /Inspect road/ });
+
+    await user.hover(inspectRoad);
+
+    expect(
+      screen.getByRole('status', { name: 'Alex’s road chain has 3 roads' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('emphasized-road-chain').textContent?.split('|')).toEqual(
+      expect.arrayContaining([...roadPath]),
+    );
+    expect(document.querySelector('.board-inspector')).toHaveTextContent(
+      'Alex’s road chain · 3 roads',
+    );
+
+    await user.unhover(inspectRoad);
+    expect(screen.queryByRole('status', { name: /road chain has/i })).not.toBeInTheDocument();
   });
 
   it('exposes a developer button that grants one of every K+N Progress Card', async () => {

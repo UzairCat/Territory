@@ -52,6 +52,7 @@ import {
 import {
   calculateLongestRoadLength,
   calculatePublicScore,
+  calculateRoadChainThroughEdge,
   calculateScore,
 } from '../../engine/rules/scoring-rules';
 import {
@@ -689,11 +690,20 @@ function progressCardMovementFlyovers(
   });
 }
 
-function latestNumberTokenSwapEventKey(events: readonly GameEvent[]): string | null {
+function latestNumberTokenSwapEventKey(
+  events: readonly GameEvent[],
+  gameId: string,
+): string | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.type === 'INVENTORS_MADNESS_SWAPPED') {
-      return JSON.stringify(['MADNESS', event.turnNumber, event.hexIds[0], event.hexIds[1]]);
+      return JSON.stringify([
+        'MADNESS',
+        gameId,
+        event.turnNumber,
+        event.hexIds[0],
+        event.hexIds[1],
+      ]);
     }
     if (event?.type !== 'KN_PROGRESS_CARD_RESOLVED' || event.targetIds?.length !== 2) {
       continue;
@@ -706,7 +716,7 @@ function latestNumberTokenSwapEventKey(events: readonly GameEvent[]): string | n
       firstHexId !== undefined &&
       secondHexId !== undefined
     ) {
-      return JSON.stringify(['INVENTOR', event.cardInstanceId, firstHexId, secondHexId]);
+      return JSON.stringify(['INVENTOR', gameId, event.cardInstanceId, firstHexId, secondHexId]);
     }
   }
   return null;
@@ -1119,6 +1129,7 @@ export function GameScreen() {
           .map((event) => event.type)
           .join(',')}`;
   const lastPlayedAudioEventKey = useRef<string | null>(null);
+  const playedNumberTokenSwapKeys = useRef(new Set<string>());
   const [showDebug, setShowDebug] = useState(false);
   const [inspectedTarget, setInspectedTarget] = useState<BoardTarget | null>(null);
   const [localActionError, setActionError] = useState<string | null>(null);
@@ -1477,6 +1488,19 @@ export function GameScreen() {
       ]),
     );
   }, [gameState]);
+  const inspectedRoadChain = useMemo(() => {
+    if (gameState === null || inspectedTarget?.kind !== 'EDGE') return null;
+    const edge = gameState.board.edges[inspectedTarget.id];
+    if (edge?.roadOwnerId === null || edge?.roadOwnerId === undefined) return null;
+    const edgeIds = calculateRoadChainThroughEdge(gameState, edge.id);
+    if (edgeIds.length === 0) return null;
+    return {
+      edgeIds,
+      ownerId: edge.roadOwnerId,
+      ownerName: gameState.players[edge.roadOwnerId]?.name ?? 'Player',
+      color: playerColors[edge.roadOwnerId] ?? '#f0cf6a',
+    };
+  }, [gameState, inspectedTarget, playerColors]);
   const highlightedHexIds = useMemo(() => {
     if (gameState?.turn.dice === null || gameState?.turn.dice === undefined) return [];
     const total = gameState.turn.dice[0] + gameState.turn.dice[1];
@@ -1569,26 +1593,48 @@ export function GameScreen() {
       ),
     [gameState, onlineViewerPlayerId, recentGameEvents],
   );
-  const latestNumberTokenSwapKey = latestNumberTokenSwapEventKey(gameEventHistory);
+  const latestNumberTokenSwapKey = latestNumberTokenSwapEventKey(
+    gameEventHistory,
+    gameState?.config.gameId ?? 'unavailable-game',
+  );
 
   useEffect(() => {
-    if (latestNumberTokenSwapKey === null) return undefined;
-    const parsed = JSON.parse(latestNumberTokenSwapKey) as [string, string | number, HexId, HexId];
-    const hexIds = [parsed[2], parsed[3]] as const;
-    const showAnimation = globalThis.setTimeout(
-      () => setNumberTokenSwapAnimation({ key: latestNumberTokenSwapKey, hexIds }),
-      0,
-    );
+    if (
+      latestNumberTokenSwapKey === null ||
+      playedNumberTokenSwapKeys.current.has(latestNumberTokenSwapKey)
+    ) {
+      return undefined;
+    }
+    const parsed = JSON.parse(latestNumberTokenSwapKey) as [
+      string,
+      string,
+      string | number,
+      HexId,
+      HexId,
+    ];
+    const hexIds = [parsed[3], parsed[4]] as const;
+    const showAnimation = globalThis.setTimeout(() => {
+      playedNumberTokenSwapKeys.current.add(latestNumberTokenSwapKey);
+      while (playedNumberTokenSwapKeys.current.size > 24) {
+        const oldestKey = playedNumberTokenSwapKeys.current.values().next().value;
+        if (oldestKey === undefined) break;
+        playedNumberTokenSwapKeys.current.delete(oldestKey);
+      }
+      setNumberTokenSwapAnimation({ key: latestNumberTokenSwapKey, hexIds });
+    }, 0);
+    return () => globalThis.clearTimeout(showAnimation);
+  }, [latestNumberTokenSwapKey]);
+
+  const activeNumberTokenSwapKey = numberTokenSwapAnimation?.key ?? null;
+  useEffect(() => {
+    if (activeNumberTokenSwapKey === null) return undefined;
     const clearAnimation = globalThis.setTimeout(() => {
       setNumberTokenSwapAnimation((current) =>
-        current?.key === latestNumberTokenSwapKey ? null : current,
+        current?.key === activeNumberTokenSwapKey ? null : current,
       );
     }, 2_350);
-    return () => {
-      globalThis.clearTimeout(showAnimation);
-      globalThis.clearTimeout(clearAnimation);
-    };
-  }, [latestNumberTokenSwapKey]);
+    return () => globalThis.clearTimeout(clearAnimation);
+  }, [activeNumberTokenSwapKey]);
   const numberTokenSwap = numberTokenSwapAnimation?.hexIds ?? null;
   const terrainChange = useMemo(() => {
     const reclaimed = recentGameEvents.find(
@@ -1636,7 +1682,10 @@ export function GameScreen() {
     }
   }
   const progressTooltipResetSignal = `${progressTooltipResetSequence}`;
-  const inspection = describeTarget(gameState, inspectedTarget);
+  const inspection =
+    inspectedRoadChain === null
+      ? describeTarget(gameState, inspectedTarget)
+      : `${inspectedRoadChain.ownerName}’s road chain · ${inspectedRoadChain.edgeIds.length} road${inspectedRoadChain.edgeIds.length === 1 ? '' : 's'}`;
   const turnFeedback = recentEventMessage(recentGameEvents, gameState);
   const setupProgress = getSetupProgress(gameState);
   const discardInteraction =
@@ -3248,11 +3297,13 @@ export function GameScreen() {
             showDebugIds={showDebug}
             selectableTargets={selectableTargets}
             highlightedHexIds={highlightedHexIds}
+            emphasizedEdgeIds={inspectedRoadChain?.edgeIds ?? []}
             emphasizedVertexIds={emphasizedVertexIds}
             inventorSelectionActive={inventorSelectionActive}
             inventorSelectedHexId={inventorSelectedHexId}
             inventorPendingHexId={inventorPendingHexId ?? reclamationSelectedHexId}
             numberTokenSwap={numberTokenSwap}
+            numberTokenSwapKey={activeNumberTokenSwapKey}
             madnessHighlightedHexIds={gameState.inventorsMadness?.pendingHexIds ?? []}
             terrainChange={terrainChange}
             merchantPlacementActive={knBoardChoice?.purpose === 'MERCHANT_HEX'}
@@ -3286,6 +3337,28 @@ export function GameScreen() {
             onInspect={setInspectedTarget}
             onSelect={selectBoardTarget}
           />
+          {inspectedRoadChain === null ? null : (
+            <aside
+              className="road-chain-peek"
+              role="status"
+              aria-label={`${inspectedRoadChain.ownerName}’s road chain has ${inspectedRoadChain.edgeIds.length} road${inspectedRoadChain.edgeIds.length === 1 ? '' : 's'}`}
+              style={{ '--road-chain-color': inspectedRoadChain.color } as CSSProperties}
+            >
+              <span className="road-chain-peek__route" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <span>
+                <small>{inspectedRoadChain.ownerName}</small>
+                <strong>Road chain</strong>
+              </span>
+              <b>
+                {inspectedRoadChain.edgeIds.length}
+                <small>{inspectedRoadChain.edgeIds.length === 1 ? 'road' : 'roads'}</small>
+              </b>
+            </aside>
+          )}
           <BarbarianTracker
             state={gameState}
             selectablePositions={knTrackChoice?.eligibleIds.map(Number) ?? []}

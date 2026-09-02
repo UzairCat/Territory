@@ -118,45 +118,85 @@ function oppositeVertexId(state: GameState, edgeId: EdgeId, vertexId: VertexId):
  * Finds the longest edge-simple trail in a player's road graph. An opponent
  * building may be an endpoint, but it cannot be crossed to join two roads.
  */
-export function calculateLongestRoadLength(state: GameState, playerId: PlayerId): number {
+function findLongestRoadTrail(
+  state: GameState,
+  playerId: PlayerId,
+  requiredEdgeId: EdgeId | null,
+): readonly EdgeId[] {
   const ownedEdges = new Set(
     Object.values(state.board.edges)
       .filter((edge) => edge.roadOwnerId === playerId)
       .map((edge) => edge.id),
   );
-  if (ownedEdges.size === 0) return 0;
+  if (ownedEdges.size === 0 || (requiredEdgeId !== null && !ownedEdges.has(requiredEdgeId))) {
+    return [];
+  }
 
-  const search = (vertexId: VertexId, usedEdges: ReadonlySet<EdgeId>): number => {
-    const vertex = state.board.vertices[vertexId];
-    if (vertex === undefined) return usedEdges.size;
-
-    const occupyingKnight = Object.values(state.players)
+  const knightOwnerById = new Map(
+    Object.values(state.players)
       .flatMap((player) => player.knights)
-      .find((knight) => knight.id === vertex.knightId);
+      .map((knight) => [knight.id, knight.ownerId] as const),
+  );
+  let longest: readonly EdgeId[] = [];
+
+  const search = (
+    vertexId: VertexId,
+    usedEdges: ReadonlySet<EdgeId>,
+    trail: readonly EdgeId[],
+  ): void => {
+    if (
+      trail.length > longest.length &&
+      (requiredEdgeId === null || usedEdges.has(requiredEdgeId))
+    ) {
+      longest = trail;
+    }
+    const vertex = state.board.vertices[vertexId];
+    if (vertex === undefined) return;
+    const occupyingKnightOwnerId =
+      vertex.knightId === null || vertex.knightId === undefined
+        ? undefined
+        : knightOwnerById.get(vertex.knightId);
+
     const blockedByOpponent =
       usedEdges.size > 0 &&
       ((vertex.building !== null && vertex.building.ownerId !== playerId) ||
-        (occupyingKnight !== undefined && occupyingKnight.ownerId !== playerId));
-    if (blockedByOpponent) return usedEdges.size;
+        (occupyingKnightOwnerId !== undefined && occupyingKnightOwnerId !== playerId));
+    if (blockedByOpponent) return;
 
-    let longest = usedEdges.size;
     for (const edgeId of vertex.connectedEdgeIds) {
       if (!ownedEdges.has(edgeId) || usedEdges.has(edgeId)) continue;
       const nextVertexId = oppositeVertexId(state, edgeId, vertexId);
       if (nextVertexId === null) continue;
       const nextUsedEdges = new Set(usedEdges);
       nextUsedEdges.add(edgeId);
-      longest = Math.max(longest, search(nextVertexId, nextUsedEdges));
+      search(nextVertexId, nextUsedEdges, [...trail, edgeId]);
     }
-    return longest;
   };
 
-  let longest = 0;
   for (const vertex of Object.values(state.board.vertices)) {
     if (!vertex.connectedEdgeIds.some((edgeId) => ownedEdges.has(edgeId))) continue;
-    longest = Math.max(longest, search(vertex.id, new Set()));
+    search(vertex.id, new Set(), []);
   }
   return longest;
+}
+
+/** Returns the owner's longest legal road trail that includes the inspected edge. */
+export function calculateRoadChainThroughEdge(
+  state: GameState,
+  inspectedEdgeId: EdgeId,
+): readonly EdgeId[] {
+  const ownerId = state.board.edges[inspectedEdgeId]?.roadOwnerId;
+  return ownerId === null || ownerId === undefined
+    ? []
+    : findLongestRoadTrail(state, ownerId, inspectedEdgeId);
+}
+
+/**
+ * Finds the longest edge-simple trail in a player's road graph. An opponent
+ * building may be an endpoint, but it cannot be crossed to join two roads.
+ */
+export function calculateLongestRoadLength(state: GameState, playerId: PlayerId): number {
+  return findLongestRoadTrail(state, playerId, null).length;
 }
 
 function resolveAwardHolder(
