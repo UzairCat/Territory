@@ -20,6 +20,7 @@ type KNInteraction = Extract<GameState['pendingInteraction'], { readonly type: '
 interface KNChoiceTrayProps {
   readonly state: GameState;
   readonly interaction: KNInteraction;
+  readonly publicCommodityCounts?: Readonly<Record<string, number>>;
   readonly errorMessage: string | null;
   readonly selections?: readonly string[] | undefined;
   readonly onSelectionsChange?: ((selections: readonly string[]) => void) | undefined;
@@ -71,6 +72,7 @@ function resourceLabel(resourceId: ResourceId): string {
 export function KNChoiceTray({
   state,
   interaction,
+  publicCommodityCounts,
   errorMessage,
   selections: controlledSelections,
   onSelectionsChange,
@@ -460,10 +462,12 @@ export function KNChoiceTray({
                 ? interaction.eligibleIds.map((id) => {
                     const player = state.players[id];
                     if (player === undefined) return null;
-                    const commodityCount = COMMODITIES.reduce(
-                      (total, commodity) => total + handCardCount(player, commodity.id),
-                      0,
-                    );
+                    const commodityCount =
+                      publicCommodityCounts?.[id] ??
+                      COMMODITIES.reduce(
+                        (total, commodity) => total + handCardCount(player, commodity.id),
+                        0,
+                      );
                     const detail = choosingSpyPlayer
                       ? `${player.knProgressCardIds.length} Progress Card${player.knProgressCardIds.length === 1 ? '' : 's'}`
                       : choosingHarborPlayer

@@ -3525,6 +3525,16 @@ export function GameScreen() {
               key={`${knTrayChoice.purpose}-${knTrayChoice.playerId}-${knTrayChoice.sourceCardId ?? 'roll'}-${knTraySelectedHexId}-${knTrayChoice.eligibleIds.join('.')}`}
               state={gameState}
               interaction={knTrayChoice}
+              {...(onlineRoom?.game?.playerCards === undefined
+                ? {}
+                : {
+                    publicCommodityCounts: Object.fromEntries(
+                      Object.entries(onlineRoom.game.playerCards).map(([playerId, cards]) => [
+                        playerId,
+                        cards.commodityCards,
+                      ]),
+                    ),
+                  })}
               errorMessage={actionError}
               {...(knDirectHandChoice === null
                 ? {}

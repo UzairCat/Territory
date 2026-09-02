@@ -508,6 +508,88 @@ describe('K+N compact choice flows', () => {
     );
   });
 
+  it('shows the public commodity count for a Commercial Harbor partner online', () => {
+    const original = knActionState();
+    if (original.kn === null) throw new Error('Commercial Harbor fixture has no K+N state.');
+    const definition = KN_PROGRESS_CARDS.find(
+      (candidate) => candidate.effect === 'COMMERCIAL_HARBOR',
+    );
+    const card = Object.values(original.kn.progressCards).find(
+      (candidate) => candidate.definitionId === definition?.id,
+    );
+    if (card === undefined) throw new Error('Commercial Harbor fixture card is missing.');
+    const actorId = TEST_PLAYER_IDS[0];
+    const targetId = TEST_PLAYER_IDS[1];
+    const state: GameState = {
+      ...original,
+      players: {
+        ...original.players,
+        [actorId]: {
+          ...original.players[actorId]!,
+          resources: resourceBundle([[RESOURCE_IDS.wood, 1]]),
+        },
+        [targetId]: {
+          ...original.players[targetId]!,
+          commodities: resourceBundle([[COMMODITY_IDS.cloth, 2]]),
+        },
+      },
+      turn: { ...original.turn, phase: 'CARD_RESOLUTION' },
+      pendingInteraction: {
+        type: 'KN_SELECTION',
+        playerId: actorId,
+        purpose: 'COMMERCIAL_HARBOR_PLAYER',
+        sourceCardId: card.instanceId,
+        eligibleIds: [targetId],
+        minimumSelections: 1,
+        maximumSelections: 1,
+        queue: [actorId],
+        canCancel: true,
+        context: { activePlayerId: actorId, remainingOpponents: [targetId] },
+      },
+    };
+    const game = createOnlineGameView(state, actorId, 1, [], [], false, false, null, null);
+    useOnlineStore.setState({
+      connection: 'CONNECTED',
+      credentials: { roomCode: 'HARBOR', playerId: actorId, resumeToken: 'h'.repeat(32) },
+      room: {
+        protocolVersion: 1,
+        code: 'HARBOR',
+        phase: 'PLAYING',
+        viewerPlayerId: actorId,
+        hostPlayerId: actorId,
+        players: state.config.players.map((player) => ({
+          id: player.id,
+          name: player.name,
+          colorId: player.colorId,
+          connected: true,
+          ready: true,
+          host: player.id === actorId,
+        })),
+        settings: {
+          mapId: state.config.mapId,
+          modeId: state.config.modeId,
+          size: 2,
+          seed: state.config.seed,
+          turnTimeSeconds: state.config.turnTimeSeconds ?? 60,
+          victoryTarget: state.config.victoryTarget,
+          discardThreshold: state.config.rules.discardThreshold,
+          hideBankCards: state.config.hideBankCards ?? false,
+          friendlyRobber: state.config.friendlyRobber ?? false,
+          balancedDice: state.config.balancedDice ?? false,
+          inventorsMadness: state.config.inventorsMadness ?? false,
+        },
+        game,
+      },
+    });
+
+    expect(game.state.players[targetId]?.commodities).toEqual({});
+    renderGame(game.state);
+
+    expect(
+      screen.getByRole('button', { name: 'Visit Sam with Commercial Harbor' }),
+    ).toHaveTextContent('2 commodities');
+  });
+
   it('lets Master Merchant take duplicate cards on a two-card selection shelf', async () => {
     const user = userEvent.setup();
     const original = knActionState();
