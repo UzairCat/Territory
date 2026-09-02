@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BoardViewport, type BoardViewportProps } from '../../src/board-renderer/BoardViewport';
+import type { TerritoryBoardOptions } from '../../src/board-renderer/TerritoryBoard';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import type { BoardState, KnightState } from '../../src/engine/core/game-state';
 import { edgeId, hexId, knightId, vertexId } from '../../src/engine/core/ids';
@@ -17,14 +18,16 @@ const rendererProbe = vi.hoisted(() => ({
   destroyed: 0,
   fitCalls: 0,
   zoomFactors: [] as number[],
+  constructedOptions: [] as unknown[],
   updatedBoards: [] as unknown[],
   updatedOptions: [] as unknown[],
 }));
 
 vi.mock('../../src/board-renderer/TerritoryBoard', () => ({
   TerritoryBoard: class {
-    constructor(..._arguments: unknown[]) {
+    constructor(_host: unknown, _board: unknown, options: unknown) {
       rendererProbe.constructed += 1;
+      rendererProbe.constructedOptions.push(options);
     }
 
     setDebugIdsVisible(): void {}
@@ -66,6 +69,7 @@ describe('board viewport renderer lifecycle', () => {
     rendererProbe.destroyed = 0;
     rendererProbe.fitCalls = 0;
     rendererProbe.zoomFactors.length = 0;
+    rendererProbe.constructedOptions.length = 0;
     rendererProbe.updatedBoards.length = 0;
     rendererProbe.updatedOptions.length = 0;
   });
@@ -185,6 +189,46 @@ describe('board viewport renderer lifecycle', () => {
     expect(rendererProbe.constructed).toBe(1);
     expect(rendererProbe.updatedBoards[0]).toBe(state.board);
     expect(rendererProbe.updatedOptions[0]).toMatchObject({ emphasizedEdgeIds: hoveredChain });
+  });
+
+  it('translates a road hover point into viewport coordinates for its nearby info card', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const onInspect = vi.fn();
+    render(
+      <BoardViewport
+        board={state.board}
+        players={state.players}
+        knState={state.kn}
+        showDebugIds={false}
+        selectableTargets={[]}
+        highlightedHexIds={[]}
+        animatedTarget={null}
+        robberMove={null}
+        playerColors={{ [TEST_PLAYER_IDS[0]]: '#2864c7' }}
+        onInspect={onInspect}
+        onSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+    const host = document.querySelector<HTMLElement>('.board-viewport');
+    if (host === null) throw new Error('Board viewport host did not render.');
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({
+      x: 120,
+      y: 80,
+      left: 120,
+      top: 80,
+      right: 920,
+      bottom: 680,
+      width: 800,
+      height: 600,
+      toJSON: () => ({}),
+    });
+    const options = rendererProbe.constructedOptions[0] as TerritoryBoardOptions;
+    const target = { kind: 'EDGE', id: edgeId('hovered-road') } as const;
+
+    options.onInspect(target, { x: 25, y: 35 });
+
+    expect(onInspect).toHaveBeenCalledWith(target, { x: 145, y: 115 });
   });
 
   it('forwards a unique event key when the same number-token pair is swapped again', async () => {
@@ -329,7 +373,7 @@ describe('board viewport renderer lifecycle', () => {
     expect(onReady).toHaveBeenCalledOnce();
   });
 
-  it('provides visible controls for zooming and refitting the board', async () => {
+  it('provides a Fit control without separate zoom buttons', async () => {
     const user = userEvent.setup();
     const state = createTestGameState('ACTION_PHASE');
     render(
@@ -349,11 +393,11 @@ describe('board viewport renderer lifecycle', () => {
     );
     await waitFor(() => expect(rendererProbe.mounted).toBe(1));
 
-    await user.click(screen.getByRole('button', { name: 'Zoom board in' }));
-    await user.click(screen.getByRole('button', { name: 'Zoom board out' }));
     await user.click(screen.getByRole('button', { name: 'Fit screen' }));
 
-    expect(rendererProbe.zoomFactors).toEqual([1.22, 0.82]);
+    expect(screen.queryByRole('button', { name: 'Zoom board in' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Zoom board out' })).not.toBeInTheDocument();
+    expect(rendererProbe.zoomFactors).toEqual([]);
     expect(rendererProbe.fitCalls).toBe(1);
   });
 });

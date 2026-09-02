@@ -1132,6 +1132,9 @@ export function GameScreen() {
   const playedNumberTokenSwapKeys = useRef(new Set<string>());
   const [showDebug, setShowDebug] = useState(false);
   const [inspectedTarget, setInspectedTarget] = useState<BoardTarget | null>(null);
+  const [roadChainPeekPosition, setRoadChainPeekPosition] = useState<BoardViewportPoint | null>(
+    null,
+  );
   const [localActionError, setActionError] = useState<string | null>(null);
   const actionError = onlineError?.message ?? localActionError;
   const [constructionType, setConstructionType] = useState<ConstructionType | null>(null);
@@ -3334,7 +3337,10 @@ export function GameScreen() {
                 knightCommand !== null)
             }
             onReady={() => setBoardReady(true)}
-            onInspect={setInspectedTarget}
+            onInspect={(target, position) => {
+              setInspectedTarget(target);
+              setRoadChainPeekPosition(target?.kind === 'EDGE' ? (position ?? null) : null);
+            }}
             onSelect={selectBoardTarget}
           />
           {inspectedRoadChain === null ? null : (
@@ -3342,7 +3348,13 @@ export function GameScreen() {
               className="road-chain-peek"
               role="status"
               aria-label={`${inspectedRoadChain.ownerName}’s road chain has ${inspectedRoadChain.edgeIds.length} road${inspectedRoadChain.edgeIds.length === 1 ? '' : 's'}`}
-              style={{ '--road-chain-color': inspectedRoadChain.color } as CSSProperties}
+              style={
+                {
+                  '--road-chain-color': inspectedRoadChain.color,
+                  '--road-chain-x': `${roadChainPeekPosition?.x ?? 24}px`,
+                  '--road-chain-y': `${roadChainPeekPosition?.y ?? 72}px`,
+                } as CSSProperties
+              }
             >
               <span className="road-chain-peek__route" aria-hidden="true">
                 <i />

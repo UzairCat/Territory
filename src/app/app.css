@@ -3379,7 +3379,7 @@ input[type='checkbox'] {
   padding: 0.22rem;
   border: 1px solid rgb(226 238 231 / 24%);
   border-radius: 0.72rem;
-  grid-template-columns: auto auto auto;
+  grid-template-columns: auto;
   gap: 0.18rem;
   min-height: 0;
   color: #d9e4de;
@@ -3398,12 +3398,6 @@ input[type='checkbox'] {
   background: rgb(18 43 39 / 88%);
 }
 
-.game-board-stage .board-controls .board-controls__zoom {
-  padding: 0;
-  color: #f2dda0;
-  font-size: 1.12rem;
-}
-
 .game-board-stage .board-controls .button:not(:disabled):hover {
   border-color: #e4cb78;
   color: #fff5d1;
@@ -3411,10 +3405,10 @@ input[type='checkbox'] {
 }
 
 .road-chain-peek {
-  position: absolute;
-  z-index: 9;
-  top: 1.15rem;
-  left: 1.15rem;
+  position: fixed;
+  z-index: 30;
+  top: clamp(3.1rem, var(--road-chain-y), calc(100vh - 3.1rem));
+  left: clamp(0.55rem, calc(var(--road-chain-x) + 0.9rem), calc(100vw - 11.75rem));
   display: grid;
   min-width: 10.5rem;
   padding: 0.42rem 0.55rem 0.42rem 0.45rem;
@@ -3435,6 +3429,7 @@ input[type='checkbox'] {
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 7%),
     0 0.55rem 1.25rem rgb(0 0 0 / 34%);
+  transform: translateY(-50%);
   animation: road-chain-peek-in 140ms ease-out both;
   backdrop-filter: blur(0.45rem);
 }
@@ -3514,12 +3509,12 @@ input[type='checkbox'] {
 @keyframes road-chain-peek-in {
   from {
     opacity: 0;
-    transform: translateY(-0.25rem) scale(0.97);
+    transform: translateY(calc(-50% - 0.25rem)) scale(0.97);
   }
 
   to {
     opacity: 1;
-    transform: none;
+    transform: translateY(-50%) scale(1);
   }
 }
 
@@ -4837,28 +4832,6 @@ input[type='checkbox'] {
   box-shadow:
     inset 0 0 1.2rem rgb(198 45 52 / 13%),
     0 0 0 1px rgb(232 95 99 / 10%);
-}
-
-.hand-tray__unsafe-warning {
-  z-index: 8;
-  display: inline-flex;
-  width: max-content;
-  height: max-content;
-  min-width: 3.7rem;
-  padding: 0.32rem 0.45rem;
-  border: 1px solid rgb(255 164 158 / 64%);
-  border-radius: 0.55rem;
-  align-items: center;
-  align-self: center;
-  justify-content: center;
-  gap: 0.24rem;
-  color: #ffe2da;
-  font-size: 0.52rem;
-  font-weight: 850;
-  line-height: 1;
-  pointer-events: none;
-  background: rgb(137 34 40 / 92%);
-  box-shadow: 0 0.28rem 0.7rem rgb(39 0 4 / 34%);
 }
 
 .hand-tray__heading {

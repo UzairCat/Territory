@@ -52,7 +52,7 @@ export interface BoardViewportProps {
   readonly progressCardFlyovers?: readonly ProgressCardFlyover[];
   readonly showKeyboardTargetControls?: boolean;
   readonly onReady?: () => void;
-  readonly onInspect: (target: BoardTarget | null) => void;
+  readonly onInspect: (target: BoardTarget | null, position?: BoardViewportPoint) => void;
   readonly onSelect: (target: BoardTarget, position?: BoardViewportPoint) => void;
 }
 
@@ -376,7 +376,16 @@ export function BoardViewport({
     () => ({
       board: stableBoard,
       options: {
-        onInspect: (target: BoardTarget | null) => inspectRef.current(target),
+        onInspect: (target: BoardTarget | null, point?: BoardViewportPoint) => {
+          if (point === undefined) {
+            inspectRef.current(target);
+            return;
+          }
+          const host = hostRef.current;
+          if (host === null) return;
+          const bounds = host.getBoundingClientRect();
+          inspectRef.current(target, { x: bounds.left + point.x, y: bounds.top + point.y });
+        },
         onSelect: (target: BoardTarget, point: BoardViewportPoint) => {
           const host = hostRef.current;
           if (host === null) return;
@@ -555,16 +564,7 @@ export function BoardViewport({
   return (
     <section className="board-shell" aria-label="Territory board">
       <div ref={hostRef} className="board-viewport" />
-      <div className="board-controls" role="group" aria-label="Board zoom controls">
-        <Button
-          className="board-controls__zoom"
-          variant="ghost"
-          aria-label="Zoom board out"
-          title="Zoom out"
-          onClick={() => rendererRef.current?.zoomBy(0.82)}
-        >
-          <span aria-hidden="true">−</span>
-        </Button>
+      <div className="board-controls" role="group" aria-label="Board view controls">
         <Button
           className="board-controls__fit"
           variant="ghost"
@@ -573,15 +573,6 @@ export function BoardViewport({
           onClick={() => rendererRef.current?.fitBoard()}
         >
           Fit
-        </Button>
-        <Button
-          className="board-controls__zoom"
-          variant="ghost"
-          aria-label="Zoom board in"
-          title="Zoom in"
-          onClick={() => rendererRef.current?.zoomBy(1.22)}
-        >
-          <span aria-hidden="true">+</span>
         </Button>
       </div>
     </section>

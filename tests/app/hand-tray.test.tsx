@@ -60,8 +60,9 @@ describe('active player hand', () => {
       />,
     );
 
-    expect(screen.getByRole('status')).toHaveTextContent('Unsafe 8/7');
-    expect(screen.getByLabelText('Active player resource hand')).toHaveClass('hand-tray--unsafe');
+    const unsafeTray = screen.getByLabelText('Active player resource hand');
+    expect(unsafeTray).toHaveClass('hand-tray--unsafe');
+    expect(within(unsafeTray).queryByText(/Unsafe/i)).not.toBeInTheDocument();
 
     const safeState = {
       ...state,
@@ -78,7 +79,6 @@ describe('active player hand', () => {
         onPlayProgressCard={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Active player resource hand')).not.toHaveClass(
       'hand-tray--unsafe',
     );

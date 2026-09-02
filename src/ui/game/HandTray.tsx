@@ -213,7 +213,6 @@ export function HandTray({
   const handCount = player === undefined ? 0 : resourceCardCount(player);
   const safeHandLimit = player === undefined ? 0 : getDiscardSafeLimit(state, player.id);
   const unsafeHand = !ignoreUnsafeHandLimit && player !== undefined && handCount > safeHandLimit;
-  const unsafeHandMessageId = player === undefined ? undefined : `unsafe-hand-${player.id}`;
 
   const openCardTooltip = (
     element: HTMLElement,
@@ -243,7 +242,6 @@ export function HandTray({
     <section
       className={`hand-tray ${animateResources ? 'hand-tray--resources-changed' : ''} ${unsafeHand ? 'hand-tray--unsafe' : ''}`}
       data-hand-player={player?.id}
-      aria-describedby={unsafeHand ? unsafeHandMessageId : undefined}
       aria-label={
         resourceSelector === undefined
           ? 'Active player resource hand'
@@ -255,17 +253,6 @@ export function HandTray({
       }}
     >
       <div className="resource-hand" aria-label="Resource cards">
-        {unsafeHand ? (
-          <span
-            id={unsafeHandMessageId}
-            className="hand-tray__unsafe-warning"
-            role="status"
-            title={`Your ${handCount}-card hand exceeds the safe limit of ${safeHandLimit}`}
-          >
-            <span aria-hidden="true">⚠</span>
-            Unsafe {handCount}/{safeHandLimit}
-          </span>
-        ) : null}
         {HAND_GOODS.flatMap((resource) => {
           const ownedCount = isCommodityId(resource.id)
             ? (player?.commodities[resource.id] ?? 0)

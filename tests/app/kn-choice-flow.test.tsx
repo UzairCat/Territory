@@ -99,7 +99,9 @@ vi.mock('../../src/board-renderer/BoardViewport', () => ({
           <button
             type="button"
             aria-label={`Inspect road ${firstRoadEdge.id}`}
-            onMouseEnter={() => onInspect({ kind: 'EDGE', id: firstRoadEdge.id })}
+            onMouseEnter={() =>
+              onInspect({ kind: 'EDGE', id: firstRoadEdge.id }, { x: 500, y: 300 })
+            }
             onMouseLeave={() => onInspect(null)}
           >
             Inspect road
@@ -1513,9 +1515,14 @@ describe('K+N compact choice flows', () => {
 
     await user.hover(inspectRoad);
 
-    expect(
-      screen.getByRole('status', { name: 'Alex’s road chain has 3 roads' }),
-    ).toBeInTheDocument();
+    const roadChainPeek = screen.getByRole('status', {
+      name: 'Alex’s road chain has 3 roads',
+    });
+    expect(roadChainPeek).toBeInTheDocument();
+    expect(roadChainPeek).toHaveStyle({
+      '--road-chain-x': '500px',
+      '--road-chain-y': '300px',
+    });
     expect(screen.getByTestId('emphasized-road-chain').textContent?.split('|')).toEqual(
       expect.arrayContaining([...roadPath]),
     );

@@ -25,7 +25,7 @@ import {
 } from './performance';
 
 export interface TerritoryBoardOptions {
-  readonly onInspect: (target: BoardTarget | null) => void;
+  readonly onInspect: (target: BoardTarget | null, position?: BoardViewportPoint) => void;
   readonly onSelect: (target: BoardTarget, position: BoardViewportPoint) => void;
   readonly selectableTargets: readonly BoardTarget[];
   readonly highlightedHexIds: readonly HexId[];
@@ -1775,9 +1775,9 @@ export class TerritoryBoard {
       drawEdge(false);
       graphic.eventMode = 'static';
       graphic.cursor = selectable ? 'pointer' : edge.roadOwnerId === null ? 'default' : 'help';
-      graphic.on('pointerover', () => {
+      graphic.on('pointerover', (event: FederatedPointerEvent) => {
         if (selectable) drawEdge(true);
-        this.onInspect(edge.target);
+        this.onInspect(edge.target, event.global);
       });
       graphic.on('pointerout', () => {
         drawEdge(false);
@@ -1785,7 +1785,7 @@ export class TerritoryBoard {
       });
       graphic.on('pointertap', (event: FederatedPointerEvent) => {
         if (selectable) this.onSelect(edge.target, event.global);
-        else this.onInspect(edge.target);
+        else this.onInspect(edge.target, event.global);
       });
       this.targets.set(targetKey(edge.target), graphic);
       if (selectable && this.showTargetPulses) {
