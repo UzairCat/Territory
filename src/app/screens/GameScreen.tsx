@@ -678,7 +678,7 @@ function latestNumberTokenSwapEventKey(events: readonly GameEvent[]): string | n
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.type === 'INVENTORS_MADNESS_SWAPPED') {
-      return JSON.stringify([index, event.hexIds[0], event.hexIds[1]]);
+      return JSON.stringify(['MADNESS', event.turnNumber, event.hexIds[0], event.hexIds[1]]);
     }
     if (event?.type !== 'KN_PROGRESS_CARD_RESOLVED' || event.targetIds?.length !== 2) {
       continue;
@@ -691,7 +691,7 @@ function latestNumberTokenSwapEventKey(events: readonly GameEvent[]): string | n
       firstHexId !== undefined &&
       secondHexId !== undefined
     ) {
-      return JSON.stringify([index, firstHexId, secondHexId]);
+      return JSON.stringify(['INVENTOR', event.cardInstanceId, firstHexId, secondHexId]);
     }
   }
   return null;
@@ -1548,8 +1548,8 @@ export function GameScreen() {
 
   useEffect(() => {
     if (latestNumberTokenSwapKey === null) return undefined;
-    const parsed = JSON.parse(latestNumberTokenSwapKey) as [number, HexId, HexId];
-    const hexIds = [parsed[1], parsed[2]] as const;
+    const parsed = JSON.parse(latestNumberTokenSwapKey) as [string, string | number, HexId, HexId];
+    const hexIds = [parsed[2], parsed[3]] as const;
     const showAnimation = globalThis.setTimeout(
       () => setNumberTokenSwapAnimation({ key: latestNumberTokenSwapKey, hexIds }),
       0,

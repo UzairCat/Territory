@@ -1231,6 +1231,60 @@ describe('K+N compact choice flows', () => {
     );
   });
 
+  it('does not replay a completed Inventor animation when bounded event history shifts', async () => {
+    vi.useFakeTimers();
+    const state = knActionState();
+    if (state.kn === null) throw new Error('Inventor animation fixture has no K+N state.');
+    const definition = KN_PROGRESS_CARDS.find((candidate) => candidate.effect === 'INVENTOR');
+    const card = Object.values(state.kn.progressCards).find(
+      (candidate) => candidate.definitionId === definition?.id,
+    );
+    const eligibleHexes = Object.values(state.board.hexes).filter(
+      (hex) => hex.numberToken !== null && ![2, 6, 8, 12].includes(hex.numberToken),
+    );
+    const firstHex = eligibleHexes[0];
+    const secondHex = eligibleHexes[1];
+    if (
+      definition === undefined ||
+      card === undefined ||
+      firstHex === undefined ||
+      secondHex === undefined
+    ) {
+      throw new Error('Inventor animation fixture is incomplete.');
+    }
+    const swapEvent: GameEvent = {
+      type: 'KN_PROGRESS_CARD_RESOLVED',
+      playerId: TEST_PLAYER_IDS[0],
+      cardInstanceId: card.instanceId,
+      cardDefinitionId: definition.id,
+      targetIds: [firstHex.id, secondHex.id],
+    };
+    const fillerEvent: GameEvent = {
+      type: 'DICE_ROLLED',
+      playerId: TEST_PLAYER_IDS[0],
+      dice: [3, 4],
+    };
+    const fullHistory = [fillerEvent, swapEvent, ...Array<GameEvent>(98).fill(fillerEvent)];
+    renderGame(state, fullHistory);
+
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByTestId('number-token-swap')).toHaveTextContent(
+      `${firstHex.id}|${secondHex.id}`,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(2_350));
+    expect(screen.getByTestId('number-token-swap')).toHaveTextContent('');
+
+    act(() => {
+      useAppStore.setState((current) => ({
+        recentGameEvents: [fillerEvent],
+        gameEventHistory: [...current.gameEventHistory, fillerEvent].slice(-100),
+      }));
+    });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(screen.getByTestId('number-token-swap')).toHaveTextContent('');
+  });
+
   it('lets Reclamation be cancelled from its hand card before or after choosing a tile', async () => {
     const user = userEvent.setup();
     const original = knActionState();

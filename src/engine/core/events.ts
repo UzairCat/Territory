@@ -64,6 +64,7 @@ export type GameEvent =
   | {
       readonly type: 'INVENTORS_MADNESS_SWAPPED';
       readonly hexIds: readonly [HexId, HexId];
+      readonly turnNumber: number;
     }
   | {
       readonly type: 'TERRAIN_RECLAIMED';

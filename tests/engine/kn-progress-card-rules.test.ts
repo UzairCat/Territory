@@ -256,12 +256,24 @@ describe('K+N Science Progress Cards', () => {
     const inventorPlayed = play(inventor.state, inventor.cardId);
     expect(inventorPlayed.ok).toBe(true);
     if (!inventorPlayed.ok) return;
+    expect(inventorPlayed.events).not.toContainEqual(
+      expect.objectContaining({ type: 'KN_PROGRESS_CARD_PLAYED' }),
+    );
     const firstChosen = choose(inventorPlayed.state, ACTIVE, [firstToken.id]);
     expect(firstChosen.ok).toBe(true);
     if (!firstChosen.ok) return;
+    expect(firstChosen.events).not.toContainEqual(
+      expect.objectContaining({ type: 'KN_PROGRESS_CARD_PLAYED' }),
+    );
     const swapped = choose(firstChosen.state, ACTIVE, [secondToken.id]);
     expect(swapped.ok).toBe(true);
     if (!swapped.ok) return;
+    expect(swapped.events).toContainEqual(
+      expect.objectContaining({
+        type: 'KN_PROGRESS_CARD_PLAYED',
+        cardInstanceId: inventor.cardId,
+      }),
+    );
     expect(swapped.state.board.hexes[firstToken.id]?.numberToken).toBe(secondToken.numberToken);
     expect(swapped.state.board.hexes[secondToken.id]?.numberToken).toBe(firstToken.numberToken);
 
@@ -284,9 +296,18 @@ describe('K+N Science Progress Cards', () => {
     const medicinePlayed = play(medicineState, medicine.cardId);
     expect(medicinePlayed.ok).toBe(true);
     if (!medicinePlayed.ok) return;
+    expect(medicinePlayed.events).not.toContainEqual(
+      expect.objectContaining({ type: 'KN_PROGRESS_CARD_PLAYED' }),
+    );
     const upgraded = choose(medicinePlayed.state, ACTIVE, [houseVertex]);
     expect(upgraded.ok).toBe(true);
     if (!upgraded.ok) return;
+    expect(upgraded.events).toContainEqual(
+      expect.objectContaining({
+        type: 'KN_PROGRESS_CARD_PLAYED',
+        cardInstanceId: medicine.cardId,
+      }),
+    );
     expect(upgraded.state.board.vertices[houseVertex]?.building?.type).toBe('MANSION');
     expect(upgraded.state.players[ACTIVE]?.resources).toMatchObject({ ore: 0, grain: 0 });
 

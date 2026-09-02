@@ -313,4 +313,52 @@ describe('game activity log', () => {
     expect(screen.queryByText('Alex played Spy.')).not.toBeInTheDocument();
     expect(screen.queryByText('Alex resolved Spy.')).not.toBeInTheDocument();
   });
+
+  it('announces Medicine and Inventor once when their final actions resolve', () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const medicine = KN_PROGRESS_CARDS.find((card) => card.effect === 'MEDICINE');
+    const inventor = KN_PROGRESS_CARDS.find((card) => card.effect === 'INVENTOR');
+    if (medicine === undefined || inventor === undefined) {
+      throw new Error('Medicine or Inventor definition is missing.');
+    }
+    const medicineCardId = cardInstanceId('activity-medicine');
+    const inventorCardId = cardInstanceId('activity-inventor');
+
+    render(
+      <ActivityLog
+        state={state}
+        events={[
+          {
+            type: 'KN_PROGRESS_CARD_PLAYED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: medicineCardId,
+            cardDefinitionId: medicine.id,
+          },
+          {
+            type: 'KN_PROGRESS_CARD_RESOLVED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: medicineCardId,
+            cardDefinitionId: medicine.id,
+          },
+          {
+            type: 'KN_PROGRESS_CARD_PLAYED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: inventorCardId,
+            cardDefinitionId: inventor.id,
+          },
+          {
+            type: 'KN_PROGRESS_CARD_RESOLVED',
+            playerId: TEST_PLAYER_IDS[0],
+            cardInstanceId: inventorCardId,
+            cardDefinitionId: inventor.id,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText('Alex played Medicine.')).toHaveLength(1);
+    expect(screen.getAllByText('Alex played Inventor.')).toHaveLength(1);
+    expect(screen.queryByText('Alex resolved Medicine.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alex resolved Inventor.')).not.toBeInTheDocument();
+  });
 });

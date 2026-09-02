@@ -49,6 +49,10 @@ interface KNCardResolution {
   readonly events: readonly GameEvent[];
 }
 
+function announcesPlayOnlyWhenResolved(definition: KNProgressCardDefinition): boolean {
+  return definition.effect === 'INVENTOR' || definition.effect === 'MEDICINE';
+}
+
 export function canUseCraneProgressCard(state: GameState, playerId: PlayerId): boolean {
   const player = state.players[playerId];
   if (
@@ -111,6 +115,7 @@ function startCard(
 ): { readonly state: GameState; readonly events: readonly GameEvent[] } {
   const player = state.players[playerId]!;
   const card = state.kn!.progressCards[cardInstanceId]!;
+  const definition = getKNProgressCardDefinition(card.definitionId)!;
   return {
     state: {
       ...state,
@@ -129,14 +134,16 @@ function startCard(
         },
       },
     },
-    events: [
-      {
-        type: 'KN_PROGRESS_CARD_PLAYED',
-        playerId,
-        cardInstanceId,
-        cardDefinitionId: card.definitionId,
-      },
-    ],
+    events: announcesPlayOnlyWhenResolved(definition)
+      ? []
+      : [
+          {
+            type: 'KN_PROGRESS_CARD_PLAYED',
+            playerId,
+            cardInstanceId,
+            cardDefinitionId: card.definitionId,
+          },
+        ],
   };
 }
 
@@ -152,6 +159,22 @@ function finishCard(
   const kn = state.kn!;
   const card = kn.progressCards[cardInstanceId]!;
   const definition = getKNProgressCardDefinition(card.definitionId)!;
+  const events: GameEvent[] = [];
+  if (announcesPlayOnlyWhenResolved(definition)) {
+    events.push({
+      type: 'KN_PROGRESS_CARD_PLAYED',
+      playerId,
+      cardInstanceId,
+      cardDefinitionId: card.definitionId,
+    });
+  }
+  events.push({
+    type: 'KN_PROGRESS_CARD_RESOLVED',
+    playerId,
+    cardInstanceId,
+    cardDefinitionId: card.definitionId,
+    ...detail,
+  });
   return {
     state: {
       ...state,
@@ -169,15 +192,7 @@ function finishCard(
         },
       },
     },
-    events: [
-      {
-        type: 'KN_PROGRESS_CARD_RESOLVED',
-        playerId,
-        cardInstanceId,
-        cardDefinitionId: card.definitionId,
-        ...detail,
-      },
-    ],
+    events,
   };
 }
 

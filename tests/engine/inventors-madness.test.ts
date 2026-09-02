@@ -52,6 +52,7 @@ describe("Inventor's Madness", () => {
     expect(secondRound.events).toContainEqual({
       type: 'INVENTORS_MADNESS_SWAPPED',
       hexIds: pending,
+      turnNumber: nextFirstTurn.state.turn.turnNumber,
     });
     expect(secondRound.state.board.hexes[pending[0]]?.numberToken).toBe(secondValue);
     expect(secondRound.state.board.hexes[pending[1]]?.numberToken).toBe(firstValue);

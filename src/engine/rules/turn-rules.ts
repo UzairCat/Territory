@@ -152,7 +152,11 @@ function advanceInventorsMadness(state: GameState): {
           [second.id]: { ...second, numberToken: first.numberToken },
         },
       };
-      events.push({ type: 'INVENTORS_MADNESS_SWAPPED', hexIds: pending });
+      events.push({
+        type: 'INVENTORS_MADNESS_SWAPPED',
+        hexIds: pending,
+        turnNumber: state.turn.turnNumber,
+      });
     }
   }
   const selected = selectMadnessTargets(board, state.random);

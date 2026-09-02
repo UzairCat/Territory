@@ -538,7 +538,13 @@ function eventEntries(event: GameEvent, state: GameState): readonly ActivityEntr
     }
     case 'KN_PROGRESS_CARD_RESOLVED': {
       const definition = getKNProgressCardDefinition(event.cardDefinitionId);
-      if (definition?.effect === 'WAR_DRUMS' || definition?.effect === 'RECLAMATION') return [];
+      if (
+        definition?.effect === 'WAR_DRUMS' ||
+        definition?.effect === 'RECLAMATION' ||
+        definition?.effect === 'INVENTOR' ||
+        definition?.effect === 'MEDICINE'
+      )
+        return [];
       if (definition?.effect === 'SPY') {
         const targetPlayerId = event.targetIds?.[0] as PlayerState['id'] | undefined;
         return [
