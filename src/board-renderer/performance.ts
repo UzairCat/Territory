@@ -6,6 +6,23 @@ export const BOARD_FRAME_RATE_LIMITS = [60, 45, 30] as const;
 
 export type BoardFrameRateLimit = (typeof BOARD_FRAME_RATE_LIMITS)[number];
 
+export const GAME_ELEMENT_SIZES = ['SMALL', 'MEDIUM', 'LARGE', 'VERY_LARGE'] as const;
+
+export type GameElementSize = (typeof GAME_ELEMENT_SIZES)[number];
+
+export function boardPieceScale(size: GameElementSize): number {
+  switch (size) {
+    case 'SMALL':
+      return 0.82;
+    case 'MEDIUM':
+      return 1;
+    case 'LARGE':
+      return 1.14;
+    case 'VERY_LARGE':
+      return 1.28;
+  }
+}
+
 export interface BoardRenderProfile {
   readonly antialias: boolean;
   readonly maximumResolution: number;

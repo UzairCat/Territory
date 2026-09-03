@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardRenderProfile } from '../../src/board-renderer/performance';
+import { boardPieceScale, boardRenderProfile } from '../../src/board-renderer/performance';
 
 describe('board render profiles', () => {
   it('reduces GPU work without changing high-detail defaults', () => {
@@ -15,5 +15,12 @@ describe('board render profiles', () => {
       maximumResolution: 1,
       terrainDetails: false,
     });
+  });
+
+  it('keeps medium pieces at their existing size and provides bounded accessibility steps', () => {
+    expect(boardPieceScale('SMALL')).toBe(0.82);
+    expect(boardPieceScale('MEDIUM')).toBe(1);
+    expect(boardPieceScale('LARGE')).toBe(1.14);
+    expect(boardPieceScale('VERY_LARGE')).toBe(1.28);
   });
 });

@@ -21,6 +21,7 @@
   --line: rgb(222 201 143 / 22%);
   --line-strong: rgb(222 201 143 / 42%);
   --shadow: 0 2rem 5rem rgb(0 0 0 / 38%);
+  --game-player-info-scale: 1;
 }
 
 * {
@@ -39,6 +40,22 @@ html[data-interface-size='comfortable'] {
 
 html[data-interface-size='large'] {
   font-size: 120%;
+}
+
+html[data-game-element-size='small'] {
+  --game-player-info-scale: 0.88;
+}
+
+html[data-game-element-size='medium'] {
+  --game-player-info-scale: 1;
+}
+
+html[data-game-element-size='large'] {
+  --game-player-info-scale: 1.1;
+}
+
+html[data-game-element-size='very_large'] {
+  --game-player-info-scale: 1.22;
 }
 
 body {

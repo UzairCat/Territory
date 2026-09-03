@@ -19,9 +19,11 @@ import {
   type RenderPort,
 } from './render-model';
 import {
+  boardPieceScale,
   boardRenderProfile,
   type BoardFrameRateLimit,
   type BoardGraphicsQuality,
+  type GameElementSize,
 } from './performance';
 
 export interface TerritoryBoardOptions {
@@ -53,6 +55,7 @@ export interface TerritoryBoardOptions {
   readonly reducedMotion?: boolean;
   readonly graphicsQuality?: BoardGraphicsQuality;
   readonly frameRateLimit?: BoardFrameRateLimit;
+  readonly gameElementSize?: GameElementSize;
   readonly showDebugIds?: boolean;
   readonly knights?: readonly KnightState[];
   readonly merchant?: KNState['merchant'];
@@ -921,7 +924,7 @@ function portRatioOffset(port: RenderPort): { readonly x: number; readonly y: nu
   return { x: side * 44, y: 10 };
 }
 
-function createPortShip(port: RenderPort): Container {
+function createPortShip(port: RenderPort, elementScale: number): Container {
   const ship = new Container();
   ship.position.set(port.position.x, port.position.y);
   ship.eventMode = 'none';
@@ -998,8 +1001,14 @@ function createPortShip(port: RenderPort): Container {
   ratio.anchor.set(0.5);
   ratio.position.set(labelOffset.x, labelOffset.y);
   ship.addChild(water, hullShadow, hull, mastAndSails, badge, glyph, ratioBackground, ratio);
-  ship.scale.set(PORT_BASE_SCALE);
+  ship.scale.set(PORT_BASE_SCALE * elementScale);
   return ship;
+}
+
+function scaleAroundPoint(container: Container, x: number, y: number, scale: number): void {
+  container.pivot.set(x, y);
+  container.position.set(x, y);
+  container.scale.set(scale);
 }
 
 function createPortDocks(port: RenderPort): Graphics {
@@ -1082,6 +1091,8 @@ export class TerritoryBoard {
   private reducedMotion: boolean;
   private readonly graphicsQuality: BoardGraphicsQuality;
   private frameRateLimit: BoardFrameRateLimit;
+  private gameElementSize: GameElementSize;
+  private gamePieceScale: number;
   // The board moves as one camera-controlled unit. A render group lets Pixi update that
   // transform on the GPU instead of walking every child while the player pans or zooms.
   private readonly world = new Container({ isRenderGroup: true });
@@ -1151,6 +1162,8 @@ export class TerritoryBoard {
     this.reducedMotion = options.reducedMotion ?? false;
     this.graphicsQuality = options.graphicsQuality ?? 'HIGH';
     this.frameRateLimit = options.frameRateLimit ?? 60;
+    this.gameElementSize = options.gameElementSize ?? 'MEDIUM';
+    this.gamePieceScale = boardPieceScale(this.gameElementSize);
     this.debugLayer.visible = options.showDebugIds ?? false;
     for (const layer of [
       this.coastLayer,
@@ -1244,6 +1257,7 @@ export class TerritoryBoard {
     if (!this.mounted || this.destroyed) return;
     const previousHexIds = this.model.hexes.map((hex) => hex.target.id).join('|');
     const previousRoadHighlightKey = [...this.emphasizedEdgeIds].sort().join('|');
+    const previousGameElementSize = this.gameElementSize;
     const nextModel = createBoardRenderModel(
       board,
       70,
@@ -1280,6 +1294,8 @@ export class TerritoryBoard {
     this.robberSelectionActive = options.showRobberAttention ?? false;
     this.reducedMotion = options.reducedMotion ?? false;
     this.frameRateLimit = options.frameRateLimit ?? 60;
+    this.gameElementSize = options.gameElementSize ?? 'MEDIUM';
+    this.gamePieceScale = boardPieceScale(this.gameElementSize);
     this.application.ticker.maxFPS = this.frameRateLimit;
 
     const nextStaticSignature = this.createStaticVisualSignature();
@@ -1317,20 +1333,28 @@ export class TerritoryBoard {
     this.numberVisualSignature = nextNumberSignature;
     this.pieceVisualSignature = nextPieceSignature;
     this.controlVisualSignature = nextControlSignature;
-    if (previousHexIds !== nextHexIds) this.fitBoard();
+    if (previousHexIds !== nextHexIds || previousGameElementSize !== this.gameElementSize) {
+      this.fitBoard();
+    }
   }
 
   fitBoard(): void {
     if (!this.mounted || this.destroyed) return;
     const { minimumX, maximumX, minimumY, maximumY } = this.model.bounds;
-    const boardWidth = maximumX - minimumX;
-    const boardHeight = maximumY - minimumY;
+    const enlargedPiecePadding =
+      PORT_BASE_SCALE * 67 * Math.max(0, this.gamePieceScale - boardPieceScale('MEDIUM'));
+    const fittedMinimumX = minimumX - enlargedPiecePadding;
+    const fittedMaximumX = maximumX + enlargedPiecePadding;
+    const fittedMinimumY = minimumY - enlargedPiecePadding;
+    const fittedMaximumY = maximumY + enlargedPiecePadding;
+    const boardWidth = fittedMaximumX - fittedMinimumX;
+    const boardHeight = fittedMaximumY - fittedMinimumY;
     const viewportWidth = this.application.screen.width;
     const viewportHeight = this.application.screen.height;
     const fitScale = Math.min(viewportWidth / boardWidth, viewportHeight / boardHeight) * 0.94;
     const scale = Math.max(0.08, Math.min(1.35, fitScale));
-    const centerX = (minimumX + maximumX) / 2;
-    const centerY = (minimumY + maximumY) / 2;
+    const centerX = (fittedMinimumX + fittedMaximumX) / 2;
+    const centerY = (fittedMinimumY + fittedMaximumY) / 2;
 
     this.world.scale.set(scale);
     this.world.position.set(
@@ -1416,6 +1440,7 @@ export class TerritoryBoard {
         ? ''
         : `${this.terrainChange.hexId}:${this.terrainChange.fromResourceId}`,
       this.reducedMotion ? 'reduced' : 'animated',
+      this.gameElementSize,
     ].join('~');
   }
 
@@ -1463,6 +1488,7 @@ export class TerritoryBoard {
       this.animatedTargetKey ?? '',
       this.robberMove === null ? '' : `${this.robberMove.fromHexId}:${this.robberMove.toHexId}`,
       this.reducedMotion ? 'reduced' : 'animated',
+      this.gameElementSize,
     ].join('~');
   }
 
@@ -1526,27 +1552,34 @@ export class TerritoryBoard {
 
     for (const port of this.model.ports) {
       const dock = createPortDocks(port);
-      const ship = createPortShip(port);
+      const ship = createPortShip(port, this.gamePieceScale);
       const labelOffset = portRatioOffset(port);
+      const portScale = PORT_BASE_SCALE * this.gamePieceScale;
       const hitTarget = new Graphics()
-        .roundRect(port.position.x - 35, port.position.y - 44, 70, 76, 12)
+        .roundRect(
+          port.position.x - 35 * this.gamePieceScale,
+          port.position.y - 44 * this.gamePieceScale,
+          70 * this.gamePieceScale,
+          76 * this.gamePieceScale,
+          12 * this.gamePieceScale,
+        )
         .fill({ color: '#ffffff', alpha: 0.001 })
         .roundRect(
-          port.position.x + labelOffset.x * PORT_BASE_SCALE - 27,
-          port.position.y + labelOffset.y * PORT_BASE_SCALE - 15,
-          54,
-          30,
-          8,
+          port.position.x + labelOffset.x * portScale - 27 * this.gamePieceScale,
+          port.position.y + labelOffset.y * portScale - 15 * this.gamePieceScale,
+          54 * this.gamePieceScale,
+          30 * this.gamePieceScale,
+          8 * this.gamePieceScale,
         )
         .fill({ color: '#ffffff', alpha: 0.001 });
       hitTarget.eventMode = 'static';
       hitTarget.cursor = 'pointer';
       hitTarget.on('pointerover', () => {
-        ship.scale.set(PORT_HOVER_SCALE);
+        ship.scale.set(PORT_HOVER_SCALE * this.gamePieceScale);
         this.onInspect(port.target);
       });
       hitTarget.on('pointerout', () => {
-        ship.scale.set(PORT_BASE_SCALE);
+        ship.scale.set(PORT_BASE_SCALE * this.gamePieceScale);
         this.onInspect(null);
       });
       hitTarget.on('pointertap', () => this.onInspect(port.target));
@@ -1649,6 +1682,7 @@ export class TerritoryBoard {
         const { x, y } = vertex.position;
         const color = this.playerColors[building.ownerId] ?? '#f6f0dc';
         const piece = createBuildingPiece(x, y, color, building.type);
+        scaleAroundPoint(piece, x, y, this.gamePieceScale);
         this.pieceLayer.addChild(piece);
         const enhancement = createBuildingEnhancement(
           x,
@@ -1657,7 +1691,10 @@ export class TerritoryBoard {
           building.hasWall === true,
           building.metropolis,
         );
-        if (enhancement !== null) this.pieceLayer.addChild(enhancement);
+        if (enhancement !== null) {
+          scaleAroundPoint(enhancement, x, y, this.gamePieceScale);
+          this.pieceLayer.addChild(enhancement);
+        }
         this.animatePlacement(vertex.target, [piece]);
       }
       if (vertex.knight !== null) {
@@ -1668,6 +1705,7 @@ export class TerritoryBoard {
           vertex.knight.level,
           vertex.knight.active,
         );
+        scaleAroundPoint(knight, vertex.position.x, vertex.position.y, this.gamePieceScale);
         this.pieceLayer.addChild(knight);
         // The Knight itself must never depend on the animation ticker for visibility. A stopped
         // ticker (for example during an intersection/visibility transition) used to leave a newly

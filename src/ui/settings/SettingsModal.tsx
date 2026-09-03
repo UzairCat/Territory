@@ -1,5 +1,9 @@
 import { useAppStore, type AnimationSpeed, type InterfaceSize } from '../../app/stores/app-store';
-import type { BoardFrameRateLimit, BoardGraphicsQuality } from '../../board-renderer/performance';
+import type {
+  BoardFrameRateLimit,
+  BoardGraphicsQuality,
+  GameElementSize,
+} from '../../board-renderer/performance';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 
@@ -101,6 +105,24 @@ export function SettingsModal() {
           </select>
           <small>
             Performance mode lowers canvas resolution and removes decorative tile detail.
+          </small>
+        </label>
+
+        <label className="field" htmlFor="game-element-size">
+          <span>Game pieces &amp; player info</span>
+          <select
+            id="game-element-size"
+            value={settings.gameElementSize}
+            onChange={(event) => update({ gameElementSize: event.target.value as GameElementSize })}
+          >
+            <option value="SMALL">Small</option>
+            <option value="MEDIUM">Medium · Default</option>
+            <option value="LARGE">Large</option>
+            <option value="VERY_LARGE">Very large</option>
+          </select>
+          <small>
+            Resizes buildings, knights, ports and their labels, plus details inside player panels.
+            Only affects this device.
           </small>
         </label>
 

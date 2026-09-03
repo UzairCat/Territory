@@ -426,12 +426,13 @@ export function OnlineLobbyScreen() {
                     <button
                       type="button"
                       className={`online-player-ready-button ${player.ready ? 'is-ready' : ''}`}
-                      aria-label={player.ready ? 'Unready yourself' : 'Ready up'}
+                      aria-label={player.ready ? 'Mark yourself unready' : 'Mark yourself ready'}
                       aria-pressed={player.ready}
                       disabled={commandPending}
                       onClick={() => void setReady(!player.ready)}
                     >
-                      <i aria-hidden="true" /> {player.ready ? 'Unready' : 'Ready'}
+                      <i aria-hidden="true">{player.ready ? '✓' : '→'}</i>
+                      {player.ready ? 'Mark Unready' : 'Mark Ready'}
                     </button>
                   ) : (
                     <span

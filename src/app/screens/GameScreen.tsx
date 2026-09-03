@@ -3316,6 +3316,7 @@ export function GameScreen() {
             reducedMotion={settings.reducedMotion}
             graphicsQuality={settings.graphicsQuality}
             frameRateLimit={settings.frameRateLimit}
+            gameElementSize={settings.gameElementSize}
             showTargetPulses={
               settings.graphicsQuality !== 'PERFORMANCE' &&
               (gameState.turn.phase !== 'ACTION_PHASE' ||

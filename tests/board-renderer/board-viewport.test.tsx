@@ -164,6 +164,32 @@ describe('board viewport renderer lifecycle', () => {
     expect(rendererProbe.destroyed).toBe(1);
   });
 
+  it('resizes game pieces through a renderer update without remounting the canvas', async () => {
+    const state = createTestGameState('ACTION_PHASE');
+    const baseProps: BoardViewportProps = {
+      board: state.board,
+      players: state.players,
+      knState: state.kn,
+      showDebugIds: false,
+      selectableTargets: [],
+      highlightedHexIds: [],
+      animatedTarget: null,
+      robberMove: null,
+      playerColors: { [TEST_PLAYER_IDS[0]]: '#2864c7' },
+      onInspect: vi.fn(),
+      onSelect: vi.fn(),
+    };
+    const view = render(<BoardViewport {...baseProps} gameElementSize="MEDIUM" />);
+    await waitFor(() => expect(rendererProbe.mounted).toBe(1));
+
+    view.rerender(<BoardViewport {...baseProps} gameElementSize="LARGE" />);
+
+    await waitFor(() => expect(rendererProbe.updated).toBe(1));
+    expect(rendererProbe.constructed).toBe(1);
+    expect(rendererProbe.destroyed).toBe(0);
+    expect(rendererProbe.updatedOptions[0]).toMatchObject({ gameElementSize: 'LARGE' });
+  });
+
   it('updates only the renderer options when a hovered road chain is emphasized', async () => {
     const state = createTestGameState('ACTION_PHASE');
     const hoveredChain = [edgeId('chain-a'), edgeId('chain-b')];

@@ -12,7 +12,7 @@ import type {
   ResourceFlyover,
 } from './render-model';
 import type { TerritoryBoard, TerritoryBoardOptions } from './TerritoryBoard';
-import type { BoardFrameRateLimit, BoardGraphicsQuality } from './performance';
+import type { BoardFrameRateLimit, BoardGraphicsQuality, GameElementSize } from './performance';
 import { boardVisualKey } from './board-visual-key';
 import { Button } from '../ui/components/Button';
 import { resourceGlyph } from '../ui/game/game-icons';
@@ -46,6 +46,7 @@ export interface BoardViewportProps {
   readonly reducedMotion?: boolean;
   readonly graphicsQuality?: BoardGraphicsQuality;
   readonly frameRateLimit?: BoardFrameRateLimit;
+  readonly gameElementSize?: GameElementSize;
   readonly showTargetPulses?: boolean;
   readonly showRobberAttention?: boolean;
   readonly resourceFlyovers?: readonly ResourceFlyover[];
@@ -300,6 +301,7 @@ export function BoardViewport({
   reducedMotion = false,
   graphicsQuality = 'HIGH',
   frameRateLimit = 60,
+  gameElementSize = 'MEDIUM',
   showTargetPulses = true,
   showRobberAttention = false,
   resourceFlyovers = [],
@@ -410,6 +412,7 @@ export function BoardViewport({
         reducedMotion,
         graphicsQuality,
         frameRateLimit,
+        gameElementSize,
         showTargetPulses,
         showRobberAttention,
         knights: stableKnights,
@@ -418,6 +421,7 @@ export function BoardViewport({
     }),
     [
       frameRateLimit,
+      gameElementSize,
       graphicsQuality,
       inventorPendingHexId,
       inventorSelectedHexId,

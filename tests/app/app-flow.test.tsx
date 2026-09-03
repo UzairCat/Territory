@@ -112,11 +112,19 @@ describe('application flow', () => {
     const timerSounds = screen.getByRole('checkbox', { name: /Timer warning sounds/i });
     expect(screen.getByRole('slider', { name: /Medieval music/i })).toHaveValue('34');
     const interfaceSize = screen.getByRole('combobox', { name: /Interface size/i });
+    const gameElementSize = screen.getByRole('combobox', {
+      name: /Game pieces & player info/i,
+    });
     expect(interfaceSize).toHaveValue('COMFORTABLE');
+    expect(gameElementSize).toHaveValue('MEDIUM');
     expect(document.documentElement).toHaveAttribute('data-interface-size', 'comfortable');
+    expect(document.documentElement).toHaveAttribute('data-game-element-size', 'medium');
     await user.selectOptions(interfaceSize, 'LARGE');
+    await user.selectOptions(gameElementSize, 'VERY_LARGE');
     expect(useAppStore.getState().settings.interfaceSize).toBe('LARGE');
+    expect(useAppStore.getState().settings.gameElementSize).toBe('VERY_LARGE');
     expect(document.documentElement).toHaveAttribute('data-interface-size', 'large');
+    expect(document.documentElement).toHaveAttribute('data-game-element-size', 'very_large');
     expect(timerSounds).toBeChecked();
     await user.click(timerSounds);
     expect(useAppStore.getState().settings.timerSounds).toBe(false);

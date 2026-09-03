@@ -26,8 +26,10 @@ import { hasAdminDisplayName } from '../../multiplayer/admin-access';
 import {
   BOARD_FRAME_RATE_LIMITS,
   BOARD_GRAPHICS_QUALITIES,
+  GAME_ELEMENT_SIZES,
   type BoardFrameRateLimit,
   type BoardGraphicsQuality,
+  type GameElementSize,
 } from '../../board-renderer/performance';
 
 export type AnimationSpeed = 'NORMAL' | 'FAST';
@@ -41,6 +43,7 @@ export interface AppSettings {
   readonly reducedMotion: boolean;
   readonly animationSpeed: AnimationSpeed;
   readonly interfaceSize: InterfaceSize;
+  readonly gameElementSize: GameElementSize;
   readonly graphicsQuality: BoardGraphicsQuality;
   readonly frameRateLimit: BoardFrameRateLimit;
 }
@@ -119,6 +122,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reducedMotion: false,
   animationSpeed: 'NORMAL',
   interfaceSize: 'COMFORTABLE',
+  gameElementSize: 'MEDIUM',
   graphicsQuality: 'HIGH',
   frameRateLimit: 60,
 };
@@ -167,6 +171,9 @@ export function readStoredAppSettings(): AppSettings {
         parsed.interfaceSize === 'LARGE'
           ? parsed.interfaceSize
           : DEFAULT_SETTINGS.interfaceSize,
+      gameElementSize: GAME_ELEMENT_SIZES.includes(parsed.gameElementSize as GameElementSize)
+        ? (parsed.gameElementSize as GameElementSize)
+        : DEFAULT_SETTINGS.gameElementSize,
       graphicsQuality: BOARD_GRAPHICS_QUALITIES.includes(
         parsed.graphicsQuality as BoardGraphicsQuality,
       )

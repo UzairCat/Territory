@@ -140,9 +140,11 @@ describe('online entry and lobby presentation', () => {
     expect(screen.getByRole('combobox', { name: 'Map' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Classic mode' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Base - Small' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Ready up' })).toHaveTextContent('Ready');
+    expect(screen.getByRole('button', { name: 'Mark yourself ready' })).toHaveTextContent(
+      'Mark Ready',
+    );
 
-    await user.click(screen.getByRole('button', { name: 'Ready up' }));
+    await user.click(screen.getByRole('button', { name: 'Mark yourself ready' }));
     expect(setReady).toHaveBeenCalledWith(true);
 
     await user.click(screen.getByRole('button', { name: 'Open profile gallery for Alex' }));
@@ -223,7 +225,9 @@ describe('online entry and lobby presentation', () => {
     expect(screen.getByRole('button', { name: 'Hide Bank Cards' })).toBeDisabled();
     expect(screen.getByRole('slider', { name: 'Points to win' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Start online match' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ready up' })).toHaveTextContent('Ready');
+    expect(screen.getByRole('button', { name: 'Mark yourself ready' })).toHaveTextContent(
+      'Mark Ready',
+    );
     expect(screen.getByText('Waiting for host…')).toBeInTheDocument();
   });
 
@@ -282,6 +286,8 @@ describe('online entry and lobby presentation', () => {
 
     expect(screen.getByRole('button', { name: 'Start online match' })).toBeEnabled();
     expect(screen.getByText('Lobby ready')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unready yourself' })).toHaveTextContent('Unready');
+    expect(screen.getByRole('button', { name: 'Mark yourself unready' })).toHaveTextContent(
+      'Mark Unready',
+    );
   });
 });

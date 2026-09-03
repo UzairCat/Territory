@@ -51,6 +51,7 @@ function RouteFallback() {
 export function App() {
   const reducedMotion = useAppStore((state) => state.settings.reducedMotion);
   const interfaceSize = useAppStore((state) => state.settings.interfaceSize);
+  const gameElementSize = useAppStore((state) => state.settings.gameElementSize);
 
   useEffect(() => {
     document.documentElement.classList.toggle('app-reduced-motion', reducedMotion);
@@ -63,6 +64,13 @@ export function App() {
       delete document.documentElement.dataset.interfaceSize;
     };
   }, [interfaceSize]);
+
+  useEffect(() => {
+    document.documentElement.dataset.gameElementSize = gameElementSize.toLowerCase();
+    return () => {
+      delete document.documentElement.dataset.gameElementSize;
+    };
+  }, [gameElementSize]);
 
   return (
     <>

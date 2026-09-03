@@ -14964,6 +14964,7 @@ input[type='checkbox'] {
 }
 
 .online-player-ready-button {
+  min-width: 6.6rem;
   border-color: rgb(239 210 117 / 38%);
   color: #ffecae;
   background: linear-gradient(145deg, rgb(191 147 54 / 34%), rgb(116 82 24 / 30%));
@@ -14971,7 +14972,16 @@ input[type='checkbox'] {
 }
 
 .online-player-ready-button > i {
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid rgb(255 239 181 / 42%);
+  place-items: center;
+  font-size: 0.56rem;
+  font-style: normal;
+  line-height: 1;
   background: #efd275;
+  color: #4a3513;
   box-shadow: 0 0 0.42rem rgb(239 210 117 / 48%);
 }
 
@@ -14992,7 +15002,9 @@ input[type='checkbox'] {
 }
 
 .online-player-ready-button.is-ready > i {
+  border-color: rgb(214 255 227 / 48%);
   background: #64d18d;
+  color: #153a22;
   box-shadow: 0 0 0.42rem rgb(100 209 141 / 65%);
 }
 
@@ -16754,5 +16766,41 @@ input[type='checkbox'] {
   .match-report-confetti i,
   .match-report-dice-chart > div > span i {
     animation: none;
+  }
+}
+
+/* Accessibility sizing that enlarges the useful contents without scaling the player-card frame. */
+.game-player__identity,
+.game-player__portrait,
+.game-player__stats > div,
+.game-player__winner-label,
+.game-player__awards > span,
+.game-player-kn__heading > strong,
+.game-player-kn__heading > small,
+.game-player-kn__stats > div,
+.game-player-kn__footer > span,
+.game-player-kn__footer > b {
+  scale: var(--game-player-info-scale, 1);
+  transition: scale 140ms ease;
+}
+
+.game-player__identity,
+.game-player-kn__heading > strong,
+.game-player-kn__heading > small {
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-player__identity,
+  .game-player__portrait,
+  .game-player__stats > div,
+  .game-player__winner-label,
+  .game-player__awards > span,
+  .game-player-kn__heading > strong,
+  .game-player-kn__heading > small,
+  .game-player-kn__stats > div,
+  .game-player-kn__footer > span,
+  .game-player-kn__footer > b {
+    transition: none;
   }
 }

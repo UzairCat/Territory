@@ -40,6 +40,7 @@ describe('application session store', () => {
       frameRateLimit: 30,
       reducedMotion: true,
       interfaceSize: 'LARGE',
+      gameElementSize: 'VERY_LARGE',
     });
 
     expect(JSON.parse(localStorage.getItem(APP_SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
@@ -47,12 +48,14 @@ describe('application session store', () => {
       frameRateLimit: 30,
       reducedMotion: true,
       interfaceSize: 'LARGE',
+      gameElementSize: 'VERY_LARGE',
     });
     expect(readStoredAppSettings()).toMatchObject({
       graphicsQuality: 'PERFORMANCE',
       frameRateLimit: 30,
       reducedMotion: true,
       interfaceSize: 'LARGE',
+      gameElementSize: 'VERY_LARGE',
     });
 
     localStorage.setItem(
@@ -62,6 +65,7 @@ describe('application session store', () => {
         frameRateLimit: 500,
         masterVolume: -4,
         interfaceSize: 'HUGE',
+        gameElementSize: 'GIANT',
       }),
     );
     expect(readStoredAppSettings()).toMatchObject({
@@ -69,6 +73,7 @@ describe('application session store', () => {
       frameRateLimit: DEFAULT_SETTINGS.frameRateLimit,
       masterVolume: DEFAULT_SETTINGS.masterVolume,
       interfaceSize: DEFAULT_SETTINGS.interfaceSize,
+      gameElementSize: DEFAULT_SETTINGS.gameElementSize,
     });
   });
 
