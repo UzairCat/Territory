@@ -48,7 +48,7 @@ describe('turn timer', () => {
     expect(onExpire).toHaveBeenCalledTimes(1);
   });
 
-  it('boosts a running timer below twenty seconds without extending a longer timer', () => {
+  it('adds fifteen seconds per action to short and long timers', () => {
     const common = {
       durationSeconds: 30,
       prompt: 'Your Turn',
@@ -60,12 +60,12 @@ describe('turn timer', () => {
     void act(() => vi.advanceTimersByTime(15_000));
     expect(screen.getByText('00:15')).toBeInTheDocument();
     rerender(<TurnTimer {...common} boostSignal="action-1" />);
-    expect(screen.getByText('00:20')).toBeInTheDocument();
+    expect(screen.getByText('00:30')).toBeInTheDocument();
 
     void act(() => vi.advanceTimersByTime(1_000));
-    expect(screen.getByText('00:19')).toBeInTheDocument();
+    expect(screen.getByText('00:29')).toBeInTheDocument();
     rerender(<TurnTimer {...common} boostSignal="action-2" />);
-    expect(screen.getByText('00:20')).toBeInTheDocument();
+    expect(screen.getByText('00:44')).toBeInTheDocument();
 
     const longer = render(
       <TurnTimer {...common} durationSeconds={30} prompt="Other Timer" boostSignal="long-0" />,
@@ -75,7 +75,23 @@ describe('turn timer', () => {
     longer.rerender(
       <TurnTimer {...common} durationSeconds={30} prompt="Other Timer" boostSignal="long-1" />,
     );
-    expect(screen.getByLabelText('Other Timer: 25 seconds remaining')).toBeInTheDocument();
+    expect(screen.getByLabelText('Other Timer: 40 seconds remaining')).toBeInTheDocument();
+  });
+
+  it('does not add a second bonus to an authoritative online deadline', () => {
+    const props = {
+      durationSeconds: 60,
+      prompt: 'Online turn',
+      onExpire: vi.fn(),
+      onUrgentTick: vi.fn(),
+    };
+    const deadline = Date.now() + 40_000;
+    const view = render(<TurnTimer {...props} boostSignal="before" deadlineAt={deadline} />);
+    view.rerender(<TurnTimer {...props} boostSignal="after" deadlineAt={deadline + 15_000} />);
+    void act(() => vi.advanceTimersByTime(250));
+    expect(screen.getByLabelText('Online turn: 55 seconds remaining')).toBeInTheDocument();
+    view.rerender(<TurnTimer {...props} boostSignal="after" deadlineAt={deadline + 15_000} />);
+    expect(screen.getByLabelText('Online turn: 55 seconds remaining')).toBeInTheDocument();
   });
 
   it('freezes its remaining time while the match is paused and resumes from the same second', () => {

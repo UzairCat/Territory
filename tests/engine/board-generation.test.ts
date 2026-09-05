@@ -5,9 +5,13 @@ import { areAxialNeighbors } from '../../src/engine/board/geometry';
 import { validateBoard } from '../../src/engine/board/validate-board';
 import type { BoardState } from '../../src/engine/core/game-state';
 import { createRandomState } from '../../src/engine/core/random';
-import { TERRAIN_IDS } from '../../src/engine/content/resources';
+import { RESOURCE_IDS, TERRAIN_IDS } from '../../src/engine/content/resources';
 import { MAPS } from '../../src/engine/maps/maps';
-import { coordinateLakeCount, coordinateLandMasses } from '../../src/engine/maps/map-utils';
+import {
+  coordinateLakeCount,
+  coordinateLandMasses,
+  createPortPool,
+} from '../../src/engine/maps/map-utils';
 
 describe('Base Map generation', () => {
   it('creates the complete deterministic topology and passes validation', () => {
@@ -86,6 +90,28 @@ describe('Base Map generation', () => {
 });
 
 describe('all map generation', () => {
+  it('requires enough ports to guarantee every resource plus two generic ports', () => {
+    expect(() => createPortPool(6)).toThrow(/at least 7 ports/i);
+  });
+
+  it.each(MAPS)('$displayName balances all six port categories with required minimums', (map) => {
+    const genericPortCount = map.portPool.filter(
+      (port) => port.tradeRatio === 3 && port.resourceId === null,
+    ).length;
+    const categoryCounts = [
+      genericPortCount,
+      ...Object.values(RESOURCE_IDS).map(
+        (resourceId) =>
+          map.portPool.filter((port) => port.tradeRatio === 2 && port.resourceId === resourceId)
+            .length,
+      ),
+    ];
+
+    expect(genericPortCount).toBeGreaterThanOrEqual(2);
+    expect(categoryCounts.slice(1).every((count) => count >= 1)).toBe(true);
+    expect(Math.max(...categoryCounts) - Math.min(...categoryCounts)).toBeLessThanOrEqual(1);
+  });
+
   it.each(MAPS)('$displayName creates its complete deterministic topology', (map) => {
     const seed = `map-${map.id}`;
     const first = generateBoard(map, createRandomState(seed));

@@ -109,7 +109,7 @@ export function SettingsModal() {
         </label>
 
         <label className="field" htmlFor="game-element-size">
-          <span>Game pieces &amp; player info</span>
+          <span>Board piece size</span>
           <select
             id="game-element-size"
             value={settings.gameElementSize}
@@ -121,9 +121,47 @@ export function SettingsModal() {
             <option value="VERY_LARGE">Very large</option>
           </select>
           <small>
-            Resizes buildings, knights, ports and their labels, plus details inside player panels.
-            Only affects this device.
+            Resizes buildings, knights, ports and their labels. Only affects this device.
           </small>
+        </label>
+
+        {(['playerInfoSize', 'gameLogSize'] as const).map((key) => (
+          <label className="field" htmlFor={key} key={key}>
+            <span>
+              {key === 'playerInfoSize' ? 'Player information size' : 'Game log text size'}
+              <output>{settings[key]}%</output>
+            </span>
+            <input
+              id={key}
+              type="range"
+              min="50"
+              max="500"
+              step="5"
+              value={settings[key]}
+              onChange={(event) => update({ [key]: Number(event.target.value) })}
+            />
+            <small>50%–500% · 200% is the default size.</small>
+            <small>
+              {key === 'playerInfoSize'
+                ? 'Adjust player details independently of board pieces. Scroll the player list to reach every player.'
+                : 'Enlarge log messages for easier reading.'}
+            </small>
+          </label>
+        ))}
+        <label className="field" htmlFor="sidebar-balance">
+          <span>Sidebar space</span>
+          <select
+            id="sidebar-balance"
+            value={settings.sidebarBalance}
+            onChange={(event) =>
+              update({ sidebarBalance: event.target.value as typeof settings.sidebarBalance })
+            }
+          >
+            <option value="BALANCED">Balanced · Default</option>
+            <option value="MORE_LOG">More room for game log</option>
+            <option value="MORE_PLAYERS">More room for players</option>
+          </select>
+          <small>Both sections scroll independently when their contents need more space.</small>
         </label>
 
         <label className="field" htmlFor="frame-rate-limit">

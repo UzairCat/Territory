@@ -482,40 +482,42 @@ describe('authoritative online rooms', () => {
     expect(room.deadlineAt).toBe(turnDeadline);
   });
 
-  it('raises a low action timer only to the twenty-second floor', () => {
-    const { manager, room, host, guest } = createStartedRoom();
-    const activePlayerId = room.state!.turn.activePlayerId;
-    if (activePlayerId === null) throw new Error('No active player.');
-    const activeCredentials = activePlayerId === host.playerId ? host : guest;
-    room.state = {
-      ...room.state!,
-      players: {
-        ...room.state!.players,
-        [activePlayerId]: {
-          ...room.state!.players[activePlayerId]!,
-          resources: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+  it.each([5_000, 40_000])(
+    'adds fifteen seconds to an action timer with %i milliseconds left',
+    (remainingMs) => {
+      const { manager, room, host, guest } = createStartedRoom();
+      const activePlayerId = room.state!.turn.activePlayerId;
+      if (activePlayerId === null) throw new Error('No active player.');
+      const activeCredentials = activePlayerId === host.playerId ? host : guest;
+      room.state = {
+        ...room.state!,
+        players: {
+          ...room.state!.players,
+          [activePlayerId]: {
+            ...room.state!.players[activePlayerId]!,
+            resources: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+          },
         },
-      },
-      turn: { ...room.state!.turn, phase: 'ACTION_PHASE', dice: [2, 3] },
-      pendingInteraction: null,
-    };
-    room.timerKey = 'choice-before-returning-to-actions';
-    room.deadlineAt = Date.now() + 5_000;
+        turn: { ...room.state!.turn, phase: 'ACTION_PHASE', dice: [2, 3] },
+        pendingInteraction: null,
+      };
+      room.timerKey = `actions-${room.state.turn.turnNumber}`;
+      room.deadlineAt = Date.now() + remainingMs;
+      const originalDeadline = room.deadlineAt;
 
-    expect(
-      manager.submit(activeCredentials, room.revision, {
-        id: actionId('online-timer-floor-bank-trade'),
-        type: 'BANK_TRADE',
-        actorId: activePlayerId,
-        offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
-        requested: resourceBundle([[RESOURCE_IDS.grain, 1]]),
-      }),
-    ).toMatchObject({ ok: true });
+      expect(
+        manager.submit(activeCredentials, room.revision, {
+          id: actionId('online-timer-floor-bank-trade'),
+          type: 'BANK_TRADE',
+          actorId: activePlayerId,
+          offered: resourceBundle([[RESOURCE_IDS.wood, 4]]),
+          requested: resourceBundle([[RESOURCE_IDS.grain, 1]]),
+        }),
+      ).toMatchObject({ ok: true });
 
-    const remaining = (room.deadlineAt ?? 0) - Date.now();
-    expect(remaining).toBeGreaterThan(19_000);
-    expect(remaining).toBeLessThanOrEqual(20_000);
-  });
+      expect(room.deadlineAt).toBe(originalDeadline + 15_000);
+    },
+  );
 
   it('accepts concurrent reward choices from one shared revision and deadline', () => {
     const { manager, room, host, guest } = createStartedRoom(true);

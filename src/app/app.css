@@ -16780,14 +16780,89 @@ input[type='checkbox'] {
 .game-player-kn__stats > div,
 .game-player-kn__footer > span,
 .game-player-kn__footer > b {
-  scale: var(--game-player-info-scale, 1);
-  transition: scale 140ms ease;
+  zoom: var(--game-player-info-scale, 1);
 }
 
-.game-player__identity,
-.game-player-kn__heading > strong,
-.game-player-kn__heading > small {
-  transform-origin: left center;
+/* Keep both reading areas reachable, even with large text or a short viewport. */
+.game-rail {
+  --log-space: 1;
+  --player-space: 1;
+  --log-fraction: 1fr;
+  --player-fraction: 1fr;
+}
+
+html[data-sidebar-balance='more_log'] .game-rail {
+  --log-fraction: 2fr;
+  --log-space: 2;
+  --player-space: 1;
+}
+
+html[data-sidebar-balance='more_players'] .game-rail {
+  --player-fraction: 2fr;
+  --log-space: 1;
+  --player-space: 2;
+}
+
+.game-rail .players-panel {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.game-rail .game-player-list {
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  align-content: start;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.game-player-list > .game-player {
+  min-width: calc(10rem * var(--game-player-info-scale, 1));
+}
+
+.game-player-kn__stats,
+.game-player__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.game-player-kn__footer {
+  flex-wrap: wrap;
+}
+
+.game-player__body {
+  grid-template-columns: calc(4.35rem * var(--game-player-info-scale)) minmax(0, 1fr);
+}
+
+.game-player-kn__body {
+  grid-template-columns: calc(3.55rem * var(--game-player-info-scale)) minmax(0, 1fr);
+}
+
+.activity-log li p {
+  font-size: calc(0.68rem * var(--game-log-text-scale, 1));
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 981px) {
+  .game-rail,
+  .game-rail--kn {
+    overflow-y: auto;
+    grid-template-rows: minmax(7rem, var(--log-fraction)) auto minmax(8rem, var(--player-fraction));
+  }
+}
+
+@media (max-width: 980px) {
+  .game-rail,
+  .game-rail--kn {
+    grid-template-rows: minmax(12rem, calc(var(--log-space) * 12rem)) auto minmax(
+        12rem,
+        calc(var(--player-space) * 12rem)
+      );
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -80,6 +80,29 @@ export function validateClassicContent(): readonly ContentValidationIssue[] {
         issue('INVALID_PORT_POOL', `${map.displayName} contains an invalid port definition.`),
       );
     }
+    const genericPortCount = map.portPool.filter(
+      (port) => port.resourceId === null && port.tradeRatio === 3,
+    ).length;
+    const portCategoryCounts = [
+      genericPortCount,
+      ...RESOURCES.map(
+        (resource) =>
+          map.portPool.filter((port) => port.resourceId === resource.id && port.tradeRatio === 2)
+            .length,
+      ),
+    ];
+    if (
+      genericPortCount < 2 ||
+      portCategoryCounts.slice(1).some((count) => count < 1) ||
+      Math.max(...portCategoryCounts) - Math.min(...portCategoryCounts) > 1
+    ) {
+      issues.push(
+        issue(
+          'UNBALANCED_PORT_POOL',
+          `${map.displayName} must balance all port types, including two generic ports and every resource-specific port.`,
+        ),
+      );
+    }
     if (coordinateLandMasses(map.coordinates).length !== map.landMassCount) {
       issues.push(
         issue(

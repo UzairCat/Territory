@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -113,7 +113,7 @@ describe('application flow', () => {
     expect(screen.getByRole('slider', { name: /Medieval music/i })).toHaveValue('34');
     const interfaceSize = screen.getByRole('combobox', { name: /Interface size/i });
     const gameElementSize = screen.getByRole('combobox', {
-      name: /Game pieces & player info/i,
+      name: /Board piece size/i,
     });
     expect(interfaceSize).toHaveValue('COMFORTABLE');
     expect(gameElementSize).toHaveValue('MEDIUM');
@@ -125,6 +125,24 @@ describe('application flow', () => {
     expect(useAppStore.getState().settings.gameElementSize).toBe('VERY_LARGE');
     expect(document.documentElement).toHaveAttribute('data-interface-size', 'large');
     expect(document.documentElement).toHaveAttribute('data-game-element-size', 'very_large');
+    const playerSize = screen.getByRole('slider', { name: /Player information size/i });
+    const logSize = screen.getByRole('slider', { name: /Game log text size/i });
+    expect(playerSize).toHaveValue('200');
+    expect(logSize).toHaveValue('200');
+    fireEvent.change(playerSize, { target: { value: '50' } });
+    fireEvent.change(logSize, { target: { value: '500' } });
+    await user.selectOptions(screen.getByRole('combobox', { name: /Sidebar space/i }), 'MORE_LOG');
+    expect(useAppStore.getState().settings).toMatchObject({
+      gameElementSize: 'VERY_LARGE',
+      playerInfoSize: 50,
+      gameLogSize: 500,
+      sidebarBalance: 'MORE_LOG',
+    });
+    expect(document.documentElement.style.getPropertyValue('--game-player-info-scale')).toBe(
+      '0.25',
+    );
+    expect(document.documentElement.style.getPropertyValue('--game-log-text-scale')).toBe('2.5');
+    expect(document.documentElement).toHaveAttribute('data-sidebar-balance', 'more_log');
     expect(timerSounds).toBeChecked();
     await user.click(timerSounds);
     expect(useAppStore.getState().settings.timerSounds).toBe(false);

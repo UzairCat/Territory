@@ -52,6 +52,21 @@ export function App() {
   const reducedMotion = useAppStore((state) => state.settings.reducedMotion);
   const interfaceSize = useAppStore((state) => state.settings.interfaceSize);
   const gameElementSize = useAppStore((state) => state.settings.gameElementSize);
+  const playerInfoSize = useAppStore((state) => state.settings.playerInfoSize);
+  const gameLogSize = useAppStore((state) => state.settings.gameLogSize);
+  const sidebarBalance = useAppStore((state) => state.settings.sidebarBalance);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--game-player-info-scale', String(playerInfoSize / 200));
+    root.style.setProperty('--game-log-text-scale', String(gameLogSize / 200));
+    root.dataset.sidebarBalance = sidebarBalance.toLowerCase();
+    return () => {
+      root.style.removeProperty('--game-player-info-scale');
+      root.style.removeProperty('--game-log-text-scale');
+      delete root.dataset.sidebarBalance;
+    };
+  }, [playerInfoSize, gameLogSize, sidebarBalance]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('app-reduced-motion', reducedMotion);

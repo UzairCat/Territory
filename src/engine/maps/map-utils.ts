@@ -55,6 +55,7 @@ const RESOURCE_PORT_ORDER = [
   RESOURCE_IDS.livestock,
   RESOURCE_IDS.ore,
 ] as const;
+const MINIMUM_GENERIC_PORT_COUNT = 2;
 
 const PORT_EDGE_DIRECTIONS: readonly AxialCoordinate[] = [
   AXIAL_DIRECTIONS[1]!,
@@ -135,13 +136,27 @@ export function createNumberTokenPool(producingTileCount: number): readonly numb
 }
 
 export function createPortPool(portCount: number): readonly PortPoolEntry[] {
-  const specificPortCount = Math.round((portCount * 5) / 9);
+  const minimumPortCount = RESOURCE_PORT_ORDER.length + MINIMUM_GENERIC_PORT_COUNT;
+  if (!Number.isSafeInteger(portCount) || portCount < minimumPortCount) {
+    throw new RangeError(
+      `A balanced port pool needs at least ${minimumPortCount} ports; received ${portCount}.`,
+    );
+  }
+
+  // Treat generic 3:1 as one category alongside the five resource-specific 2:1 categories.
+  // Small maps retain two generic ports, while larger maps stay as close to an even six-way
+  // distribution as possible.
+  const genericPortCount = Math.max(
+    MINIMUM_GENERIC_PORT_COUNT,
+    Math.floor(portCount / (RESOURCE_PORT_ORDER.length + 1)),
+  );
+  const specificPortCount = portCount - genericPortCount;
   return [
     ...Array.from({ length: specificPortCount }, (_, index): PortPoolEntry => ({
       tradeRatio: 2,
       resourceId: RESOURCE_PORT_ORDER[index % RESOURCE_PORT_ORDER.length]!,
     })),
-    ...Array.from({ length: portCount - specificPortCount }, (): PortPoolEntry => ({
+    ...Array.from({ length: genericPortCount }, (): PortPoolEntry => ({
       tradeRatio: 3,
       resourceId: null,
     })),

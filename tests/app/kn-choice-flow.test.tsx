@@ -2030,7 +2030,7 @@ describe('K+N compact choice flows', () => {
     expect(tick).toHaveBeenCalled();
   });
 
-  it('returns from a completed action with twenty seconds instead of a fresh full timer', () => {
+  it('returns from a completed action with the twenty-second allowance plus a fifteen-second bonus', () => {
     const original = knActionState();
     renderGame({ ...original, config: { ...original.config, turnTimeSeconds: 60 } }, [
       {
@@ -2041,7 +2041,7 @@ describe('K+N compact choice flows', () => {
     ]);
 
     expect(
-      screen.getByLabelText('Alex is taking actions: 20 seconds remaining'),
+      screen.getByLabelText('Alex is taking actions: 35 seconds remaining'),
     ).toBeInTheDocument();
   });
 

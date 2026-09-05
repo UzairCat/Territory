@@ -71,8 +71,12 @@ export function TurnTimer({
   useEffect(() => {
     if (previousBoostRef.current === boostSignal) return;
     previousBoostRef.current = boostSignal;
-    setRemainingSeconds((current) => (current > 0 && current < 20 ? 20 : current));
-  }, [boostSignal]);
+    // Online time comes exclusively from the server, which already applied the bonus.
+    if (deadlineAt !== null || paused) return;
+    // Apply the newly accepted game action immediately, once per boost signal.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRemainingSeconds((current) => (current > 0 ? current + 15 : current));
+  }, [boostSignal, deadlineAt, paused]);
 
   useEffect(() => {
     if (remainingSeconds === 0) {

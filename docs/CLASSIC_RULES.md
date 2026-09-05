@@ -82,7 +82,8 @@ that event; other resource types resolve normally.
 - Eighteen number tokens: 2; two each of 3–6; two each of 8–11; and 12.
 - Six and eight tokens may not be adjacent after randomized placement.
 - The robber begins on the Wasteland.
-- Four generic 3:1 ports and one 2:1 port for each resource.
+- Its nine ports use the shared balanced pool: two generic 3:1 ports, at least one 2:1 port for each
+  resource, and two additional 2:1 ports.
 
 ## Trading
 

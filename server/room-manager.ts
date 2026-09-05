@@ -265,18 +265,10 @@ function hasTimerBoost(events: readonly GameEvent[]): boolean {
     'ROAD_BUILT',
     'TRADE_COMPLETED',
     'COMMERCIAL_HARBOR_EXCHANGED',
-    'PROGRESS_CARD_BOUGHT',
-    'PROGRESS_CARD_PLAYED',
     'KNIGHT_BUILT',
-    'KNIGHT_ACTIVATED',
     'KNIGHT_UPGRADED',
-    'KNIGHT_MOVED',
-    'KNIGHT_DISPLACED',
     'WALL_BUILT',
     'IMPROVEMENT_BOUGHT',
-    'KN_PROGRESS_CARD_RESOLVED',
-    'MERCHANT_MOVED',
-    'METROPOLIS_CHANGED',
   ]);
   return events.some((event) => types.has(event.type));
 }
@@ -959,11 +951,11 @@ export class RoomManager {
     const returningToActionAfterTimedAction =
       !forceReset && timerKeyChanged && step.key.startsWith('actions-') && hasTimerBoost(events);
     if (returningToActionAfterTimedAction) {
-      room.deadlineAt = now + 20_000;
+      room.deadlineAt = now + 35_000;
     } else if (forceReset || timerKeyChanged || room.deadlineAt === null) {
       room.deadlineAt = now + step.durationMs;
-    } else if (hasTimerBoost(events) && room.deadlineAt - now < 20_000) {
-      room.deadlineAt = now + 20_000;
+    } else if (step.key.startsWith('actions-') && hasTimerBoost(events)) {
+      room.deadlineAt += 15_000;
     }
     room.timerKey = step.key;
     this.scheduleTimer(room, step);

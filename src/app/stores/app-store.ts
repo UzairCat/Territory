@@ -44,6 +44,9 @@ export interface AppSettings {
   readonly animationSpeed: AnimationSpeed;
   readonly interfaceSize: InterfaceSize;
   readonly gameElementSize: GameElementSize;
+  readonly playerInfoSize: number;
+  readonly gameLogSize: number;
+  readonly sidebarBalance: 'BALANCED' | 'MORE_LOG' | 'MORE_PLAYERS';
   readonly graphicsQuality: BoardGraphicsQuality;
   readonly frameRateLimit: BoardFrameRateLimit;
 }
@@ -123,6 +126,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   animationSpeed: 'NORMAL',
   interfaceSize: 'COMFORTABLE',
   gameElementSize: 'MEDIUM',
+  playerInfoSize: 200,
+  gameLogSize: 200,
+  sidebarBalance: 'BALANCED',
   graphicsQuality: 'HIGH',
   frameRateLimit: 60,
 };
@@ -174,6 +180,24 @@ export function readStoredAppSettings(): AppSettings {
       gameElementSize: GAME_ELEMENT_SIZES.includes(parsed.gameElementSize as GameElementSize)
         ? (parsed.gameElementSize as GameElementSize)
         : DEFAULT_SETTINGS.gameElementSize,
+      playerInfoSize:
+        typeof parsed.playerInfoSize === 'number' &&
+        Number.isFinite(parsed.playerInfoSize) &&
+        parsed.playerInfoSize >= 50 &&
+        parsed.playerInfoSize <= 500
+          ? parsed.playerInfoSize
+          : DEFAULT_SETTINGS.playerInfoSize,
+      gameLogSize:
+        typeof parsed.gameLogSize === 'number' &&
+        Number.isFinite(parsed.gameLogSize) &&
+        parsed.gameLogSize >= 50 &&
+        parsed.gameLogSize <= 500
+          ? parsed.gameLogSize
+          : DEFAULT_SETTINGS.gameLogSize,
+      sidebarBalance:
+        parsed.sidebarBalance === 'MORE_LOG' || parsed.sidebarBalance === 'MORE_PLAYERS'
+          ? parsed.sidebarBalance
+          : DEFAULT_SETTINGS.sidebarBalance,
       graphicsQuality: BOARD_GRAPHICS_QUALITIES.includes(
         parsed.graphicsQuality as BoardGraphicsQuality,
       )

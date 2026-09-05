@@ -115,18 +115,10 @@ const TIMER_BOOST_EVENT_TYPES = new Set<GameEvent['type']>([
   'ROAD_BUILT',
   'TRADE_COMPLETED',
   'COMMERCIAL_HARBOR_EXCHANGED',
-  'PROGRESS_CARD_BOUGHT',
-  'PROGRESS_CARD_PLAYED',
   'KNIGHT_BUILT',
-  'KNIGHT_ACTIVATED',
   'KNIGHT_UPGRADED',
-  'KNIGHT_MOVED',
-  'KNIGHT_DISPLACED',
   'WALL_BUILT',
   'IMPROVEMENT_BOUGHT',
-  'KN_PROGRESS_CARD_RESOLVED',
-  'MERCHANT_MOVED',
-  'METROPOLIS_CHANGED',
 ]);
 
 function phaseLabel(phase: GameState['turn']['phase']): string {
@@ -3110,7 +3102,7 @@ export function GameScreen() {
               : gameState.turn.phase === 'ACTION_PHASE'
                 ? {
                     duration: recentActionBoostsTimer
-                      ? 20
+                      ? 35
                       : (gameState.config.turnTimeSeconds ?? 60),
                     key: `actions-${gameState.turn.turnNumber}`,
                     prompt: actionModePrompt,
@@ -3521,6 +3513,9 @@ export function GameScreen() {
             </header>
             <div
               className={`game-player-list ${gameState.kn === null ? '' : 'game-player-list--kn'}`}
+              tabIndex={0}
+              role="region"
+              aria-label="Player information"
             >
               {orderedPlayerConfigs.map((config, index) => {
                 const player = gameState.players[config.id];
@@ -3769,7 +3764,7 @@ export function GameScreen() {
                   key={timerKey}
                   durationSeconds={timedPhase.duration}
                   prompt={timedPhase.prompt}
-                  boostSignal={timerBoostSignal}
+                  boostSignal={timedPhase.key.startsWith('actions-') ? timerBoostSignal : 'none'}
                   paused={gamePaused}
                   deadlineAt={isOnlineMatch ? onlineRoom.game?.deadlineAt : null}
                   clockOffsetMs={onlineClockOffsetMs}
