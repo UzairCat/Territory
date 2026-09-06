@@ -200,6 +200,7 @@ export type GameEvent =
   | {
       readonly type: 'KN_PROGRESS_CARD_PLAYED';
       readonly playerId: PlayerId;
+      readonly targetPlayerId?: PlayerId;
       readonly cardInstanceId: CardInstanceId;
       readonly cardDefinitionId: CardDefinitionId;
     }

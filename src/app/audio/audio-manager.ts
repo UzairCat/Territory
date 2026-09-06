@@ -88,7 +88,7 @@ export function audioCuesForEvents(
     ];
   }
   if (viewerMustDiscard) return [cue('DISCARD_SLAM')];
-  if (events.some((event) => event.type === 'ROBBER_MOVED')) return [cue('STONE_PLACE')];
+  if (events.some((event) => event.type === 'ROBBER_MOVED')) return [cue('ROBBER_MOVED')];
   if (events.some((event) => event.type === 'KNIGHT_ACTIVATED')) return [cue('SWORD_DRAW')];
   if (
     events.some((event) =>
@@ -146,6 +146,7 @@ const CUE_VOLUME: Readonly<Record<SoundCue, number>> = {
   LONGEST_ROAD: 0.72,
   PERK: 0.66,
   ROAD_PLACE: 0.58,
+  ROBBER_MOVED: 0.72,
   STONE_PLACE: 0.72,
   SWORD_DRAW: 0.68,
   TIMER: 0.42,

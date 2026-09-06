@@ -295,6 +295,7 @@ describe('game activity log', () => {
             playerId: TEST_PLAYER_IDS[0],
             cardInstanceId: spyCardId,
             cardDefinitionId: definition.id,
+            targetPlayerId: TEST_PLAYER_IDS[1],
           },
           {
             type: 'KN_PROGRESS_CARD_RESOLVED',

@@ -134,16 +134,17 @@ function startCard(
         },
       },
     },
-    events: announcesPlayOnlyWhenResolved(definition)
-      ? []
-      : [
-          {
-            type: 'KN_PROGRESS_CARD_PLAYED',
-            playerId,
-            cardInstanceId,
-            cardDefinitionId: card.definitionId,
-          },
-        ],
+    events:
+      announcesPlayOnlyWhenResolved(definition) || definition.effect === 'SPY'
+        ? []
+        : [
+            {
+              type: 'KN_PROGRESS_CARD_PLAYED',
+              playerId,
+              cardInstanceId,
+              cardDefinitionId: card.definitionId,
+            },
+          ],
   };
 }
 
@@ -1792,10 +1793,19 @@ export function resolveKNProgressCardSelection(
         'SPY_CARD',
         target.knProgressCardIds,
         {
-          context: { activePlayerId, targetPlayerId: targetId },
+          canCancel: false,
+          context: { activePlayerId, targetPlayerId: targetId, committed: true },
         },
       ),
-      events: [],
+      events: [
+        {
+          type: 'KN_PROGRESS_CARD_PLAYED',
+          playerId: activePlayerId,
+          cardInstanceId,
+          cardDefinitionId: state.kn!.progressCards[cardInstanceId]!.definitionId,
+          targetPlayerId: targetId,
+        },
+      ],
     };
   } else if (interaction.purpose === 'SPY_CARD') {
     const targetId = interaction.context.targetPlayerId as PlayerId;

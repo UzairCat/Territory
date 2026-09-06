@@ -821,9 +821,36 @@ describe('K+N Politics Progress Cards', () => {
     const spyPlayed = play(victimCard.state, spy.cardId);
     expect(spyPlayed.ok).toBe(true);
     if (!spyPlayed.ok) return;
+    expect(spyPlayed.events.some((event) => event.type === 'KN_PROGRESS_CARD_PLAYED')).toBe(false);
     const targetChosen = choose(spyPlayed.state, ACTIVE, [OPPONENT]);
     expect(targetChosen.ok).toBe(true);
     if (!targetChosen.ok) return;
+    expect(targetChosen.state.pendingInteraction).toMatchObject({
+      purpose: 'SPY_CARD',
+      canCancel: false,
+      context: { committed: true },
+    });
+    expect(targetChosen.events).toContainEqual(
+      expect.objectContaining({ type: 'KN_PROGRESS_CARD_PLAYED', targetPlayerId: OPPONENT }),
+    );
+    const cancelled = dispatch(targetChosen.state, {
+      id: actionId('cancel-committed-spy'),
+      type: 'RESOLVE_PROGRESS_SELECTION',
+      actorId: ACTIVE,
+      selections: [],
+      cancelled: true,
+    });
+    expect(cancelled.ok).toBe(false);
+    const timedOut = dispatch(targetChosen.state, {
+      id: actionId('timeout-committed-spy'),
+      type: 'AUTO_TIMEOUT',
+      actorId: ACTIVE,
+    });
+    expect(timedOut.ok).toBe(true);
+    if (timedOut.ok) {
+      expect(timedOut.state.players[ACTIVE]?.knProgressCardIds).toContain(victimCard.cardId);
+      expect(timedOut.state.players[OPPONENT]?.knProgressCardIds).not.toContain(victimCard.cardId);
+    }
     const stolen = choose(targetChosen.state, ACTIVE, [victimCard.cardId]);
     expect(stolen.ok).toBe(true);
     if (!stolen.ok) return;

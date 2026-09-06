@@ -57,12 +57,6 @@ describe('game audio design', () => {
         playerId: TEST_PLAYER_IDS[0],
         vertexId: vertexId('sound-wall'),
       },
-      {
-        type: 'ROBBER_MOVED',
-        playerId: TEST_PLAYER_IDS[0],
-        fromHexId: null,
-        hexId: hexId('sound-robber'),
-      },
     ];
 
     for (const event of placementEvents) {
@@ -71,6 +65,16 @@ describe('game audio design', () => {
   });
 
   it('maps the tactile and dramatic actions to their dedicated effects', () => {
+    expect(
+      cues([
+        {
+          type: 'ROBBER_MOVED',
+          playerId: TEST_PLAYER_IDS[0],
+          fromHexId: null,
+          hexId: hexId('sound-robber'),
+        },
+      ]),
+    ).toEqual(['ROBBER_MOVED']);
     expect(cues([{ type: 'DICE_ROLLED', playerId: TEST_PLAYER_IDS[0], dice: [3, 5] }])).toEqual([
       'DICE_ROLL',
     ]);
