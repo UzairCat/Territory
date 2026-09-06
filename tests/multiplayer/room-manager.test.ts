@@ -347,13 +347,14 @@ describe('authoritative online rooms', () => {
     expect(new Set(colors)).toHaveProperty('size', 2);
   });
 
-  it('starts only when every full-room player is ready without settings clearing readiness', () => {
+  it('starts with two ready players in a four-seat room without settings clearing readiness', () => {
     const manager = new RoomManager({ onRoomChanged: () => undefined });
     managers.push(manager);
     const host = manager.create('Host', 'host-socket');
     expect(host.ok).toBe(true);
     if (!host.ok) return;
     expect(host.room.players).toHaveLength(1);
+    expect(host.room.settings.size).toBe(4);
     expect(host.room.players[0]).toMatchObject({ ready: false });
     expect(manager.start(host.credentials)).toMatchObject({
       ok: false,

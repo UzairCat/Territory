@@ -135,7 +135,7 @@ describe('online entry and lobby presentation', () => {
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
     expect(screen.getAllByText('ABC234').length).toBeGreaterThan(0);
     expect(screen.getByText('Alex (You)')).toBeInTheDocument();
-    expect(screen.getByText('Open seat')).toBeInTheDocument();
+    expect(screen.getAllByText('Open seat')).toHaveLength(3);
     expect(screen.getByRole('button', { name: 'Start online match' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Map' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Select Classic mode' })).toBeEnabled();

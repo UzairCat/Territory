@@ -693,7 +693,7 @@ export function LocalLobbyScreen() {
 
               <div className="lobby-room-stepper">
                 <div>
-                  <strong>Players</strong>
+                  <strong>Maximum players</strong>
                   <output aria-label={`Players: ${lobby.size}`}>{lobby.size}</output>
                 </div>
                 <div className="lobby-room-stepper__controls lobby-room-stepper__controls--compact">

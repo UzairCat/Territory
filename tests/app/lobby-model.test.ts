@@ -25,6 +25,26 @@ function completeLobby(): LobbyConfig {
 }
 
 describe('local lobby model', () => {
+  it.each([2, 3] as const)('starts a four-seat lobby with %i actual players', (count) => {
+    const lobby = createDefaultLobby('capacity-default');
+    expect(lobby.size).toBe(4);
+    const result = buildGameConfig(
+      {
+        ...lobby,
+        players: Array.from({ length: count }, (_, index) => ({
+          id: playerId(`capacity-${index}`),
+          name: `Player ${index}`,
+          colorId: PLAYER_COLORS[index]!.id,
+        })),
+      },
+      gameId('capacity-game'),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.playerCount).toBe(count);
+      expect(result.config.players).toHaveLength(count);
+    }
+  });
   it('offers twenty-two unique player colors and twelve preset avatars', () => {
     expect(PLAYER_COLORS).toHaveLength(22);
     expect(PLAYER_AVATARS).toHaveLength(12);

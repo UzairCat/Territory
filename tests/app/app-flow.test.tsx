@@ -158,7 +158,7 @@ describe('application flow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Local game' }));
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
-    expect(screen.getByText(/0 of 2 seats filled/)).toBeInTheDocument();
+    expect(screen.getByText(/0 of 4 seats filled/)).toBeInTheDocument();
 
     await addPlayer('Alex');
     await addPlayer('Sam');
@@ -239,7 +239,7 @@ describe('application flow', () => {
     );
     expect(screen.getByRole('heading', { name: 'Territory Lobby' })).toBeInTheDocument();
     expect(
-      screen.getByText('2 of 2 seats filled · Turn order randomizes at start'),
+      screen.getByText('2 of 4 seats filled · Turn order randomizes at start'),
     ).toBeInTheDocument();
   });
 
@@ -920,7 +920,7 @@ describe('application flow', () => {
     await user.click(screen.getByRole('button', { name: /main menu/i }));
     await user.click(screen.getByRole('button', { name: 'Local game' }));
 
-    expect(screen.getByText(/0 of 2 seats filled/)).toBeInTheDocument();
+    expect(screen.getByText(/0 of 4 seats filled/)).toBeInTheDocument();
     expect(screen.queryByText('Alex')).not.toBeInTheDocument();
   });
 });

@@ -73,7 +73,7 @@ export function createDefaultLobby(seed: string): LobbyConfig {
   return {
     mapId: BASE_MAP.id,
     modeId: CLASSIC_MODE.id,
-    size: 2,
+    size: 4,
     seed,
     turnTimeSeconds: 60,
     victoryTarget: CLASSIC_MODE.rules.victoryTarget,
@@ -121,8 +121,8 @@ export function validateLobby(lobby: LobbyConfig): readonly LobbyIssue[] {
   const colorIds = lobby.players.map((player) => player.colorId);
   const allowedColors = new Set(PLAYER_COLORS.map((color) => color.id));
 
-  if (lobby.players.length < lobby.size) {
-    const remaining = lobby.size - lobby.players.length;
+  if (lobby.players.length < 2) {
+    const remaining = 2 - lobby.players.length;
     issues.push({
       code: 'PLAYER_COUNT_INCOMPLETE',
       message: `Add ${remaining} more local ${remaining === 1 ? 'player' : 'players'} to start.`,
@@ -259,7 +259,7 @@ export function buildGameConfig(lobby: LobbyConfig, id: GameId): BuildGameConfig
       gameId: id,
       modeId: lobby.modeId,
       mapId: resolveMapId(lobby),
-      playerCount: lobby.size,
+      playerCount: lobby.players.length as PlayerCount,
       seed: lobby.seed.trim(),
       victoryTarget: lobby.victoryTarget,
       turnTimeSeconds: lobby.turnTimeSeconds,

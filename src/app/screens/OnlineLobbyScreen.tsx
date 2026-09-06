@@ -256,11 +256,11 @@ export function OnlineLobbyScreen() {
   const settings = room.settings;
   const previousSeed = room.previousSeed ?? null;
   const controlsDisabled = !viewerIsHost || commandPending;
-  const full = room.players.length === settings.size;
+  const enoughPlayers = room.players.length >= 2 && room.players.length <= settings.size;
   const connectedPlayers = room.players.filter((player) => player.connected).length;
   const readyPlayers = room.players.filter((player) => player.ready).length;
   const allConnected = room.players.every((player) => player.connected);
-  const allReady = full && allConnected && room.players.every((player) => player.ready);
+  const allReady = enoughPlayers && allConnected && room.players.every((player) => player.ready);
   const waitingForReady = room.players.filter((player) => player.connected && !player.ready).length;
   const hostPlayer = room.players.find((player) => player.id === room.hostPlayerId);
   const viewerPlayer = room.players.find((player) => player.id === room.viewerPlayerId);
@@ -375,14 +375,15 @@ export function OnlineLobbyScreen() {
             </div>
             <span
               className={`lobby-room-ready-dot ${allReady ? '' : allConnected ? 'is-waiting' : 'is-reconnecting'}`}
-              title={`${readyPlayers} of ${settings.size} seats ready`}
-              aria-label={`${readyPlayers} of ${settings.size} seats ready`}
+              title={`${readyPlayers} of ${room.players.length} players ready`}
+              aria-label={`${readyPlayers} of ${room.players.length} players ready`}
             >
               ●
             </span>
           </header>
           <p className="lobby-room-player-summary">
-            {connectedPlayers}/{settings.size} connected · {readyPlayers}/{settings.size} ready
+            {connectedPlayers}/{room.players.length} connected · {readyPlayers}/
+            {room.players.length} ready
           </p>
           <ol className="player-list">
             {Array.from({ length: settings.size }, (_, index) => {
@@ -832,7 +833,7 @@ export function OnlineLobbyScreen() {
 
               <div className="lobby-room-stepper">
                 <div>
-                  <strong>Players</strong>
+                  <strong>Maximum players</strong>
                   <output aria-label={`Players: ${settings.size}`}>{settings.size}</output>
                 </div>
                 <div className="lobby-room-stepper__controls lobby-room-stepper__controls--compact">
@@ -941,8 +942,8 @@ export function OnlineLobbyScreen() {
                 <p className="validation-ready">Lobby ready</p>
               ) : (
                 <p>
-                  {!full
-                    ? `Waiting for ${settings.size - room.players.length} more player${settings.size - room.players.length === 1 ? '' : 's'}`
+                  {!enoughPlayers
+                    ? 'Waiting for at least 2 players'
                     : !allConnected
                       ? 'Waiting for every player to reconnect'
                       : `Waiting for ${waitingForReady} player${waitingForReady === 1 ? '' : 's'} to ready up`}
