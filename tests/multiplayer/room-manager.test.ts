@@ -59,6 +59,73 @@ afterEach(() => {
 });
 
 describe('authoritative online rooms', () => {
+  it.each(['leave', 'disconnect'] as const)(
+    'immediately releases a lobby seat and its credentials on %s',
+    (method) => {
+      const manager = new RoomManager({ onRoomChanged: () => undefined });
+      managers.push(manager);
+      const host = manager.create('Host', 'host');
+      if (!host.ok) throw new Error(host.error.message);
+      const guest = manager.join(host.credentials.roomCode, 'Guest', 'guest');
+      if (!guest.ok) throw new Error(guest.error.message);
+
+      if (method === 'leave') manager.leave(guest.credentials);
+      else manager.disconnect('guest');
+
+      expect(manager.authenticate(guest.credentials)).toBeNull();
+      expect(manager.resume(guest.credentials, 'retry')).toMatchObject({
+        ok: false,
+        error: { code: 'SESSION_EXPIRED' },
+      });
+      expect(manager.join(host.credentials.roomCode, 'Guest', 'new-guest').ok).toBe(true);
+    },
+  );
+
+  it('transfers lobby ownership on disconnect and deletes the room after the last player leaves', () => {
+    const manager = new RoomManager({ onRoomChanged: () => undefined });
+    managers.push(manager);
+    const host = manager.create('Host', 'host');
+    if (!host.ok) throw new Error(host.error.message);
+    const guest = manager.join(host.credentials.roomCode, 'Guest', 'guest');
+    if (!guest.ok) throw new Error(guest.error.message);
+
+    manager.disconnect('host');
+    expect(manager.rooms.get(host.credentials.roomCode)?.hostPlayerId).toBe(
+      guest.credentials.playerId,
+    );
+    manager.disconnect('guest');
+    expect(manager.rooms.has(host.credentials.roomCode)).toBe(false);
+  });
+
+  it('keeps a lobby seat until its last socket disconnects', () => {
+    const manager = new RoomManager({ onRoomChanged: () => undefined });
+    managers.push(manager);
+    const host = manager.create('Host', 'host');
+    if (!host.ok) throw new Error(host.error.message);
+    expect(manager.resume(host.credentials, 'second-tab').ok).toBe(true);
+    manager.disconnect('host');
+    expect(manager.authenticate(host.credentials)).not.toBeNull();
+    manager.disconnect('second-tab');
+    expect(manager.authenticate(host.credentials)).toBeNull();
+  });
+
+  it('releases absent match players when the host returns to the lobby', () => {
+    const { manager, host, guest, room } = createStartedRoom();
+    manager.disconnect('guest-socket');
+    expect(manager.authenticate(guest)).not.toBeNull();
+    expect(manager.returnToLobby(host).ok).toBe(true);
+    expect(room.phase).toBe('LOBBY');
+    expect(manager.authenticate(guest)).toBeNull();
+    expect(manager.join(host.roomCode, 'Guest', 'new-guest').ok).toBe(true);
+  });
+
+  it('preserves a match seat after explicitly leaving so it can still resume', () => {
+    const { manager, guest } = createStartedRoom();
+    expect(manager.leave(guest).ok).toBe(true);
+    expect(manager.authenticate(guest)).not.toBeNull();
+    expect(manager.resume(guest, 'returning-guest').ok).toBe(true);
+  });
+
   it('reclaims a started room after every player remains disconnected', () => {
     vi.useFakeTimers();
     const manager = new RoomManager({

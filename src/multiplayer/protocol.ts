@@ -11,7 +11,6 @@ import type { ColorId, PlayerId } from '../engine/core/ids';
 
 export const ONLINE_PROTOCOL_VERSION = 1;
 export const ROOM_CODE_LENGTH = 6;
-export const RECONNECT_GRACE_MS = 90_000;
 export const MATCH_DISCONNECT_GRACE_MS = 3 * 60_000;
 export const PLAYER_TRADE_OFFER_DURATION_MS = 25_000;
 

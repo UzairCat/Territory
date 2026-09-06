@@ -31,7 +31,6 @@ import {
   ONLINE_PROTOCOL_VERSION,
   MATCH_DISCONNECT_GRACE_MS,
   PLAYER_TRADE_OFFER_DURATION_MS,
-  RECONNECT_GRACE_MS,
   type ActionAck,
   type OnlineAck,
   type OnlineError,
@@ -818,7 +817,7 @@ export class RoomManager {
         roomChanged = true;
         this.scheduleMemberRemoval(room, member);
       }
-      if (!roomChanged) continue;
+      if (!roomChanged || !this.rooms.has(room.code)) continue;
       this.scheduleInactivityCleanup(room);
       this.hooks.onRoomChanged(room.code);
     }
@@ -1125,11 +1124,14 @@ export class RoomManager {
     member: RoomMember,
     remainingOverrideMs?: number,
   ): void {
+    if (room.phase === 'LOBBY') {
+      this.removeMember(room, member.id);
+      return;
+    }
     if (member.removalTimer !== null) clearTimeout(member.removalTimer);
-    const gracePeriod = room.phase === 'LOBBY' ? RECONNECT_GRACE_MS : MATCH_DISCONNECT_GRACE_MS;
-    const remainingMs = Math.max(0, remainingOverrideMs ?? gracePeriod);
+    const remainingMs = Math.max(0, remainingOverrideMs ?? MATCH_DISCONNECT_GRACE_MS);
     member.disconnectDeadlineAt = Date.now() + remainingMs;
-    if (room.phase !== 'LOBBY' && room.paused) {
+    if (room.paused) {
       member.removalRemainingMs = remainingMs;
       member.removalTimer = null;
       return;

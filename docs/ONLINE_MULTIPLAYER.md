@@ -16,7 +16,8 @@ The protocol currently includes:
 
 - cryptographically random room codes, player IDs, and resume tokens;
 - SHA-256 token storage on the server and browser-local resume credentials;
-- a 90-second grace period before a disconnected lobby seat is released;
+- immediate removal of lobby seats when players leave or their last connection disconnects;
+- the existing reconnection grace period for players who disconnect during a match;
 - reconnect/resync snapshots instead of relying on missed Socket.IO messages;
 - monotonic match revisions and idempotent action IDs;
 - server-owned setup, roll, discard, robber, action, trade, and Progress choice deadlines;
