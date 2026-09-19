@@ -5,7 +5,9 @@ import { PROGRESS_CARDS } from '../../src/engine/content/progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
 import type { AxialCoordinate } from '../../src/engine/content/types';
 import { validateClassicContent } from '../../src/engine/content/validate-content';
+import { coordinateLakeCount, coordinateLandMasses } from '../../src/engine/maps/map-utils';
 import { MAPS } from '../../src/engine/maps/maps';
+import { LAKE_LABYRINTH_MAP } from '../../src/engine/maps/themed-maps';
 import { CLASSIC_MODE } from '../../src/engine/modes/classic';
 
 function shapeKey(coordinates: readonly AxialCoordinate[]): string {
@@ -77,11 +79,7 @@ describe('locked classic content', () => {
       ['Atoll', 41, 12, 1],
       ['Archipelago', 50, 15, 3],
       ['Twin Fjords', 50, 15, 1],
-      ['Twin Lakes', 56, 16, 1],
-      ['Stepping Stones', 40, 12, 4],
-      ['The Narrows', 59, 18, 2],
-      ['Keyhole', 59, 17, 1],
-      ['Canyonlands', 67, 19, 1],
+      ['Lake Labyrinth', 48, 14, 1],
     ]);
     for (const map of MAPS) {
       const wastelandCount = map.terrainPool.filter((terrain) => terrain === 'wasteland').length;
@@ -118,5 +116,10 @@ describe('locked classic content', () => {
   it('gives every map a unique id and silhouette, even after rotation or reflection', () => {
     expect(new Set(MAPS.map((map) => map.id)).size).toBe(MAPS.length);
     expect(new Set(MAPS.map((map) => shapeKey(map.coordinates))).size).toBe(MAPS.length);
+  });
+
+  it('keeps all ten Lake Labyrinth lakes enclosed by one connected island', () => {
+    expect(coordinateLandMasses(LAKE_LABYRINTH_MAP.coordinates)).toHaveLength(1);
+    expect(coordinateLakeCount(LAKE_LABYRINTH_MAP.coordinates)).toBe(10);
   });
 });

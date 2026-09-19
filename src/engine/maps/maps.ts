@@ -25,16 +25,7 @@ import {
   HOURGLASS_MAP,
   RIFT_MAP,
 } from './original-maps';
-import {
-  ARCHIPELAGO_MAP,
-  ATOLL_MAP,
-  CANYONLANDS_MAP,
-  KEYHOLE_MAP,
-  STEPPING_STONES_MAP,
-  THE_NARROWS_MAP,
-  TWIN_FJORDS_MAP,
-  TWIN_LAKES_MAP,
-} from './themed-maps';
+import { ARCHIPELAGO_MAP, ATOLL_MAP, LAKE_LABYRINTH_MAP, TWIN_FJORDS_MAP } from './themed-maps';
 
 export const MAPS: readonly MapDefinition[] = [
   BASE_MAP,
@@ -61,11 +52,7 @@ export const MAPS: readonly MapDefinition[] = [
   ATOLL_MAP,
   ARCHIPELAGO_MAP,
   TWIN_FJORDS_MAP,
-  TWIN_LAKES_MAP,
-  STEPPING_STONES_MAP,
-  THE_NARROWS_MAP,
-  KEYHOLE_MAP,
-  CANYONLANDS_MAP,
+  LAKE_LABYRINTH_MAP,
 ];
 
 export function getMapDefinition(mapId: MapId): MapDefinition | undefined {

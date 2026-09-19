@@ -192,241 +192,79 @@ export const TWIN_FJORDS_MAP = {
   separateHighProbabilityTokens: true,
 } as const satisfies MapDefinition;
 
-export const TWIN_LAKES_MAP = {
-  id: mapId('twin-lakes'),
-  displayName: 'Twin Lakes',
+export const LAKE_LABYRINTH_MAP = {
+  id: mapId('lake-labyrinth'),
+  displayName: 'Lake Labyrinth',
   landMassCount: 1,
-  lakeCount: 2,
+  lakeCount: 10,
   supportedPlayerCounts: SUPPORTED_PLAYER_COUNTS,
   supportedModeIds: SUPPORTED_MODE_IDS,
   coordinates: coordinatesFromRows([
     { r: -4, segments: [[0, 4]] },
-    { r: -3, segments: [[-1, 5]] },
+    {
+      r: -3,
+      segments: [
+        [-1, -1],
+        [1, 2],
+        [4, 4],
+      ],
+    },
     {
       r: -2,
       segments: [
-        [-2, -1],
-        [1, 2],
-        [4, 6],
+        [-2, 0],
+        [2, 4],
       ],
     },
     {
       r: -1,
       segments: [
-        [-2, -1],
-        [1, 2],
-        [5, 6],
+        [-3, -2],
+        [0, 1],
+        [4, 4],
       ],
     },
     {
       r: 0,
       segments: [
-        [-3, -1],
-        [1, 2],
-        [5, 6],
+        [-4, -4],
+        [-2, -1],
+        [1, 4],
       ],
     },
-    { r: 1, segments: [[-3, 6]] },
-    { r: 2, segments: [[-2, 5]] },
-    { r: 3, segments: [[-1, 4]] },
-  ]),
-  terrainPool: createTerrainPool({
-    forest: 11,
-    hills: 10,
-    fields: 11,
-    pasture: 10,
-    mountains: 11,
-    wasteland: 3,
-  }),
-  numberTokenPool: createNumberTokenPool(53),
-  portPool: createPortPool(16),
-  separateHighProbabilityTokens: true,
-} as const satisfies MapDefinition;
-
-export const STEPPING_STONES_MAP = {
-  id: mapId('stepping-stones'),
-  displayName: 'Stepping Stones',
-  landMassCount: 4,
-  lakeCount: 0,
-  supportedPlayerCounts: SUPPORTED_PLAYER_COUNTS,
-  supportedModeIds: SUPPORTED_MODE_IDS,
-  coordinates: coordinatesFromRows([
-    { r: -5, segments: [[-5, -3]] },
-    { r: -4, segments: [[-6, -3]] },
     {
-      r: -3,
+      r: 1,
       segments: [
-        [-6, -4],
-        [5, 7],
+        [-4, -4],
+        [-2, 0],
+        [2, 3],
       ],
     },
-    { r: -2, segments: [[4, 7]] },
-    { r: -1, segments: [[4, 6]] },
-    { r: 1, segments: [[-6, -4]] },
-    { r: 2, segments: [[-7, -4]] },
+    {
+      r: 2,
+      segments: [
+        [-4, -3],
+        [0, 2],
+      ],
+    },
     {
       r: 3,
       segments: [
-        [-7, -5],
-        [4, 6],
+        [-4, -1],
+        [1, 1],
       ],
     },
-    { r: 4, segments: [[3, 6]] },
-    { r: 5, segments: [[3, 5]] },
+    { r: 4, segments: [[-4, 0]] },
   ]),
   terrainPool: createTerrainPool({
-    forest: 8,
-    hills: 8,
-    fields: 8,
-    pasture: 7,
-    mountains: 7,
-    wasteland: 2,
-  }),
-  numberTokenPool: createNumberTokenPool(38),
-  portPool: createPortPool(12),
-  separateHighProbabilityTokens: true,
-} as const satisfies MapDefinition;
-
-export const THE_NARROWS_MAP = {
-  id: mapId('the-narrows'),
-  displayName: 'The Narrows',
-  landMassCount: 2,
-  lakeCount: 0,
-  supportedPlayerCounts: SUPPORTED_PLAYER_COUNTS,
-  supportedModeIds: SUPPORTED_MODE_IDS,
-  coordinates: coordinatesFromRows([
-    { r: -5, segments: [[1, 4]] },
-    { r: -4, segments: [[0, 5]] },
-    { r: -3, segments: [[-1, 5]] },
-    { r: -2, segments: [[-2, 4]] },
-    { r: -1, segments: [[-2, 2]] },
-    { r: 1, segments: [[-3, 1]] },
-    { r: 2, segments: [[-4, 2]] },
-    { r: 3, segments: [[-4, 3]] },
-    { r: 4, segments: [[-3, 2]] },
-    { r: 5, segments: [[-2, 1]] },
-  ]),
-  terrainPool: createTerrainPool({
-    forest: 12,
-    hills: 11,
-    fields: 11,
-    pasture: 11,
-    mountains: 11,
+    forest: 9,
+    hills: 9,
+    fields: 9,
+    pasture: 9,
+    mountains: 9,
     wasteland: 3,
   }),
-  numberTokenPool: createNumberTokenPool(56),
-  portPool: createPortPool(18),
-  separateHighProbabilityTokens: true,
-} as const satisfies MapDefinition;
-
-export const KEYHOLE_MAP = {
-  id: mapId('keyhole'),
-  displayName: 'Keyhole',
-  landMassCount: 1,
-  lakeCount: 1,
-  supportedPlayerCounts: SUPPORTED_PLAYER_COUNTS,
-  supportedModeIds: SUPPORTED_MODE_IDS,
-  coordinates: coordinatesFromRows([
-    { r: -6, segments: [[2, 3]] },
-    { r: -5, segments: [[1, 3]] },
-    { r: -4, segments: [[1, 3]] },
-    { r: -3, segments: [[0, 3]] },
-    { r: -2, segments: [[-1, 4]] },
-    { r: -1, segments: [[-2, 5]] },
-    {
-      r: 0,
-      segments: [
-        [-3, -1],
-        [2, 6],
-      ],
-    },
-    {
-      r: 1,
-      segments: [
-        [-3, -1],
-        [3, 6],
-      ],
-    },
-    { r: 2, segments: [[-2, 5]] },
-    { r: 3, segments: [[-1, 4]] },
-    { r: 4, segments: [[0, 3]] },
-  ]),
-  terrainPool: createTerrainPool({
-    forest: 11,
-    hills: 11,
-    fields: 12,
-    pasture: 11,
-    mountains: 11,
-    wasteland: 3,
-  }),
-  numberTokenPool: createNumberTokenPool(56),
-  portPool: createPortPool(17),
-  separateHighProbabilityTokens: true,
-} as const satisfies MapDefinition;
-
-export const CANYONLANDS_MAP = {
-  id: mapId('canyonlands'),
-  displayName: 'Canyonlands',
-  landMassCount: 1,
-  lakeCount: 0,
-  supportedPlayerCounts: SUPPORTED_PLAYER_COUNTS,
-  supportedModeIds: SUPPORTED_MODE_IDS,
-  coordinates: coordinatesFromRows([
-    {
-      r: -4,
-      segments: [
-        [0, 1],
-        [3, 5],
-      ],
-    },
-    {
-      r: -3,
-      segments: [
-        [-1, 1],
-        [3, 6],
-      ],
-    },
-    {
-      r: -2,
-      segments: [
-        [-2, 1],
-        [3, 7],
-      ],
-    },
-    {
-      r: -1,
-      segments: [
-        [-3, 0],
-        [3, 7],
-      ],
-    },
-    {
-      r: 0,
-      segments: [
-        [-3, -1],
-        [2, 6],
-      ],
-    },
-    {
-      r: 1,
-      segments: [
-        [-4, -2],
-        [1, 5],
-      ],
-    },
-    { r: 2, segments: [[-4, 4]] },
-    { r: 3, segments: [[-3, 3]] },
-    { r: 4, segments: [[-2, 2]] },
-  ]),
-  terrainPool: createTerrainPool({
-    forest: 13,
-    hills: 13,
-    fields: 13,
-    pasture: 12,
-    mountains: 12,
-    wasteland: 4,
-  }),
-  numberTokenPool: createNumberTokenPool(63),
-  portPool: createPortPool(19),
+  numberTokenPool: createNumberTokenPool(45),
+  portPool: createPortPool(14),
   separateHighProbabilityTokens: true,
 } as const satisfies MapDefinition;

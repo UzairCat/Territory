@@ -280,31 +280,22 @@ describe('application flow', () => {
     expect(screen.getByLabelText('Alex profile picture: Courier')).toBeInTheDocument();
   });
 
-  it('offers all eight new maps and selects one from the last page', async () => {
+  it('offers the retained maps and selects Lake Labyrinth from the last page', async () => {
     const user = userEvent.setup();
     renderApp('/lobby');
 
     const mapSelect = screen.getByRole('combobox', { name: 'Map' });
-    for (const name of [
-      'Atoll',
-      'Archipelago',
-      'Twin Fjords',
-      'Twin Lakes',
-      'Stepping Stones',
-      'The Narrows',
-      'Keyhole',
-      'Canyonlands',
-    ]) {
+    for (const name of ['Atoll', 'Archipelago', 'Twin Fjords', 'Lake Labyrinth']) {
       expect(within(mapSelect).getByRole('option', { name })).toBeInTheDocument();
     }
 
-    await user.selectOptions(mapSelect, 'canyonlands');
-    expect(useAppStore.getState().lobby.mapId).toBe('canyonlands');
-    expect(screen.getByRole('button', { name: 'Select Canyonlands' })).toHaveAttribute(
+    await user.selectOptions(mapSelect, 'lake-labyrinth');
+    expect(useAppStore.getState().lobby.mapId).toBe('lake-labyrinth');
+    expect(screen.getByRole('button', { name: 'Select Lake Labyrinth' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(screen.getByText('67 tiles · 19 ports')).toBeInTheDocument();
+    expect(screen.getByText('48 tiles · 14 ports · 10 lakes')).toBeInTheDocument();
   });
 
   it('configures functional room rules and advanced match limits from the lobby', async () => {
