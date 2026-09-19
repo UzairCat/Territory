@@ -22,6 +22,7 @@ export * from './core/json';
 export * from './core/random';
 export * from './maps/base-map';
 export * from './maps/additional-maps';
+export * from './maps/themed-maps';
 export * from './maps/maps';
 export * from './modes/classic';
 export * from './modes/kn';

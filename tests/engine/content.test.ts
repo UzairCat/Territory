@@ -3,9 +3,29 @@ import { describe, expect, it } from 'vitest';
 import { BUILDING_DEFINITIONS } from '../../src/engine/content/buildings';
 import { PROGRESS_CARDS } from '../../src/engine/content/progress-cards';
 import { RESOURCE_IDS } from '../../src/engine/content/resources';
+import type { AxialCoordinate } from '../../src/engine/content/types';
 import { validateClassicContent } from '../../src/engine/content/validate-content';
 import { MAPS } from '../../src/engine/maps/maps';
 import { CLASSIC_MODE } from '../../src/engine/modes/classic';
+
+function shapeKey(coordinates: readonly AxialCoordinate[]): string {
+  const variants: string[] = [];
+  for (const reflected of [false, true]) {
+    let points = coordinates.map(({ q, r }) => (reflected ? { q: r, r: q } : { q, r }));
+    for (let turn = 0; turn < 6; turn += 1) {
+      const minimumQ = Math.min(...points.map(({ q }) => q));
+      const minimumR = Math.min(...points.map(({ r }) => r));
+      variants.push(
+        points
+          .map(({ q, r }) => `${q - minimumQ},${r - minimumR}`)
+          .sort()
+          .join(';'),
+      );
+      points = points.map(({ q, r }) => ({ q: -r, r: q + r }));
+    }
+  }
+  return variants.sort()[0] ?? '';
+}
 
 describe('locked classic content', () => {
   it('passes all cross-definition invariants', () => {
@@ -54,6 +74,14 @@ describe('locked classic content', () => {
       ['Hourglass', 39, 12, 1],
       ['Clover', 41, 12, 1],
       ['Great River', 56, 17, 2],
+      ['Atoll', 41, 12, 1],
+      ['Archipelago', 50, 15, 3],
+      ['Twin Fjords', 50, 15, 1],
+      ['Twin Lakes', 56, 16, 1],
+      ['Stepping Stones', 40, 12, 4],
+      ['The Narrows', 59, 18, 2],
+      ['Keyhole', 59, 17, 1],
+      ['Canyonlands', 67, 19, 1],
     ]);
     for (const map of MAPS) {
       const wastelandCount = map.terrainPool.filter((terrain) => terrain === 'wasteland').length;
@@ -85,5 +113,10 @@ describe('locked classic content', () => {
       { displayName: 'University', count: 1, artwork: 'UNIVERSITY', victoryPoints: 1 },
     ]);
     expect(new Set(PROGRESS_CARDS.map((card) => card.artwork)).size).toBe(9);
+  });
+
+  it('gives every map a unique id and silhouette, even after rotation or reflection', () => {
+    expect(new Set(MAPS.map((map) => map.id)).size).toBe(MAPS.length);
+    expect(new Set(MAPS.map((map) => shapeKey(map.coordinates))).size).toBe(MAPS.length);
   });
 });

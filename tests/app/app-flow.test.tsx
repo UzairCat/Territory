@@ -280,6 +280,33 @@ describe('application flow', () => {
     expect(screen.getByLabelText('Alex profile picture: Courier')).toBeInTheDocument();
   });
 
+  it('offers all eight new maps and selects one from the last page', async () => {
+    const user = userEvent.setup();
+    renderApp('/lobby');
+
+    const mapSelect = screen.getByRole('combobox', { name: 'Map' });
+    for (const name of [
+      'Atoll',
+      'Archipelago',
+      'Twin Fjords',
+      'Twin Lakes',
+      'Stepping Stones',
+      'The Narrows',
+      'Keyhole',
+      'Canyonlands',
+    ]) {
+      expect(within(mapSelect).getByRole('option', { name })).toBeInTheDocument();
+    }
+
+    await user.selectOptions(mapSelect, 'canyonlands');
+    expect(useAppStore.getState().lobby.mapId).toBe('canyonlands');
+    expect(screen.getByRole('button', { name: 'Select Canyonlands' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('67 tiles · 19 ports')).toBeInTheDocument();
+  });
+
   it('configures functional room rules and advanced match limits from the lobby', async () => {
     const user = userEvent.setup();
     renderApp('/lobby');
